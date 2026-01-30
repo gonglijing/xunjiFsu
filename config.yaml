@@ -1,0 +1,24 @@
+# GoGW 配置文件
+# 数据库配置
+database:
+  path: "gogw.db"
+
+# 服务器配置
+server:
+  addr: ":8080"
+  read_timeout: 30s
+  write_timeout: 30s
+
+# 认证配置
+auth:
+  session_max_age: 604800  # 7天，单位秒
+
+# 采集器配置
+collector:
+  default_interval: 5000   # 默认采集周期，毫秒
+  default_upload_interval: 10000  # 默认上传周期，毫秒
+
+# 日志配置
+logging:
+  level: "info"
+  format: "json"

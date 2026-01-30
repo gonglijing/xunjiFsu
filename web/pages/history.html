@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工业网关管理系统 - 历史数据</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .htmx-request .htmx-indicator { display: inline; }
+        .htmx-indicator { display: none; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="bg-blue-600 text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">工业网关管理系统</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/" class="hover:text-gray-200">仪表盘</a>
+                <a href="/realtime" class="hover:text-gray-200">实时数据</a>
+                <a href="/history" class="text-white font-bold">历史数据</a>
+                <span id="user-info">用户</span>
+                <a href="/logout" class="bg-red-500 hover:bg-red-700 px-3 py-1 rounded">退出</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <div class="container mx-auto px-4 py-8">
+        <h2 class="text-2xl font-bold mb-6">历史数据查询</h2>
+        
+        <!-- 查询条件 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">设备</label>
+                    <select id="device-select" class="w-full border rounded-lg px-4 py-2">
+                        <option value="">-- 所有设备 --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">字段</label>
+                    <select id="field-select" class="w-full border rounded-lg px-4 py-2">
+                        <option value="">-- 所有字段 --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">时间范围</label>
+                    <select id="time-range" class="w-full border rounded-lg px-4 py-2" onchange="updateTimeInputs()">
+                        <option value="1h">最近1小时</option>
+                        <option value="6h">最近6小时</option>
+                        <option value="24h" selected>最近24小时</option>
+                        <option value="7d">最近7天</option>
+                        <option value="30d">最近30天</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white px-6 py-2 rounded-lg w-full"
+                            onclick="searchHistory()">
+                        <span class="htmx-indicator">查询中...</span>
+                        查询
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 自定义时间输入 -->
+            <div id="custom-time" class="grid grid-cols-2 gap-4 mt-4 hidden">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">开始时间</label>
+                    <input type="datetime-local" id="start-time" class="w-full border rounded-lg px-4 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">结束时间</label>
+                    <input type="datetime-local" id="end-time" class="w-full border rounded-lg px-4 py-2">
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div id="stats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 hidden">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">数据点数量</div>
+                <div id="data-count" class="text-3xl font-bold text-blue-600">-</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">最早记录</div>
+                <div id="first-time" class="text-lg font-medium">-</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">最晚记录</div>
+                <div id="last-time" class="text-lg font-medium">-</div>
+            </div>
+        </div>
+
+        <!-- 历史数据表格 -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="px-6 py-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-medium">查询结果</h3>
+                <div class="flex items-center gap-2">
+                    <button class="text-sm text-blue-600 hover:text-blue-800" onclick="exportCSV()">导出CSV</button>
+                    <button class="text-sm text-blue-600 hover:text-blue-800" onclick="refreshData()">刷新</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">设备</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">字段</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">值</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table" class="bg-white divide-y divide-gray-200">
+                        <tr>
+                            <td colspan="4" class="px-6 py-12 text-center text-gray-500">
+                                请选择查询条件并点击查询
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- 分页 -->
+            <div id="pagination" class="px-6 py-4 border-t hidden">
+                <div class="flex items-center justify-between">
+                    <div class="text-sm text-gray-500">
+                        共 <span id="total-count">0</span> 条记录
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="prev-page" class="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50"
+                                onclick="changePage(-1)">上一页</button>
+                        <span id="page-info" class="text-sm">1 / 1</span>
+                        <button id="next-page" class="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50"
+                                onclick="changePage(1)">下一页</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = [];
+        let currentPage = 1;
+        const pageSize = 100;
+        let totalCount = 0;
+
+        // 页面加载时获取设备列表
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTimeInputs();
+            loadDevices();
+        });
+
+        // 加载设备列表
+        function loadDevices() {
+            htmx.ajax('GET', '/api/devices', {
+                target: '#device-select',
+                swap: 'innerHTML',
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        try {
+                            const devices = JSON.parse(evt.detail.xhr.response);
+                            let html = '<option value="">-- 所有设备 --</option>';
+                            devices.forEach(device => {
+                                html += `<option value="${device.id}">${device.name}</option>`;
+                            });
+                            document.getElementById('device-select').innerHTML = html;
+                        } catch (e) {
+                            console.error('Failed to parse devices:', e);
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新字段选择
+        document.getElementById('device-select').addEventListener('change', function() {
+            const deviceId = this.value;
+            const fieldSelect = document.getElementById('field-select');
+            
+            if (deviceId) {
+                htmx.ajax('GET', '/api/data/cache/' + deviceId, {
+                    target: '#field-select',
+                    swap: 'innerHTML',
+                    afterRequest: function(evt) {
+                        if (evt.detail.successful) {
+                            try {
+                                const data = JSON.parse(evt.detail.xhr.response);
+                                let html = '<option value="">-- 所有字段 --</option>';
+                                const fields = new Set();
+                                data.forEach(item => fields.add(item.field_name));
+                                fields.forEach(field => {
+                                    html += `<option value="${field}">${field}</option>`;
+                                });
+                                fieldSelect.innerHTML = html;
+                            } catch (e) {
+                                console.error('Failed to parse data:', e);
+                            }
+                        }
+                    }
+                });
+            } else {
+                fieldSelect.innerHTML = '<option value="">-- 所有字段 --</option>';
+            }
+        });
+
+        // 更新时间输入框显示
+        function updateTimeInputs() {
+            const range = document.getElementById('time-range').value;
+            const customTime = document.getElementById('custom-time');
+            
+            if (range === 'custom') {
+                customTime.classList.remove('hidden');
+            } else {
+                customTime.classList.add('hidden');
+            }
+        }
+
+        // 获取时间范围
+        function getTimeRange() {
+            const range = document.getElementById('time-range').value;
+            const now = new Date();
+            let start = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 默认24小时
+
+            switch (range) {
+                case '1h':
+                    start = new Date(now.getTime() - 60 * 60 * 1000);
+                    break;
+                case '6h':
+                    start = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+                    break;
+                case '24h':
+                    start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    break;
+                case '7d':
+                    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case '30d':
+                    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'custom':
+                    const startInput = document.getElementById('start-time').value;
+                    const endInput = document.getElementById('end-time').value;
+                    if (startInput) start = new Date(startInput);
+                    if (endInput) now = new Date(endInput);
+                    break;
+            }
+
+            return { start, end: now };
+        }
+
+        // 搜索历史数据
+        function searchHistory() {
+            const deviceId = document.getElementById('device-select').value;
+            const fieldName = document.getElementById('field-select').value;
+            const timeRange = getTimeRange();
+
+            // 使用最新的数据点API来获取历史数据
+            htmx.ajax('GET', '/api/data/points?limit=1000', {
+                target: '#history-table',
+                swap: 'innerHTML',
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        try {
+                            const data = JSON.parse(evt.detail.xhr.response);
+                            // 过滤数据
+                            currentData = data.filter(item => {
+                                const itemTime = new Date(item.collected_at);
+                                if (itemTime < timeRange.start || itemTime > timeRange.end) return false;
+                                if (deviceId && item.device_id != deviceId) return false;
+                                if (fieldName && item.field_name != fieldName) return false;
+                                return true;
+                            });
+
+                            // 按时间排序
+                            currentData.sort((a, b) => new Date(b.collected_at) - new Date(a.collected_at));
+                            totalCount = currentData.length;
+                            currentPage = 1;
+
+                            updateStats();
+                            renderTable();
+                        } catch (e) {
+                            console.error('Failed to parse data:', e);
+                            document.getElementById('history-table').innerHTML = 
+                                '<tr><td colspan="4" class="px-6 py-12 text-center text-red-500">查询失败</td></tr>';
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            const stats = document.getElementById('stats');
+            if (currentData.length > 0) {
+                stats.classList.remove('hidden');
+                document.getElementById('data-count').textContent = totalCount;
+                document.getElementById('first-time').textContent = 
+                    new Date(currentData[currentData.length - 1].collected_at).toLocaleString();
+                document.getElementById('last-time').textContent = 
+                    new Date(currentData[0].collected_at).toLocaleString();
+            } else {
+                stats.classList.add('hidden');
+            }
+        }
+
+        // 渲染表格
+        function renderTable() {
+            const start = (currentPage - 1) * pageSize;
+            const end = Math.min(start + pageSize, totalCount);
+            const pageData = currentData.slice(start, end);
+
+            let html = '';
+            if (pageData.length === 0) {
+                html = '<tr><td colspan="4" class="px-6 py-12 text-center text-gray-500">暂无数据</td></tr>';
+            } else {
+                pageData.forEach(item => {
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${new Date(item.collected_at).toLocaleString()}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                ${item.device_name}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${item.field_name}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-mono">
+                                ${item.value}
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+            document.getElementById('history-table').innerHTML = html;
+
+            // 更新分页
+            const pagination = document.getElementById('pagination');
+            if (totalCount > pageSize) {
+                pagination.classList.remove('hidden');
+                const totalPages = Math.ceil(totalCount / pageSize);
+                document.getElementById('page-info').textContent = `${currentPage} / ${totalPages}`;
+                document.getElementById('prev-page').disabled = currentPage <= 1;
+                document.getElementById('next-page').disabled = currentPage >= totalPages;
+                document.getElementById('total-count').textContent = totalCount;
+            } else {
+                if (totalCount > 0) {
+                    pagination.classList.remove('hidden');
+                    document.getElementById('page-info').textContent = `1 / 1`;
+                    document.getElementById('total-count').textContent = totalCount;
+                } else {
+                    pagination.classList.add('hidden');
+                }
+            }
+        }
+
+        // 翻页
+        function changePage(delta) {
+            const totalPages = Math.ceil(totalCount / pageSize);
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderTable();
+            }
+        }
+
+        // 刷新数据
+        function refreshData() {
+            searchHistory();
+        }
+
+        // 导出CSV
+        function exportCSV() {
+            if (currentData.length === 0) {
+                alert('没有数据可导出');
+                return;
+            }
+
+            let csv = '时间,设备,字段,值\n';
+            currentData.forEach(item => {
+                csv += `"${item.collected_at}","${item.device_name}","${item.field_name}","${item.value}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'history_data_' + new Date().toISOString().slice(0, 10) + '.csv';
+            link.click();
+        }
+    </script>
+</body>
+</html>

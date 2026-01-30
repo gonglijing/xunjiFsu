@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工业网关管理系统 - 登录</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .htmx-request .htmx-indicator { display: inline; }
+        .htmx-indicator { display: none; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-8">
+            <h1 class="text-2xl font-bold text-center mb-6">工业网关管理系统</h1>
+            <form action="/login" method="POST">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="username">
+                        用户名
+                    </label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                           id="username" name="username" type="text" required>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
+                        密码
+                    </label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                           id="password" name="password" type="password" required>
+                </div>
+                <div class="flex items-center justify-between">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                            type="submit">
+                        登录
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
