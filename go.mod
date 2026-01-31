@@ -1,4 +1,4 @@
-module gogw
+module github.com/gonglijing/xunjiFsu
 
 go 1.21.0
 

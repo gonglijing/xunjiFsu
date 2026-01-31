@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"gogw/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 // ErrResourceNotFound 资源未找到
@@ -498,6 +498,13 @@ func NewResourceManagerImpl() *ResourceManagerImpl {
 // GetLocker 获取资源访问锁管理器
 func (m *ResourceManagerImpl) GetLocker() *ResourceLocker {
 	return m.locker
+}
+
+// GetResourceCount 获取资源数量
+func (m *ResourceManagerImpl) GetResourceCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.serialManager.ports) + len(m.networkManager.clients)
 }
 
 // OpenResource 打开资源

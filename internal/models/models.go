@@ -12,19 +12,13 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// Resource 资源模型（串口/网口）
+// Resource 资源模型（串口/DI/DO）
 type Resource struct {
 	ID        int64     `json:"id" db:"id"`
 	Name      string    `json:"name" db:"name"`
-	Type      string    `json:"type" db:"type"` // serial, network
+	Type      string    `json:"type" db:"type"` // serial, di, do
 	Port      string    `json:"port" db:"port"` // 串口路径
-	BaudRate  int       `json:"baud_rate" db:"baud_rate"`
-	DataBits  int       `json:"data_bits" db:"data_bits"`
-	StopBits  int       `json:"stop_bits" db:"stop_bits"`
-	Parity    string    `json:"parity" db:"parity"`
-	IPAddress string    `json:"ip_address" db:"ip_address"`
-	PortNum   int       `json:"port_num" db:"port_num"`
-	Protocol  string    `json:"protocol" db:"protocol"` // tcp, udp
+	Address   int       `json:"address" db:"address"` // DI/DO 地址
 	Enabled   int       `json:"enabled" db:"enabled"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
@@ -53,9 +47,18 @@ type Device struct {
 	DeviceConfig    string    `json:"device_config" db:"device_config"`
 	CollectInterval int       `json:"collect_interval" db:"collect_interval"` // 采集周期(ms)
 	UploadInterval  int       `json:"upload_interval" db:"upload_interval"`   // 上传周期(ms)
-	Enabled         int       `json:"enabled" db:"enabled"`
-	CreatedAt       time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
+	// 串口参数
+	BaudRate  int    `json:"baud_rate" db:"baud_rate"`
+	DataBits  int    `json:"data_bits" db:"data_bits"`
+	StopBits  int    `json:"stop_bits" db:"stop_bits"`
+	Parity    string `json:"parity" db:"parity"` // N, O, E
+	// 网口参数
+	IPAddress string `json:"ip_address" db:"ip_address"`
+	PortNum   int    `json:"port_num" db:"port_num"`
+	Protocol  string `json:"protocol" db:"protocol"` // tcp, udp
+	Enabled   int    `json:"enabled" db:"enabled"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // DeviceDriverMapping 设备驱动映射

@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"gogw/internal/database"
-	"gogw/internal/driver"
-	"gogw/internal/models"
-	"gogw/internal/northbound"
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
 
 // Collector 采集器

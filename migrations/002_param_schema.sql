@@ -13,21 +13,16 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 资源表（串口/网口）
+-- 资源表（串口/DI/DO）
 CREATE TABLE IF NOT EXISTS resources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('serial', 'network')),
+    type TEXT NOT NULL CHECK(type IN ('serial', 'di', 'do')),
     -- 串口配置
     port TEXT,
-    baud_rate INTEGER DEFAULT 9600,
-    data_bits INTEGER DEFAULT 8,
-    stop_bits INTEGER DEFAULT 1,
-    parity TEXT DEFAULT 'N' CHECK(parity IN ('N', 'O', 'E')),
-    -- 网口配置
-    ip_address TEXT,
-    port_num INTEGER,
-    protocol TEXT DEFAULT 'tcp' CHECK(protocol IN ('tcp', 'udp')),
+    -- DI/DO 配置
+    address INTEGER DEFAULT 1,
+    -- 通用状态
     enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -56,6 +51,15 @@ CREATE TABLE IF NOT EXISTS devices (
     device_config TEXT,
     collect_interval INTEGER DEFAULT 5000,
     upload_interval INTEGER DEFAULT 10000,
+    -- 串口参数
+    baud_rate INTEGER DEFAULT 9600,
+    data_bits INTEGER DEFAULT 8,
+    stop_bits INTEGER DEFAULT 1,
+    parity TEXT DEFAULT 'N' CHECK(parity IN ('N', 'O', 'E')),
+    -- 网口参数
+    ip_address TEXT,
+    port_num INTEGER,
+    protocol TEXT DEFAULT 'tcp' CHECK(protocol IN ('tcp', 'udp')),
     enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

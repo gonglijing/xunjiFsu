@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"gogw/internal/models"
-	"gogw/internal/resource"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/resource"
 )
 
 // ErrDriverNotFound 驱动未找到

@@ -10,14 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"gogw/internal/auth"
-	"gogw/internal/collector"
-	"gogw/internal/database"
-	"gogw/internal/driver"
-	"gogw/internal/handlers"
-	"gogw/internal/models"
-	"gogw/internal/northbound"
-	"gogw/internal/resource"
+	"github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/collector"
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound"
+	"github.com/gonglijing/xunjiFsu/internal/resource"
 
 	gorillaHandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -216,18 +216,23 @@ func main() {
 	r.HandleFunc("/api/drivers", h.CreateDriver).Methods("POST")
 	r.HandleFunc("/api/drivers/{id}", h.UpdateDriver).Methods("PUT")
 	r.HandleFunc("/api/drivers/{id}", h.DeleteDriver).Methods("DELETE")
+	r.HandleFunc("/api/drivers/{id}/download", h.DownloadDriver).Methods("GET")
+	r.HandleFunc("/api/drivers/upload", h.UploadDriverFile).Methods("POST")
+	r.HandleFunc("/api/drivers/files", h.ListDriverFiles).Methods("GET")
 
 	// API路由 - 设备
 	r.HandleFunc("/api/devices", h.GetDevices).Methods("GET")
 	r.HandleFunc("/api/devices", h.CreateDevice).Methods("POST")
 	r.HandleFunc("/api/devices/{id}", h.UpdateDevice).Methods("PUT")
 	r.HandleFunc("/api/devices/{id}", h.DeleteDevice).Methods("DELETE")
+	r.HandleFunc("/api/devices/{id}/toggle", h.ToggleDeviceEnable).Methods("POST")
 
 	// API路由 - 北向配置
 	r.HandleFunc("/api/northbound", h.GetNorthboundConfigs).Methods("GET")
 	r.HandleFunc("/api/northbound", h.CreateNorthboundConfig).Methods("POST")
 	r.HandleFunc("/api/northbound/{id}", h.UpdateNorthboundConfig).Methods("PUT")
 	r.HandleFunc("/api/northbound/{id}", h.DeleteNorthboundConfig).Methods("DELETE")
+	r.HandleFunc("/api/northbound/{id}/toggle", h.ToggleNorthboundEnable).Methods("POST")
 
 	// API路由 - 阈值
 	r.HandleFunc("/api/thresholds", h.GetThresholds).Methods("GET")

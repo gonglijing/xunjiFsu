@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"gogw/internal/models"
-	"gogw/internal/pwdutil"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/pwdutil"
 
 	_ "modernc.org/sqlite"
 )
@@ -394,10 +394,9 @@ func DeleteUser(id int64) error {
 // CreateResource 创建资源
 func CreateResource(resource *models.Resource) (int64, error) {
 	result, err := ParamDB.Exec(
-		`INSERT INTO resources (name, type, port, baud_rate, data_bits, stop_bits, parity, ip_address, port_num, protocol, enabled) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		resource.Name, resource.Type, resource.Port, resource.BaudRate, resource.DataBits,
-		resource.StopBits, resource.Parity, resource.IPAddress, resource.PortNum, resource.Protocol, resource.Enabled,
+		`INSERT INTO resources (name, type, port, address, enabled) 
+		VALUES (?, ?, ?, ?, ?)`,
+		resource.Name, resource.Type, resource.Port, resource.Address, resource.Enabled,
 	)
 	if err != nil {
 		return 0, err
@@ -409,11 +408,10 @@ func CreateResource(resource *models.Resource) (int64, error) {
 func GetResourceByID(id int64) (*models.Resource, error) {
 	resource := &models.Resource{}
 	err := ParamDB.QueryRow(
-		`SELECT id, name, type, port, baud_rate, data_bits, stop_bits, parity, ip_address, port_num, protocol, enabled, created_at, updated_at 
+		`SELECT id, name, type, port, address, enabled, created_at, updated_at 
 		FROM resources WHERE id = ?`,
 		id,
-	).Scan(&resource.ID, &resource.Name, &resource.Type, &resource.Port, &resource.BaudRate, &resource.DataBits,
-		&resource.StopBits, &resource.Parity, &resource.IPAddress, &resource.PortNum, &resource.Protocol,
+	).Scan(&resource.ID, &resource.Name, &resource.Type, &resource.Port, &resource.Address,
 		&resource.Enabled, &resource.CreatedAt, &resource.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -424,7 +422,7 @@ func GetResourceByID(id int64) (*models.Resource, error) {
 // GetAllResources 获取所有资源
 func GetAllResources() ([]*models.Resource, error) {
 	rows, err := ParamDB.Query(
-		`SELECT id, name, type, port, baud_rate, data_bits, stop_bits, parity, ip_address, port_num, protocol, enabled, created_at, updated_at 
+		`SELECT id, name, type, port, address, enabled, created_at, updated_at 
 		FROM resources ORDER BY id`,
 	)
 	if err != nil {
@@ -435,8 +433,7 @@ func GetAllResources() ([]*models.Resource, error) {
 	var resources []*models.Resource
 	for rows.Next() {
 		resource := &models.Resource{}
-		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Type, &resource.Port, &resource.BaudRate, &resource.DataBits,
-			&resource.StopBits, &resource.Parity, &resource.IPAddress, &resource.PortNum, &resource.Protocol,
+		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Type, &resource.Port, &resource.Address,
 			&resource.Enabled, &resource.CreatedAt, &resource.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -448,11 +445,8 @@ func GetAllResources() ([]*models.Resource, error) {
 // UpdateResource 更新资源
 func UpdateResource(resource *models.Resource) error {
 	_, err := ParamDB.Exec(
-		`UPDATE resources SET name = ?, type = ?, port = ?, baud_rate = ?, data_bits = ?, stop_bits = ?, parity = ?, 
-		ip_address = ?, port_num = ?, protocol = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		resource.Name, resource.Type, resource.Port, resource.BaudRate, resource.DataBits,
-		resource.StopBits, resource.Parity, resource.IPAddress, resource.PortNum, resource.Protocol,
-		resource.Enabled, resource.ID,
+		`UPDATE resources SET name = ?, type = ?, port = ?, address = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		resource.Name, resource.Type, resource.Port, resource.Address, resource.Enabled, resource.ID,
 	)
 	return err
 }
@@ -593,6 +587,12 @@ func UpdateDevice(device *models.Device) error {
 	return err
 }
 
+// UpdateDeviceEnabled 更新设备使能状态
+func UpdateDeviceEnabled(id int64, enabled int) error {
+	_, err := ParamDB.Exec("UPDATE devices SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", enabled, id)
+	return err
+}
+
 // DeleteDevice 删除设备
 func DeleteDevice(id int64) error {
 	_, err := ParamDB.Exec("DELETE FROM devices WHERE id = ?", id)
@@ -677,6 +677,12 @@ func UpdateNorthboundConfig(config *models.NorthboundConfig) error {
 		"UPDATE northbound_configs SET name = ?, type = ?, enabled = ?, config = ?, upload_interval = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 		config.Name, config.Type, config.Enabled, config.Config, config.UploadInterval, config.ID,
 	)
+	return err
+}
+
+// UpdateNorthboundEnabled 更新北向使能状态
+func UpdateNorthboundEnabled(id int64, enabled int) error {
+	_, err := ParamDB.Exec("UPDATE northbound_configs SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", enabled, id)
 	return err
 }
 
@@ -1129,4 +1135,16 @@ func CleanupOldDataByConfig() (int64, error) {
 		}
 	}
 	return totalDeleted, nil
+}
+
+// CleanupData 清理过期数据（根据时间戳）
+func CleanupData(before string) (int64, error) {
+	result, err := DataDB.Exec(
+		"DELETE FROM data_points WHERE collected_at < ?",
+		before,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

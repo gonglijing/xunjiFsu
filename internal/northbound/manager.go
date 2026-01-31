@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"gogw/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 // Northbound 北向接口接口
@@ -100,15 +100,16 @@ func (m *NorthboundManager) GetAdapter(name string) (Northbound, error) {
 	return adapter, nil
 }
 
-// ListAdapters 列出所有适配器
-func (m *NorthboundManager) ListAdapters() []string {
+// GetAdapterCount 获取适配器数量
+func (m *NorthboundManager) GetAdapterCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	names := make([]string, 0, len(m.adapters))
-	for name := range m.adapters {
-		names = append(names, name)
-	}
-	return names
+	return len(m.adapters)
+}
+
+// RemoveAdapter 移除适配器
+func (m *NorthboundManager) RemoveAdapter(name string) {
+	m.UnregisterAdapter(name)
 }
 
 // SendData 发送数据到所有启用的北向

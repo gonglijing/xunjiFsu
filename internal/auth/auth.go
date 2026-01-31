@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"gogw/internal/database"
-	"gogw/internal/pwdutil"
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/pwdutil"
 
 	"github.com/gorilla/sessions"
 )
