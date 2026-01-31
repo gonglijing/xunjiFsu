@@ -4,501 +4,424 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HuShu智能网关 - 历史数据</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .htmx-request .htmx-indicator { display: inline; }
-        .htmx-indicator { display: none; }
-        .table-header { @apply bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 font-semibold; }
-        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
-        .badge-green { @apply bg-green-100 text-green-800; }
-        .badge-blue { @apply bg-blue-100 text-blue-800; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 50%, #0a0a1a 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+        
+        .nav {
+            background: rgba(10, 15, 35, 0.95);
+            border-bottom: 1px solid rgba(0, 198, 255, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding: 16px 0;
+        }
+        .nav-inner { display: flex; justify-content: space-between; align-items: center; }
+        .nav-brand { display: flex; align-items: center; gap: 16px; }
+        .nav-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .nav-title {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00c6ff, #00ffff, #8a2be2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-subtitle { font-size: 12px; color: #9ca3af; display: flex; align-items: center; gap: 8px; }
+        .nav-subtitle span { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-link {
+            color: rgba(0, 198, 255, 0.6);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+        }
+        .nav-link:hover, .nav-link.active { color: #00c6ff; }
+        .nav-link.active { background: rgba(0, 198, 255, 0.1); }
+        .nav-user {
+            display: flex; align-items: center; gap: 12px;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+        .nav-user-avatar {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px;
+        }
+        
+        .card {
+            background: rgba(10, 15, 35, 0.9);
+            border: 1px solid rgba(0, 198, 255, 0.15);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1px solid;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        .btn-primary { background: rgba(0, 198, 255, 0.1); border-color: rgba(0, 198, 255, 0.3); color: #00c6ff; }
+        .btn-primary:hover { background: rgba(0, 198, 255, 0.25); }
+        .btn-success { background: rgba(0, 255, 127, 0.1); border-color: rgba(0, 255, 127, 0.3); color: #00ff7f; }
+        
+        .input, .select { width: 100%; padding: 12px 16px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(0, 198, 255, 0.2); border-radius: 10px; color: #fff; font-size: 14px; }
+        
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .gap-4 { gap: 16px; }
+        .gap-6 { gap: 24px; }
+        
+        .mb-4 { margin-bottom: 16px; }
+        .mb-6 { margin-bottom: 24px; }
+        .mb-8 { margin-bottom: 32px; }
+        .mt-4 { margin-top: 16px; }
+        .p-6 { padding: 24px; }
+        .p-8 { padding: 32px; }
+        
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .space-x-2 { gap: 8px; }
+        .space-x-4 { gap: 16px; }
+        .space-x-8 { gap: 32px; }
+        
+        .text-white { color: #fff; }
+        .text-gray-300 { color: #d1d5db; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-gray-500 { color: #6b7280; }
+        .text-blue-400 { color: #60a5fa; }
+        .text-green-400 { color: #4ade80; }
+        .text-sm { font-size: 14px; }
+        .text-lg { font-size: 18px; }
+        .text-xl { font-size: 20px; }
+        .font-medium { font-weight: 500; }
+        .font-semibold { font-weight: 600; }
+        .font-bold { font-weight: 700; }
+        .font-mono { font-family: 'SF Mono', Monaco, monospace; }
+        
+        .hidden { display: none; }
+        .w-full { width: 100%; }
+        .rounded-lg { border-radius: 10px; }
+        .rounded-xl { border-radius: 16px; }
+        .overflow-hidden { overflow: hidden; }
+        .overflow-x-auto { overflow-x: auto; }
+        
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        @media (min-width: 768px) { .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (min-width: 1024px) { .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.5); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00c6ff, #8a2be2); border-radius: 4px; }
+        
+        .border-glow { position: relative; }
+        .border-glow::before {
+            content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+            background: linear-gradient(135deg, #00c6ff, #00ffff, #8a2be2, #00c6ff);
+            background-size: 300% 300%; animation: border-rotate 4s linear infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+        }
+        @keyframes border-rotate { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        
+        .tab-btn {
+            padding: 16px 20px;
+            color: rgba(0, 198, 255, 0.5);
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .tab-btn:hover { color: #00c6ff; }
+        .tab-btn.active { color: #00c6ff; text-shadow: 0 0 15px rgba(0, 198, 255, 0.8); }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #00c6ff, #8a2be2); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .table-container { overflow-x: auto; }
+        .table { width: 100%; border-collapse: collapse; background: rgba(0, 0, 0, 0.3); border-radius: 12px; overflow: hidden; }
+        .table th {
+            background: rgba(0, 198, 255, 0.1);
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: 500;
+            color: #00c6ff;
+            border-bottom: 1px solid rgba(0, 198, 255, 0.2);
+            font-size: 14px;
+        }
+        .table td { padding: 16px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: #b0d4ff; }
+        .table tr:hover td { background: rgba(0, 198, 255, 0.08); }
+        
+        .pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .pagination-info { font-size: 14px; color: #9ca3af; }
+        .pagination-info strong { color: #fff; font-weight: 600; }
+        .pagination-controls { display: flex; align-items: center; gap: 8px; }
+        .pagination-btn {
+            padding: 8px 16px;
+            background: rgba(0, 198, 255, 0.1);
+            border: 1px solid rgba(0, 198, 255, 0.3);
+            border-radius: 8px;
+            color: #00c6ff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .pagination-btn:hover:not(:disabled) { background: rgba(0, 198, 255, 0.25); }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination-page { padding: 8px 16px; color: #d1d5db; }
+        
+        .empty-state { text-align: center; padding: 64px 32px; }
+        .empty-icon { width: 96px; height: 96px; border-radius: 50%; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 48px; color: #4b5563; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen">
+<body>
     <!-- 顶部导航 -->
-    <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
-        <div class="container mx-auto px-6 py-4">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <i class="fas fa-history text-2xl"></i>
-                    <h1 class="text-xl font-bold">HuShu智能网关 - 历史数据</h1>
+    <nav class="nav">
+        <div class="container nav-inner">
+            <div class="nav-brand">
+                <div class="nav-logo">&#128337;</div>
+                <div>
+                    <div class="nav-title">HuShu智能网关</div>
+                    <div class="nav-subtitle"><span></span>历史数据查询</div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
-                        <i class="fas fa-home"></i>
-                        <span>仪表盘</span>
-                    </a>
-                    <a href="/realtime" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
-                        <i class="fas fa-chart-line"></i>
-                        <span>实时数据</span>
-                    </a>
-                    <a href="/history" class="flex items-center space-x-2 text-white font-bold">
-                        <i class="fas fa-history"></i>
-                        <span>历史数据</span>
-                    </a>
-                    <div class="flex items-center space-x-2 bg-blue-700 px-3 py-1 rounded-lg">
-                        <i class="fas fa-user-circle"></i>
-                        <span>admin</span>
-                    </div>
-                    <a href="/logout" class="flex items-center space-x-2 bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>退出</span>
-                    </a>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">&#8962; 仪表盘</a>
+                <a href="/realtime" class="nav-link">&#128200; 实时数据</a>
+                <a href="/history" class="nav-link active">&#128337; 历史数据</a>
+                <div class="nav-user">
+                    <div class="nav-user-avatar">&#128100;</div>
+                    <span class="text-gray-300">admin</span>
                 </div>
+                <a href="/logout" class="btn" style="background: rgba(255,0,63,0.1); border-color: rgba(255,0,63,0.3); color: #ff003f; padding: 8px 16px;">&#10145; 退出</a>
             </div>
         </div>
     </nav>
 
     <!-- 主内容 -->
-    <div class="container mx-auto px-6 py-8">
-        <!-- 查询条件卡片 -->
-        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
-            <div class="flex items-center mb-4">
-                <i class="fas fa-filter text-blue-500 mr-2"></i>
-                <h3 class="text-lg font-semibold text-gray-800">查询条件</h3>
-            </div>
-            
+    <main class="container" style="padding-top: 32px; padding-bottom: 32px;">
+        <!-- 查询条件 -->
+        <div class="card border-glow mb-8">
+            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; color: #60a5fa;">&#128269; 查询条件</h3>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-microchip mr-2 text-gray-400"></i>设备
-                    </label>
-                    <div class="relative">
-                        <select id="device-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white">
-                            <option value="">-- 所有设备 --</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                            <i class="fas fa-chevron-down text-gray-400"></i>
-                        </div>
-                    </div>
+                    <label style="display: block; font-size: 14px; color: #d1d5db; margin-bottom: 8px;">&#128268; 设备</label>
+                    <select id="history-device-select" class="select">
+                        <option value="">-- 所有设备 --</option>
+                    </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-tag mr-2 text-gray-400"></i>字段
-                    </label>
-                    <div class="relative">
-                        <select id="field-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white">
-                            <option value="">-- 所有字段 --</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                            <i class="fas fa-chevron-down text-gray-400"></i>
-                        </div>
-                    </div>
+                    <label style="display: block; font-size: 14px; color: #d1d5db; margin-bottom: 8px;">&#128197; 开始时间</label>
+                    <input type="datetime-local" id="history-start-time" class="input">
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-clock mr-2 text-gray-400"></i>时间范围
-                    </label>
-                    <div class="relative">
-                        <select id="time-range" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white" onchange="updateTimeInputs()">
-                            <option value="1h">最近1小时</option>
-                            <option value="6h">最近6小时</option>
-                            <option value="24h" selected>最近24小时</option>
-                            <option value="7d">最近7天</option>
-                            <option value="30d">最近30天</option>
-                            <option value="custom">自定义</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                            <i class="fas fa-chevron-down text-gray-400"></i>
-                        </div>
-                    </div>
+                    <label style="display: block; font-size: 14px; color: #d1d5db; margin-bottom: 8px;">&#128197; 结束时间</label>
+                    <input type="datetime-local" id="history-end-time" class="input">
                 </div>
-                <div class="flex items-end">
-                    <button class="btn-primary w-full" onclick="searchHistory()">
-                        <i class="fas fa-search mr-2"></i>查询
-                    </button>
+                <div style="display: flex; align-items: flex-end;">
+                    <button class="btn btn-success w-full justify-center" onclick="queryHistory()">&#128269; 查询</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- 结果展示 -->
+        <div class="card border-glow">
+            <!-- 标签页切换 -->
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px; padding: 0 16px;">
+                <button onclick="switchHistoryTab('table')" id="tab-table-btn" class="tab-btn active">&#128196; 表格视图</button>
+                <button onclick="switchHistoryTab('chart')" id="tab-chart-btn" class="tab-btn">&#128202; 图表视图</button>
             </div>
             
-            <!-- 自定义时间输入 -->
-            <div id="custom-time" class="grid grid-cols-2 gap-4 mt-4 hidden">
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-calendar-start mr-2 text-gray-400"></i>开始时间
-                    </label>
-                    <input type="datetime-local" id="start-time" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-calendar-end mr-2 text-gray-400"></i>结束时间
-                    </label>
-                    <input type="datetime-local" id="end-time" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-            </div>
-        </div>
-
-        <!-- 统计信息 -->
-        <div id="stats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 hidden">
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center">
-                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-                        <i class="fas fa-database text-blue-600 text-xl"></i>
+            <!-- 标签内容 -->
+            <div style="padding: 24px;">
+                <!-- 表格视图 -->
+                <div id="view-table" class="tab-content active">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>&#128197; 采集时间</th><th>&#128268; 设备</th><th>&#128268; 字段</th><th>&#128178; 数值</th><th>&#128203; 单位</th></tr></thead>
+                            <tbody id="history-table-body">
+                                <tr><td colspan="5" class="text-center p-8 text-gray-500">请设置查询条件并点击查询</td></tr>
+                            </tbody>
+                        </table>
                     </div>
-                    <div>
-                        <div class="text-sm text-gray-500">数据点数量</div>
-                        <div id="data-count" class="text-3xl font-bold text-gray-800">-</div>
+                    <!-- 分页 -->
+                    <div class="pagination">
+                        <div class="pagination-info">共 <strong id="history-total">0</strong> 条记录</div>
+                        <div class="pagination-controls">
+                            <button class="pagination-btn" onclick="prevHistoryPage()" id="prev-page-btn">&#9664;</button>
+                            <span class="pagination-page" id="history-page">1 / 1</span>
+                            <button class="pagination-btn" onclick="nextHistoryPage()" id="next-page-btn">&#9654;</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center">
-                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4">
-                        <i class="fas fa-play-circle text-green-600 text-xl"></i>
-                    </div>
-                    <div>
-                        <div class="text-sm text-gray-500">最早记录</div>
-                        <div id="first-time" class="text-lg font-medium text-gray-800">-</div>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center">
-                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
-                        <i class="fas fa-stop-circle text-purple-600 text-xl"></i>
-                    </div>
-                    <div>
-                        <div class="text-sm text-gray-500">最晚记录</div>
-                        <div id="last-time" class="text-lg font-medium text-gray-800">-</div>
+                
+                <!-- 图表视图 -->
+                <div id="view-chart" class="tab-content">
+                    <div id="chart-container" style="width:100%;height:400px;display:flex;align-items:center;justify-content:center;" class="empty-state">
+                        <div class="text-center">
+                            <div class="empty-icon">&#128202;</div>
+                            <p class="text-xl mb-2" style="color: #9ca3af;">图表数据展示区域</p>
+                            <p class="text-sm" style="color: #6b7280;">请先执行查询操作</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- 历史数据表格 -->
-        <div class="bg-white rounded-xl shadow-md overflow-hidden">
-            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                <div class="flex items-center">
-                    <i class="fas fa-table text-blue-500 mr-2"></i>
-                    <h3 class="text-lg font-medium text-gray-800">查询结果</h3>
-                </div>
-                <div class="flex items-center gap-3">
-                    <button class="flex items-center space-x-2 text-sm text-green-600 hover:text-green-800 px-3 py-1 rounded-lg hover:bg-green-50 transition-colors" onclick="exportCSV()">
-                        <i class="fas fa-file-export"></i>
-                        <span>导出CSV</span>
-                    </button>
-                    <button class="flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-800 px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors" onclick="refreshData()">
-                        <i class="fas fa-sync-alt"></i>
-                        <span>刷新</span>
-                    </button>
-                </div>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead class="table-header">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                <i class="far fa-clock mr-2"></i>时间
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                <i class="fas fa-microchip mr-2"></i>设备
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                <i class="fas fa-tag mr-2"></i>字段
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                <i class="fas fa-chart-line mr-2"></i>值
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-table" class="bg-white divide-y divide-gray-200">
-                        <tr>
-                            <td colspan="4" class="px-6 py-12 text-center text-gray-500">
-                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <i class="fas fa-search text-3xl text-gray-300"></i>
-                                </div>
-                                <p>请选择查询条件并点击查询</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <!-- 分页 -->
-            <div id="pagination" class="px-6 py-4 border-t bg-gray-50 hidden">
-                <div class="flex items-center justify-between">
-                    <div class="text-sm text-gray-500">
-                        共 <span id="total-count" class="font-semibold text-gray-800">0</span> 条记录
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button id="prev-page" class="flex items-center space-x-1 px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" onclick="changePage(-1)">
-                            <i class="fas fa-chevron-left"></i>
-                            <span>上一页</span>
-                        </button>
-                        <span id="page-info" class="text-sm px-3 py-1 bg-blue-100 text-blue-800 rounded-lg">
-                            1 / 1
-                        </span>
-                        <button id="next-page" class="flex items-center space-x-1 px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" onclick="changePage(1)">
-                            <span>下一页</span>
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <style>
-        .btn-primary { @apply bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3 rounded-lg shadow transition-all duration-200; }
-        .card-hover { @apply transition-all duration-300 hover:shadow-lg; }
-    </style>
+    </main>
 
     <script>
-        let currentData = [];
-        let currentPage = 1;
-        const pageSize = 100;
-        let totalCount = 0;
-
-        // 页面加载时获取设备列表
-        document.addEventListener('DOMContentLoaded', function() {
-            updateTimeInputs();
-            loadDevices();
-        });
-
-        // 加载设备列表
-        function loadDevices() {
-            htmx.ajax('GET', '/api/devices', {
-                target: '#device-select',
-                swap: 'innerHTML',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        try {
-                            const devices = JSON.parse(evt.detail.xhr.response);
-                            let html = '<option value="">-- 所有设备 --</option>';
-                            devices.forEach(device => {
-                                html += `<option value="${device.id}">${device.name}</option>`;
-                            });
-                            document.getElementById('device-select').innerHTML = html;
-                        } catch (e) {
-                            console.error('Failed to parse devices:', e);
-                        }
-                    }
-                }
+        var historyPage = 1;
+        var historyPageSize = 50;
+        var historyTotal = 0;
+        
+        function api(url, options) {
+            return fetch(url, options).then(function(res) {
+                if (!res.ok) throw new Error();
+                return res.json();
             });
         }
-
-        // 更新字段选择
-        document.getElementById('device-select').addEventListener('change', function() {
-            const deviceId = this.value;
-            const fieldSelect = document.getElementById('field-select');
-            
-            if (deviceId) {
-                htmx.ajax('GET', '/api/data/cache/' + deviceId, {
-                    target: '#field-select',
-                    swap: 'innerHTML',
-                    afterRequest: function(evt) {
-                        if (evt.detail.successful) {
-                            try {
-                                const data = JSON.parse(evt.detail.xhr.response);
-                                let html = '<option value="">-- 所有字段 --</option>';
-                                const fields = new Set();
-                                data.forEach(item => fields.add(item.field_name));
-                                fields.forEach(field => {
-                                    html += `<option value="${field}">${field}</option>`;
-                                });
-                                fieldSelect.innerHTML = html;
-                            } catch (e) {
-                                console.error('Failed to parse data:', e);
-                            }
-                        }
-                    }
-                });
-            } else {
-                fieldSelect.innerHTML = '<option value="">-- 所有字段 --</option>';
-            }
-        });
-
-        // 更新时间输入框显示
-        function updateTimeInputs() {
-            const range = document.getElementById('time-range').value;
-            const customTime = document.getElementById('custom-time');
-            
-            if (range === 'custom') {
-                customTime.classList.remove('hidden');
-            } else {
-                customTime.classList.add('hidden');
-            }
+        
+        function formatDateTimeLocal(date) {
+            var year = date.getFullYear();
+            var month = String(date.getMonth() + 1).padStart(2, '0');
+            var day = String(date.getDate()).padStart(2, '0');
+            var hours = String(date.getHours()).padStart(2, '0');
+            var minutes = String(date.getMinutes()).padStart(2, '0');
+            return year + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
         }
-
-        // 获取时间范围
-        function getTimeRange() {
-            const range = document.getElementById('time-range').value;
-            const now = new Date();
-            let start = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 默认24小时
-
-            switch (range) {
-                case '1h':
-                    start = new Date(now.getTime() - 60 * 60 * 1000);
-                    break;
-                case '6h':
-                    start = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-                    break;
-                case '24h':
-                    start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                    break;
-                case '7d':
-                    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                    break;
-                case '30d':
-                    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                    break;
-                case 'custom':
-                    const startInput = document.getElementById('start-time').value;
-                    const endInput = document.getElementById('end-time').value;
-                    if (startInput) start = new Date(startInput);
-                    if (endInput) now = new Date(endInput);
-                    break;
-            }
-
-            return { start, end: now };
+        
+        function switchHistoryTab(tab) {
+            document.getElementById('tab-table-btn').classList.remove('active');
+            document.getElementById('tab-chart-btn').classList.remove('active');
+            document.getElementById('view-table').classList.remove('active');
+            document.getElementById('view-chart').classList.remove('active');
+            document.getElementById('tab-' + tab + '-btn').classList.add('active');
+            document.getElementById('view-' + tab).classList.add('active');
         }
-
-        // 搜索历史数据
-        function searchHistory() {
-            const deviceId = document.getElementById('device-select').value;
-            const fieldName = document.getElementById('field-select').value;
-            const timeRange = getTimeRange();
-
-            // 使用最新的数据点API来获取历史数据
-            htmx.ajax('GET', '/api/data/points?limit=1000', {
-                target: '#history-table',
-                swap: 'innerHTML',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        try {
-                            const data = JSON.parse(evt.detail.xhr.response);
-                            // 过滤数据
-                            currentData = data.filter(item => {
-                                const itemTime = new Date(item.collected_at);
-                                if (itemTime < timeRange.start || itemTime > timeRange.end) return false;
-                                if (deviceId && item.device_id != deviceId) return false;
-                                if (fieldName && item.field_name != fieldName) return false;
-                                return true;
-                            });
-
-                            // 按时间排序
-                            currentData.sort((a, b) => new Date(b.collected_at) - new Date(a.collected_at));
-                            totalCount = currentData.length;
-                            currentPage = 1;
-
-                            updateStats();
-                            renderTable();
-                        } catch (e) {
-                            console.error('Failed to parse data:', e);
-                            document.getElementById('history-table').innerHTML = 
-                                '<tr><td colspan="4" class="px-6 py-12 text-center text-red-500">查询失败</td></tr>';
-                        }
-                    }
-                }
+        
+        function queryHistory() {
+            var deviceId = document.getElementById('history-device-select').value;
+            var startTime = document.getElementById('history-start-time').value;
+            var endTime = document.getElementById('history-end-time').value;
+            
+            var url = '/api/data/points?page=' + historyPage + '&page_size=' + historyPageSize;
+            if (deviceId) url += '&device_id=' + deviceId;
+            if (startTime) url += '&start_time=' + startTime.replace('T', ' ') + ':00';
+            if (endTime) url += '&end_time=' + endTime.replace('T', ' ') + ':59';
+            
+            api(url).then(function(response) {
+                var data = response.data || response;
+                historyTotal = response.total || response.length || 0;
+                renderHistoryTable(data);
+                updateHistoryPagination();
             });
         }
-
-        // 更新统计信息
-        function updateStats() {
-            const stats = document.getElementById('stats');
-            if (currentData.length > 0) {
-                stats.classList.remove('hidden');
-                document.getElementById('data-count').textContent = totalCount;
-                document.getElementById('first-time').textContent = 
-                    new Date(currentData[currentData.length - 1].collected_at).toLocaleString();
-                document.getElementById('last-time').textContent = 
-                    new Date(currentData[0].collected_at).toLocaleString();
-            } else {
-                stats.classList.add('hidden');
-            }
-        }
-
-        // 渲染表格
-        function renderTable() {
-            const start = (currentPage - 1) * pageSize;
-            const end = Math.min(start + pageSize, totalCount);
-            const pageData = currentData.slice(start, end);
-
-            let html = '';
-            if (pageData.length === 0) {
-                html = `<tr><td colspan="4" class="px-6 py-12 text-center text-gray-500">
-                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i class="fas fa-inbox text-3xl text-gray-300"></i>
-                    </div>
-                    <p>暂无数据</p>
-                </td></tr>`;
-            } else {
-                pageData.forEach(item => {
-                    html += `
-                        <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <i class="far fa-clock mr-2 text-gray-400"></i>
-                                ${new Date(item.collected_at).toLocaleString()}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <i class="fas fa-microchip mr-2 text-blue-400"></i>
-                                ${item.device_name}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <span class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">${item.field_name}</span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-mono font-semibold">
-                                ${item.value}
-                            </td>
-                        </tr>
-                    `;
-                });
-            }
-            document.getElementById('history-table').innerHTML = html;
-
-            // 更新分页
-            const pagination = document.getElementById('pagination');
-            if (totalCount > pageSize) {
-                pagination.classList.remove('hidden');
-                const totalPages = Math.ceil(totalCount / pageSize);
-                document.getElementById('page-info').textContent = `${currentPage} / ${totalPages}`;
-                document.getElementById('prev-page').disabled = currentPage <= 1;
-                document.getElementById('next-page').disabled = currentPage >= totalPages;
-                document.getElementById('total-count').textContent = totalCount;
-            } else {
-                if (totalCount > 0) {
-                    pagination.classList.remove('hidden');
-                    document.getElementById('page-info').textContent = `1 / 1`;
-                    document.getElementById('total-count').textContent = totalCount;
-                } else {
-                    pagination.classList.add('hidden');
-                }
-            }
-        }
-
-        // 翻页
-        function changePage(delta) {
-            const totalPages = Math.ceil(totalCount / pageSize);
-            const newPage = currentPage + delta;
-            if (newPage >= 1 && newPage <= totalPages) {
-                currentPage = newPage;
-                renderTable();
-            }
-        }
-
-        // 刷新数据
-        function refreshData() {
-            searchHistory();
-        }
-
-        // 导出CSV
-        function exportCSV() {
-            if (currentData.length === 0) {
-                alert('没有数据可导出');
+        
+        function renderHistoryTable(data) {
+            var tbody = document.getElementById('history-table-body');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center p-8 text-gray-500">未查询到历史数据</td></tr>';
                 return;
             }
-
-            let csv = '时间,设备,字段,值\n';
-            currentData.forEach(item => {
-                csv += `"${item.collected_at}","${item.device_name}","${item.field_name}","${item.value}"\n`;
-            });
-
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'history_data_' + new Date().toISOString().slice(0, 10) + '.csv';
-            link.click();
+            var html = '';
+            for (var i = 0; i < data.length; i++) {
+                var item = data[i];
+                html += '<tr style="transition:background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                html += '<td style="color:#9ca3af;">' + new Date(item.collected_at).toLocaleString('zh-CN') + '</td>';
+                html += '<td>' + (item.device_name || item.device_id) + '</td>';
+                html += '<td style="color:#60a5fa;">' + item.field_name + '</td>';
+                html += '<td style="color:#4ade80;font-family:monospace;">' + parseFloat(item.value).toFixed(2) + '</td>';
+                html += '<td style="color:#6b7280;">' + getUnit(item.field_name) + '</td>';
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
         }
+        
+        function updateHistoryPagination() {
+            var totalPages = Math.ceil(historyTotal / historyPageSize) || 1;
+            document.getElementById('history-total').textContent = historyTotal;
+            document.getElementById('history-page').textContent = historyPage + ' / ' + totalPages;
+            document.getElementById('prev-page-btn').disabled = historyPage <= 1;
+            document.getElementById('next-page-btn').disabled = historyPage >= totalPages;
+        }
+        
+        function prevHistoryPage() {
+            if (historyPage > 1) { historyPage--; queryHistory(); }
+        }
+        
+        function nextHistoryPage() {
+            var totalPages = Math.ceil(historyTotal / historyPageSize) || 1;
+            if (historyPage < totalPages) { historyPage++; queryHistory(); }
+        }
+        
+        function getUnit(fieldName) {
+            fieldName = (fieldName || '').toLowerCase();
+            if (fieldName.includes('temp') || fieldName.includes('温度')) return 'C';
+            if (fieldName.includes('hum') || fieldName.includes('湿度')) return '%';
+            if (fieldName.includes('press') || fieldName.includes('压力')) return 'Pa';
+            if (fieldName.includes('volt') || fieldName.includes('电压')) return 'V';
+            if (fieldName.includes('curr') || fieldName.includes('电流')) return 'A';
+            if (fieldName.includes('power') || fieldName.includes('功率')) return 'W';
+            if (fieldName.includes('speed') || fieldName.includes('速度')) return 'm/s';
+            if (fieldName.includes('level') || fieldName.includes('液位')) return 'm';
+            if (fieldName.includes('flow') || fieldName.includes('流量')) return 'm/h';
+            return '';
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            var now = new Date();
+            var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            document.getElementById('history-end-time').value = formatDateTimeLocal(now);
+            document.getElementById('history-start-time').value = formatDateTimeLocal(yesterday);
+            
+            api('/api/devices').then(function(devices) {
+                var select = document.getElementById('history-device-select');
+                var html = '<option value="">-- 所有设备 --</option>';
+                for (var i = 0; i < devices.length; i++) {
+                    html += '<option value="' + devices[i].id + '">' + devices[i].name + '</option>';
+                }
+                select.innerHTML = html;
+            });
+        });
     </script>
 </body>
 </html>

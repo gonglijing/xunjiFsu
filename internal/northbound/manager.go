@@ -1,9 +1,12 @@
 package northbound
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -301,14 +304,23 @@ type HTTPAdapter struct {
 	url         string
 	headers     map[string]string
 	lastUpload  time.Time
+	timeout     time.Duration
 	mu          sync.RWMutex
 	initialized bool
+}
+
+// HTTPConfig HTTP配置
+type HTTPConfig struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Timeout int               `json:"timeout"` // 秒
 }
 
 // NewHTTPAdapter 创建HTTP适配器
 func NewHTTPAdapter() *HTTPAdapter {
 	return &HTTPAdapter{
 		lastUpload: time.Time{},
+		timeout:    30 * time.Second,
 	}
 }
 
@@ -319,9 +331,20 @@ func (a *HTTPAdapter) Name() string {
 
 // Initialize 初始化
 func (a *HTTPAdapter) Initialize(configStr string) error {
-	// 解析HTTP配置
+	config := &HTTPConfig{}
+	if err := json.Unmarshal([]byte(configStr), config); err != nil {
+		return fmt.Errorf("failed to parse HTTP config: %w", err)
+	}
+
 	a.config = configStr
+	a.url = config.URL
+	a.headers = config.Headers
+	if config.Timeout > 0 {
+		a.timeout = time.Duration(config.Timeout) * time.Second
+	}
 	a.initialized = true
+
+	log.Printf("HTTP adapter initialized: %s", a.url)
 	return nil
 }
 
@@ -331,9 +354,15 @@ func (a *HTTPAdapter) Send(data *models.CollectData) error {
 		return fmt.Errorf("adapter not initialized")
 	}
 
-	// 发送HTTP请求
-	log.Printf("HTTP data to %s: %v", a.url, data)
-	return nil
+	// 构建消息
+	msg := map[string]interface{}{
+		"device_name": data.DeviceName,
+		"timestamp":   data.Timestamp,
+		"fields":      data.Fields,
+	}
+
+	body, _ := json.Marshal(msg)
+	return a.sendRequest(a.url, body, "data")
 }
 
 // SendAlarm 发送报警
@@ -342,8 +371,37 @@ func (a *HTTPAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 		return fmt.Errorf("adapter not initialized")
 	}
 
-	// 发送HTTP请求
-	log.Printf("HTTP alarm to %s: %v", a.url, alarm)
+	body, _ := json.Marshal(alarm)
+	return a.sendRequest(a.url, body, "alarm")
+}
+
+// sendRequest 发送HTTP请求
+func (a *HTTPAdapter) sendRequest(url string, body []byte, msgType string) error {
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// 设置 headers
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range a.headers {
+		req.Header.Set(k, v)
+	}
+
+	client := &http.Client{Timeout: a.timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("HTTP %s request failed: %v", msgType, err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	log.Printf("HTTP %s sent successfully to %s", msgType, url)
 	return nil
 }
 

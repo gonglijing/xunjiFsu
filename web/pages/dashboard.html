@@ -4,1253 +4,879 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HuShu智能网关 - 仪表盘</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .htmx-request .htmx-indicator { display: inline; }
-        .htmx-indicator { display: none; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-        .status-running { @apply bg-green-100 text-green-800 border-green-200; }
-        .status-stopped { @apply bg-red-100 text-red-800 border-red-200; }
-        .status-warning { @apply bg-yellow-100 text-yellow-800 border-yellow-200; }
-        .card-hover { @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1; }
-        .btn-primary { @apply bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg shadow transition-all duration-200; }
-        .btn-danger { @apply bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg shadow transition-all duration-200; }
-        .btn-success { @apply bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-4 py-2 rounded-lg shadow transition-all duration-200; }
-        .input-field { @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200; }
-        .table-header { @apply bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 font-semibold; }
-        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
-        .badge-green { @apply bg-green-100 text-green-800; }
-        .badge-red { @apply bg-red-100 text-red-800; }
-        .badge-yellow { @apply bg-yellow-100 text-yellow-800; }
-        .badge-blue { @apply bg-blue-100 text-blue-800; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 50%, #0a0a1a 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+        
+        /* 导航 */
+        .nav {
+            background: rgba(10, 15, 35, 0.95);
+            border-bottom: 1px solid rgba(0, 198, 255, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding: 16px 0;
+        }
+        .nav-inner { display: flex; justify-content: space-between; align-items: center; }
+        .nav-brand { display: flex; align-items: center; gap: 16px; }
+        .nav-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .nav-title {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00c6ff, #00ffff, #8a2be2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-subtitle { font-size: 12px; color: #9ca3af; display: flex; align-items: center; gap: 8px; }
+        .nav-subtitle span { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-link {
+            color: rgba(0, 198, 255, 0.6);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .nav-link:hover, .nav-link.active { color: #00c6ff; }
+        .nav-link.active { background: rgba(0, 198, 255, 0.1); }
+        .nav-user {
+            display: flex; align-items: center; gap: 12px;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+        .nav-user-avatar {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px;
+        }
+        
+        /* 卡片 */
+        .card {
+            background: rgba(10, 15, 35, 0.9);
+            border: 1px solid rgba(0, 198, 255, 0.15);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .card-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1px solid;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        .btn-primary { background: rgba(0, 198, 255, 0.1); border-color: rgba(0, 198, 255, 0.3); color: #00c6ff; }
+        .btn-primary:hover { background: rgba(0, 198, 255, 0.25); box-shadow: 0 0 20px rgba(0, 198, 255, 0.3); }
+        .btn-success { background: rgba(0, 255, 127, 0.1); border-color: rgba(0, 255, 127, 0.3); color: #00ff7f; }
+        .btn-success:hover { background: rgba(0, 255, 127, 0.25); }
+        .btn-danger { background: rgba(255, 0, 63, 0.1); border-color: rgba(255, 0, 63, 0.3); color: #ff003f; }
+        
+        /* 徽章 */
+        .badge {
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .badge-running { background: rgba(0, 255, 127, 0.1); border: 1px solid rgba(0, 255, 127, 0.4); color: #00ff7f; }
+        .badge-stopped { background: rgba(255, 0, 63, 0.1); border: 1px solid rgba(255, 0, 63, 0.4); color: #ff003f; }
+        .badge-warning { background: rgba(255, 200, 0, 0.1); border: 1px solid rgba(255, 200, 0, 0.4); color: #ffc800; }
+        
+        /* 表格 */
+        .table-container { overflow-x: auto; }
+        .table { width: 100%; border-collapse: collapse; background: rgba(0, 0, 0, 0.3); border-radius: 12px; overflow: hidden; }
+        .table th {
+            background: rgba(0, 198, 255, 0.1);
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: 500;
+            color: #00c6ff;
+            border-bottom: 1px solid rgba(0, 198, 255, 0.2);
+            font-size: 14px;
+        }
+        .table td { padding: 16px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: #b0d4ff; }
+        .table tr:hover td { background: rgba(0, 198, 255, 0.08); }
+        
+        /* 输入框 */
+        .input { width: 100%; padding: 12px 16px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(0, 198, 255, 0.2); border-radius: 10px; color: #fff; font-size: 14px; }
+        .input:focus { outline: none; border-color: rgba(0, 198, 255, 0.6); }
+        .select { width: 100%; padding: 12px 16px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(0, 198, 255, 0.2); border-radius: 10px; color: #fff; font-size: 14px; cursor: pointer; }
+        
+        /* 网格 */
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .gap-4 { gap: 16px; }
+        .gap-6 { gap: 24px; }
+        
+        /* 间距 */
+        .mb-4 { margin-bottom: 16px; }
+        .mb-6 { margin-bottom: 24px; }
+        .mb-8 { margin-bottom: 32px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .p-4 { padding: 16px; }
+        .p-6 { padding: 24px; }
+        .p-8 { padding: 32px; }
+        
+        /* Flex */
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .space-x-2 { gap: 8px; }
+        .space-x-3 { gap: 12px; }
+        
+        /* 文本 */
+        .text-white { color: #fff; }
+        .text-gray-300 { color: #d1d5db; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-gray-500 { color: #6b7280; }
+        .text-blue-400 { color: #60a5fa; }
+        .text-green-400 { color: #4ade80; }
+        .text-purple-400 { color: #c084fc; }
+        .text-yellow-400 { color: #facc15; }
+        .text-red-400 { color: #f87171; }
+        .text-sm { font-size: 14px; }
+        .text-lg { font-size: 18px; }
+        .text-xl { font-size: 20px; }
+        .text-2xl { font-size: 24px; }
+        .text-3xl { font-size: 30px; }
+        .font-medium { font-weight: 500; }
+        .font-semibold { font-weight: 600; }
+        .font-bold { font-weight: 700; }
+        .text-center { text-align: center; }
+        
+        /* 工具类 */
+        .hidden { display: none; }
+        .w-full { width: 100%; }
+        .rounded-lg { border-radius: 10px; }
+        .rounded-xl { border-radius: 16px; }
+        .rounded-full { border-radius: 9999px; }
+        .cursor-pointer { cursor: pointer; }
+        .transition { transition: all 0.3s; }
+        
+        /* 动画 */
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* 响应式 */
+        @media (min-width: 768px) { .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (min-width: 1024px) { .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.5); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00c6ff, #8a2be2); border-radius: 4px; }
+        
+        /* 边框动画 */
+        .border-glow { position: relative; }
+        .border-glow::before {
+            content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+            background: linear-gradient(135deg, #00c6ff, #00ffff, #8a2be2, #00c6ff);
+            background-size: 300% 300%; animation: border-rotate 4s linear infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+        }
+        @keyframes border-rotate { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        
+        /* 标签页 */
+        .tab-btn {
+            padding: 16px 20px;
+            color: rgba(0, 198, 255, 0.5);
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .tab-btn:hover { color: #00c6ff; }
+        .tab-btn.active { color: #00c6ff; text-shadow: 0 0 15px rgba(0, 198, 255, 0.8); }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #00c6ff, #8a2be2); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-out; }
+        
+        /* 状态点 */
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s infinite; }
+        
+        /* 科技感数字 */
+        .stat-number { font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-weight: 600; letter-spacing: 2px; }
+        
+        /* 图标发光 */
+        .icon-glow { filter: drop-shadow(0 0 8px currentColor); }
+        
+        /* 操作按钮 */
+        .action-btn { padding: 6px; background: none; border: none; cursor: pointer; transition: all 0.3s; }
+        .action-btn:hover { transform: scale(1.1); }
+        
+        /* 时间显示 */
+        .time-display { display: inline-flex; align-items: center; gap: 12px; padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; }
+        
+        /* 统计卡片 */
+        .stat-card { background: rgba(10, 15, 35, 0.9); border: 1px solid rgba(0, 198, 255, 0.15); border-radius: 16px; padding: 24px; }
+        .stat-card-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; }
+        .stat-card-label { font-size: 14px; color: #9ca3af; margin-bottom: 4px; }
+        .stat-card-value { font-size: 36px; font-weight: 700; font-family: monospace; }
+        .stat-card-sub { font-size: 12px; color: #6b7280; margin-top: 8px; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen">
+<body>
     <!-- 顶部导航 -->
-    <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
-        <div class="container mx-auto px-6 py-4">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <i class="fas fa-server text-2xl"></i>
-                    <h1 class="text-xl font-bold">HuShu智能网关</h1>
+    <nav class="nav">
+        <div class="container nav-inner">
+            <div class="nav-brand">
+                <div class="nav-logo">&#9776;</div>
+                <div>
+                    <div class="nav-title">HuShu智能网关</div>
+                    <div class="nav-subtitle"><span></span>工业物联网网关管理系统</div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/realtime" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
-                        <i class="fas fa-chart-line"></i>
-                        <span>实时数据</span>
-                    </a>
-                    <a href="/history" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
-                        <i class="fas fa-history"></i>
-                        <span>历史数据</span>
-                    </a>
-                    <div class="flex items-center space-x-2 bg-blue-700 px-3 py-1 rounded-lg">
-                        <i class="fas fa-user-circle"></i>
-                        <span>admin</span>
-                    </div>
-                    <a href="/logout" class="flex items-center space-x-2 bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>退出</span>
-                    </a>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link active">&#8962; 仪表盘</a>
+                <a href="/realtime" class="nav-link">&#128200; 实时数据</a>
+                <a href="/history" class="nav-link">&#128337; 历史数据</a>
+                <div class="nav-user">
+                    <div class="nav-user-avatar">&#128100;</div>
+                    <span class="text-sm text-gray-300">admin</span>
                 </div>
+                <a href="/logout" class="btn btn-danger" style="padding: 8px 16px;">&#10145; 退出</a>
             </div>
         </div>
     </nav>
 
-    <!-- 主内容区 -->
-    <div class="container mx-auto px-6 py-8">
-        <!-- 状态卡片 -->
+    <!-- 主内容 -->
+    <main class="container" style="padding-top: 32px; padding-bottom: 32px;">
+        <!-- 时间显示 -->
+        <div style="text-align: right; margin-bottom: 24px;">
+            <div class="time-display">
+                <span style="color: #60a5fa;">&#128336;</span>
+                <span id="current-time" class="text-sm text-gray-300" style="font-family: monospace;">--:--:--</span>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <!-- 采集状态 -->
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <i class="fas fa-play-circle text-blue-600 text-xl"></i>
-                    </div>
-                    <span id="collector-badge" class="badge badge-yellow">检查中</span>
+            <div class="stat-card border-glow">
+                <div class="flex justify-between items-start">
+                    <div class="stat-card-icon" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">&#9654;</div>
+                    <span id="collector-badge" class="badge badge-warning">检查中</span>
                 </div>
-                <h3 class="text-gray-500 text-sm font-medium">采集状态</h3>
-                <p id="collector-status-text" class="text-2xl font-bold text-gray-800 mt-1">未知</p>
-                <div class="flex space-x-2 mt-4">
-                    <button onclick="startCollector()" class="btn-success flex-1 text-sm py-2">
-                        <i class="fas fa-play mr-1"></i>启动
-                    </button>
-                    <button onclick="stopCollector()" class="btn-danger flex-1 text-sm py-2">
-                        <i class="fas fa-stop mr-1"></i>停止
-                    </button>
+                <div class="stat-card-label">采集状态</div>
+                <div id="collector-status-text" class="stat-card-value" style="color: #00c6ff;">--</div>
+                <div style="display: flex; gap: 8px; margin-top: 16px;">
+                    <button onclick="startCollector()" class="btn btn-success" style="flex: 1; justify-content: center; padding: 10px;">&#9654; 启动</button>
+                    <button onclick="stopCollector()" class="btn btn-danger" style="flex: 1; justify-content: center; padding: 10;">&#9632; 停止</button>
                 </div>
             </div>
 
             <!-- 设备统计 -->
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                        <i class="fas fa-microchip text-green-600 text-xl"></i>
-                    </div>
-                    <span class="badge badge-blue">在线</span>
+            <div class="stat-card border-glow">
+                <div class="flex justify-between items-start">
+                    <div class="stat-card-icon" style="background: rgba(74, 222, 128, 0.2); color: #4ade80;">&#128268;</div>
+                    <span class="badge badge-running"><span style="width:8px;height:8px;background:#4ade80;border-radius:50%;margin-right:6px;animation:pulse 2s infinite;"></span>在线</span>
                 </div>
-                <h3 class="text-gray-500 text-sm font-medium">设备总数</h3>
-                <p id="device-count" class="text-2xl font-bold text-gray-800 mt-1">-</p>
-                <p class="text-xs text-gray-400 mt-2">已启用: <span id="device-enabled-count">0</span></p>
+                <div class="stat-card-label">设备总数</div>
+                <div id="device-count" class="stat-card-value" style="color: #ffc800;">-</div>
+                <div class="stat-card-sub">已启用: <span id="device-enabled-count" style="color: #4ade80;">0</span></div>
             </div>
 
             <!-- 北向配置 -->
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                        <i class="fas fa-cloud-upload-alt text-purple-600 text-xl"></i>
-                    </div>
-                    <span id="northbound-badge" class="badge badge-green">活跃</span>
+            <div class="stat-card border-glow">
+                <div class="flex justify-between items-start">
+                    <div class="stat-card-icon" style="background: rgba(192, 132, 252, 0.2); color: #c084fc;">&#128225;</div>
+                    <span class="badge badge-running"><span style="width:8px;height:8px;background:#c084fc;border-radius:50%;margin-right:6px;animation:pulse 2s infinite;"></span>活跃</span>
                 </div>
-                <h3 class="text-gray-500 text-sm font-medium">北向配置</h3>
-                <p id="northbound-count" class="text-2xl font-bold text-gray-800 mt-1">-</p>
-                <p class="text-xs text-gray-400 mt-2">已启用: <span id="northbound-enabled-count">0</span></p>
+                <div class="stat-card-label">北向配置</div>
+                <div id="northbound-count" class="stat-card-value" style="color: #00c6ff;">-</div>
+                <div class="stat-card-sub">已启用: <span id="northbound-enabled-count" style="color: #c084fc;">0</span></div>
             </div>
 
             <!-- 报警信息 -->
-            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                        <i class="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
-                    </div>
-                    <span class="badge badge-red">待处理</span>
+            <div class="stat-card border-glow">
+                <div class="flex justify-between items-start">
+                    <div class="stat-card-icon" style="background: rgba(250, 204, 21, 0.2); color: #facc15;">&#9888;</div>
+                    <span class="badge badge-stopped"><span style="width:8px;height:8px;background:#facc15;border-radius:50%;margin-right:6px;"></span>待处理</span>
                 </div>
-                <h3 class="text-gray-500 text-sm font-medium">报警数量</h3>
-                <p id="alarm-count" class="text-2xl font-bold text-gray-800 mt-1">-</p>
-                <p class="text-xs text-gray-400 mt-2">今日: <span id="alarm-today-count">0</span></p>
+                <div class="stat-card-label">报警数量</div>
+                <div id="alarm-count" class="stat-card-value" style="color: #00c6ff;">-</div>
+                <div class="stat-card-sub">今日: <span id="alarm-today-count" style="color: #facc15;">0</span></div>
             </div>
         </div>
 
         <!-- 标签页 -->
-        <div class="bg-white rounded-xl shadow-md overflow-hidden">
-            <!-- 标签导航 -->
-            <div class="bg-gray-50 border-b px-6">
-                <nav class="flex space-x-8" aria-label="Tabs">
-                    <button onclick="switchTab('resources')" class="tab-btn active flex items-center space-x-2 py-4 px-2 border-b-2 border-blue-500 text-blue-600 font-medium">
-                        <i class="fas fa-plug"></i>
-                        <span>资源管理</span>
-                    </button>
-                    <button onclick="switchTab('devices')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
-                        <i class="fas fa-microchip"></i>
-                        <span>设备管理</span>
-                    </button>
-                    <button onclick="switchTab('drivers')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
-                        <i class="fas fa-code"></i>
-                        <span>驱动管理</span>
-                    </button>
-                    <button onclick="switchTab('northbound')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
-                        <i class="fas fa-cloud"></i>
-                        <span>北向配置</span>
-                    </button>
-                    <button onclick="switchTab('thresholds')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
-                        <i class="fas fa-bell"></i>
-                        <span>阈值配置</span>
-                    </button>
-                    <button onclick="switchTab('alarms')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span>报警日志</span>
-                    </button>
-                </nav>
+        <div class="card border-glow">
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px; padding: 0 16px;">
+                <button onclick="switchTab('resources')" id="tab-btn-resources" class="tab-btn active">&#128268; 资源管理</button>
+                <button onclick="switchTab('devices')" id="tab-btn-devices" class="tab-btn">&#128268; 设备管理</button>
+                <button onclick="switchTab('drivers')" id="tab-btn-drivers" class="tab-btn">&#128187; 驱动管理</button>
+                <button onclick="switchTab('northbound')" id="tab-btn-northbound" class="tab-btn">&#128225; 北向配置</button>
+                <button onclick="switchTab('thresholds')" id="tab-btn-thresholds" class="tab-btn">&#128276; 阈值配置</button>
+                <button onclick="switchTab('alarms')" id="tab-btn-alarms" class="tab-btn">&#9888; 报警日志</button>
             </div>
 
-            <!-- 标签内容 -->
-            <div class="p-6">
+            <div style="padding: 24px;">
                 <!-- 资源管理 -->
-                <div id="tab-resources" class="tab-content fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-plug mr-2 text-blue-500"></i>资源列表
-                        </h3>
-                        <button onclick="showResourceModal()" class="btn-primary">
-                            <i class="fas fa-plus mr-2"></i>添加资源
-                        </button>
+                <div id="tab-resources" class="tab-content active">
+                    <div class="card-header">
+                        <h3 class="card-title" style="color: #60a5fa;">&#128268; 资源列表</h3>
+                        <button onclick="showResourceModal()" class="btn btn-primary">&#43; 添加资源</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="table-header">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">名称</th>
-                                    <th class="px-4 py-3 text-left">类型</th>
-                                    <th class="px-4 py-3 text-left">配置</th>
-                                    <th class="px-4 py-3 text-left">状态</th>
-                                    <th class="px-4 py-3 text-left">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="resources-table" class="divide-y divide-gray-200">
-                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>名称</th><th>类型</th><th>配置</th><th>状态</th><th>操作</th></tr></thead>
+                            <tbody id="resources-table">
+                                <tr><td colspan="5" style="text-align: center; padding: 48px; color: #6b7280;">&#8987; 加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- 设备管理 -->
-                <div id="tab-devices" class="tab-content hidden fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-microchip mr-2 text-green-500"></i>设备列表
-                        </h3>
-                        <button onclick="showDeviceModal()" class="btn-primary">
-                            <i class="fas fa-plus mr-2"></i>添加设备
-                        </button>
+                <div id="tab-devices" class="tab-content">
+                    <div class="card-header">
+                        <h3 class="card-title" style="color: #4ade80;">&#128268; 设备列表</h3>
+                        <button onclick="showDeviceModal()" class="btn btn-primary">&#43; 添加设备</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="table-header">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">名称</th>
-                                    <th class="px-4 py-3 text-left">资源</th>
-                                    <th class="px-4 py-3 text-left">串口/网口配置</th>
-                                    <th class="px-4 py-3 text-left">采集周期</th>
-                                    <th class="px-4 py-3 text-left">使能</th>
-                                    <th class="px-4 py-3 text-left">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="devices-table-body" class="divide-y divide-gray-200">
-                                <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>名称</th><th>资源</th><th>地址</th><th>采集周期</th><th>使能</th><th>操作</th></tr></thead>
+                            <tbody id="devices-table">
+                                <tr><td colspan="6" style="text-align: center; padding: 48px; color: #6b7280;">&#8987; 加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- 驱动管理 -->
-                <div id="tab-drivers" class="tab-content hidden fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-code mr-2 text-purple-500"></i>驱动列表
-                        </h3>
-                        <div class="flex space-x-2">
-                            <label class="btn-primary cursor-pointer">
-                                <i class="fas fa-upload mr-2"></i>上传驱动
-                                <input type="file" accept=".wasm" onchange="uploadDriverFile(this)" class="hidden">
+                <div id="tab-drivers" class="tab-content">
+                    <div class="card-header">
+                        <h3 class="card-title" style="color: #c084fc;">&#128187; 驱动列表</h3>
+                        <div style="display: flex; gap: 12px;">
+                            <label class="btn btn-primary" style="cursor: pointer;">
+                                &#8593; 上传驱动
+                                <input type="file" accept=".wasm" onchange="uploadDriverFile(this)" style="display: none;">
                             </label>
-                            <button onclick="showDriverModal()" class="btn-primary">
-                                <i class="fas fa-plus mr-2"></i>添加驱动
-                            </button>
+                            <button onclick="showDriverModal()" class="btn btn-primary">&#43; 添加驱动</button>
                         </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="table-header">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">名称</th>
-                                    <th class="px-4 py-3 text-left">文件路径</th>
-                                    <th class="px-4 py-3 text-left">版本</th>
-                                    <th class="px-4 py-3 text-left">状态</th>
-                                    <th class="px-4 py-3 text-left">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="drivers-table" class="divide-y divide-gray-200">
-                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>名称</th><th>文件路径</th><th>版本</th><th>状态</th><th>操作</th></tr></thead>
+                            <tbody id="drivers-table">
+                                <tr><td colspan="5" style="text-align: center; padding: 48px; color: #6b7280;">&#8987; 加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- 北向配置 -->
-                <div id="tab-northbound" class="tab-content hidden fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-cloud mr-2 text-indigo-500"></i>北向配置列表
-                        </h3>
-                        <button onclick="showNorthboundModal()" class="btn-primary">
-                            <i class="fas fa-plus mr-2"></i>添加配置
-                        </button>
+                <div id="tab-northbound" class="tab-content">
+                    <div class="card-header">
+                        <h3 class="card-title" style="color: #60a5fa;">&#128225; 北向配置列表</h3>
+                        <button onclick="showNorthboundModal()" class="btn btn-primary">&#43; 添加配置</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="table-header">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">名称</th>
-                                    <th class="px-4 py-3 text-left">类型</th>
-                                    <th class="px-4 py-3 text-left">ProductKey</th>
-                                    <th class="px-4 py-3 text-left">DeviceKey</th>
-                                    <th class="px-4 py-3 text-left">上传周期</th>
-                                    <th class="px-4 py-3 text-left">状态</th>
-                                    <th class="px-4 py-3 text-left">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="northbound-table-body" class="divide-y divide-gray-200">
-                                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>名称</th><th>类型</th><th>产品Key</th><th>设备Key</th><th>上报周期</th><th>状态</th><th>操作</th></tr></thead>
+                            <tbody id="northbound-table">
+                                <tr><td colspan="7" style="text-align: center; padding: 48px; color: #6b7280;">&#8987; 加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- 阈值配置 -->
-                <div id="tab-thresholds" class="tab-content hidden fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-bell mr-2 text-yellow-500"></i>阈值配置列表
-                        </h3>
-                        <button onclick="showThresholdModal()" class="btn-primary">
-                            <i class="fas fa-plus mr-2"></i>添加阈值
-                        </button>
+                <div id="tab-thresholds" class="tab-content">
+                    <div class="card-header">
+                        <h3 class="card-title" style="color: #facc15;">&#128276; 阈值配置列表</h3>
+                        <button onclick="showThresholdModal()" class="btn btn-primary">&#43; 添加阈值</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="table-header">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">设备</th>
-                                    <th class="px-4 py-3 text-left">字段</th>
-                                    <th class="px-4 py-3 text-left">条件</th>
-                                    <th class="px-4 py-3 text-left">阈值</th>
-                                    <th class="px-4 py-3 text-left">级别</th>
-                                    <th class="px-4 py-3 text-left">状态</th>
-                                    <th class="px-4 py-3 text-left">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="thresholds-table" class="divide-y divide-gray-200">
-                                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>字段</th><th>条件</th><th>阈值</th><th>严重程度</th><th>启用</th><th>操作</th></tr></thead>
+                            <tbody id="thresholds-table">
+                                <tr><td colspan="6" style="text-align: center; padding: 48px; color: #6b7280;">&#8987; 加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- 报警日志 -->
-                <div id="tab-alarms" class="tab-content hidden fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-exclamation-circle mr-2 text-red-500"></i>报警日志
-                        </h3>
-                        <button onclick="refreshAlarms()" class="btn-primary">
-                            <i class="fas fa-sync-alt mr-2"></i>刷新
-                        </button>
+                <div id="tab-alarms" class="tab-content">
+                    <div class="card-header">
+                        <h3 class="card-title" style="color: #f87171;">&#9888; 报警日志</h3>
+                        <button onclick="loadAlarms()" class="btn btn-primary">&#8635; 刷新</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="table-header">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">时间</th>
-                                    <th class="px-4 py-3 text-left">设备</th>
-                                    <th class="px-4 py-3 text-left">字段</th>
-                                    <th class="px-4 py-3 text-left">实际值</th>
-                                    <th class="px-4 py-3 text-left">阈值</th>
-                                    <th class="px-4 py-3 text-left">级别</th>
-                                    <th class="px-4 py-3 text-left">状态</th>
-                                </tr>
-                            </thead>
-                            <tbody id="alarms-table" class="divide-y divide-gray-200">
-                                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>时间</th><th>设备</th><th>字段</th><th>实际值</th><th>阈值</th><th>严重程度</th><th>状态</th><th>操作</th></tr></thead>
+                            <tbody id="alarms-table">
+                                <tr><td colspan="8" style="text-align: center; padding: 48px; color: #6b7280;">&#8987; 加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- 模态框容器 -->
-    <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center">
-        <!-- 模态框内容由JS动态生成 -->
+    <div id="modal-container" class="hidden" style="position: fixed; inset: 0; z-index: 50;">
+        <div style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.85);" onclick="closeModal()"></div>
     </div>
 
     <script>
-        // 页面加载时初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            loadStatus();
-            loadResources();
-            loadDevices();
-            loadDrivers();
-            loadNorthboundConfigs();
-            loadThresholds();
-            loadAlarms();
-            
-            // 定期刷新状态
-            setInterval(loadStatus, 5000);
-        });
-
-        // 加载系统状态
-        function loadStatus() {
-            htmx.ajax('GET', '/api/status', {
-                target: '#collector-status-text',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        try {
-                            const status = JSON.parse(evt.detail.xhr.response);
-                            const badge = document.getElementById('collector-badge');
-                            const statusText = document.getElementById('collector-status-text');
-                            
-                            if (status.collector_running) {
-                                badge.className = 'badge badge-green';
-                                badge.textContent = '运行中';
-                                statusText.textContent = '采集中';
-                            } else {
-                                badge.className = 'badge badge-red';
-                                badge.textContent = '已停止';
-                                statusText.textContent = '已停止';
-                            }
-                        } catch (e) {}
-                    }
-                }
-            });
-        }
-
-        // 启动采集器
-        function startCollector() {
-            htmx.ajax('POST', '/api/collector/start', {
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        loadStatus();
-                        loadDevices();
-                        loadNorthboundConfigs();
-                    }
-                }
-            });
-        }
-
-        // 停止采集器
-        function stopCollector() {
-            htmx.ajax('POST', '/api/collector/stop', {
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        loadStatus();
-                    }
-                }
-            });
-        }
-
-        // 切换标签
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
-            document.getElementById('tab-' + tabName).classList.remove('hidden');
-            
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('border-blue-500', 'text-blue-600');
-                btn.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            document.querySelector('[data-tab="' + tabName + '"]').classList.remove('border-transparent', 'text-gray-500');
-            document.querySelector('[data-tab="' + tabName + '"]').classList.add('border-blue-500', 'text-blue-600');
-        }
-
-        // 加载资源列表
-        function loadResources() {
-            htmx.ajax('GET', '/api/resources', {
-                target: '#resources-table',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderResourcesTable(evt.detail.xhr.response);
-                    }
-                }
-            });
-        }
-
-        // 渲染资源表格
-        function renderResourcesTable(data) {
-            try {
-                const resources = JSON.parse(data);
-                let html = '';
-                resources.forEach(resource => {
-                    const statusBadge = resource.enabled === 1 
-                        ? '<span class="badge badge-green">启用</span>' 
-                        : '<span class="badge badge-red">禁用</span>';
-                    
-                    const typeConfig = {
-                        serial: { icon: 'fa-plug', text: '串口', color: 'blue' },
-                        di: { icon: 'fa-toggle-on', text: 'DI (数字输入)', color: 'green' },
-                        do: { icon: 'fa-toggle-off', text: 'DO (数字输出)', color: 'orange' }
-                    };
-                    const typeInfo = typeConfig[resource.type] || { icon: 'fa-plug', text: resource.type, color: 'gray' };
-                    
-                    let configText = '';
-                    if (resource.type === 'serial') {
-                        configText = resource.port || '-';
-                    } else if (resource.type === 'di' || resource.type === 'do') {
-                        configText = `地址: ${resource.address || 1}`;
-                    }
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                                <i class="fas ${typeInfo.icon} mr-2 text-${typeInfo.color}-500"></i>${resource.name}
-                            </td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${typeInfo.text}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${configText}</td>
-                            <td class="px-4 py-3">${statusBadge}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <button onclick="editResource(${resource.id})" class="text-blue-600 hover:text-blue-800 mr-3">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="deleteResource(${resource.id})" class="text-red-600 hover:text-red-800">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-                document.getElementById('resources-table').innerHTML = html || '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
-            } catch (e) {
-                console.error('Failed to parse resources:', e);
+        // 更新系统时间
+        function updateTime() {
+            var el = document.getElementById('current-time');
+            if (el) {
+                var now = new Date();
+                el.textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
             }
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // 标签页切换
+        function switchTab(tabName) {
+            var btns = document.querySelectorAll('.tab-btn');
+            var contents = document.querySelectorAll('.tab-content');
+            for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+            for (var i = 0; i < contents.length; i++) contents[i].classList.remove('active');
+            document.getElementById('tab-btn-' + tabName).classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        // API请求
+        function api(url, options) {
+            return fetch(url, options).then(function(res) {
+                if (!res.ok) throw new Error();
+                return res.json();
+            }).catch(function(e) {
+                console.error('API Error:', url, e);
+                throw e;
+            });
+        }
+
+        // 加载状态
+        function loadStatus() {
+            api('/api/status').then(function(status) {
+                var badge = document.getElementById('collector-badge');
+                var statusText = document.getElementById('collector-status-text');
+                
+                if (status.collector_running) {
+                    badge.className = 'badge badge-running';
+                    badge.innerHTML = '<span style="width:8px;height:8px;background:#4ade80;border-radius:50%;margin-right:6px;animation:pulse 2s infinite;"></span>运行中';
+                    if (statusText) { statusText.textContent = '运行中'; statusText.style.color = '#4ade80'; }
+                } else {
+                    badge.className = 'badge badge-stopped';
+                    badge.innerHTML = '<span style="width:8px;height:8px;background:#f87171;border-radius:50%;margin-right:6px;"></span>已停止';
+                    if (statusText) { statusText.textContent = '已停止'; statusText.style.color = '#f87171'; }
+                }
+                
+                var setText = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val || 0; };
+                setText('device-count', status.device_count);
+                setText('device-enabled-count', status.device_enabled_count);
+                setText('northbound-count', status.northbound_count);
+                setText('northbound-enabled-count', status.northbound_enabled_count);
+                setText('alarm-count', status.alarm_count);
+                setText('alarm-today-count', status.alarm_today_count);
+            });
         }
 
         // 加载设备列表
         function loadDevices() {
-            htmx.ajax('GET', '/api/devices', {
-                target: '#devices-table-body',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderDevicesTable(evt.detail.xhr.response);
-                    }
+            api('/api/devices').then(function(devices) {
+                var tbody = document.getElementById('devices-table');
+                if (devices.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 48px; color: #6b7280;">暂无设备</td></tr>';
+                    return;
                 }
-            });
-        }
-
-        // 渲染设备表格
-        function renderDevicesTable(data) {
-            try {
-                const devices = JSON.parse(data);
-                let html = '';
-                let enabledCount = 0;
-                
-                devices.forEach(device => {
-                    if (device.enabled === 1) enabledCount++;
-                    
-                    const enabledBadge = device.enabled === 1 
-                        ? '<span class="badge badge-green">启用</span>' 
-                        : '<span class="badge badge-red">禁用</span>';
-                    
-                    // 显示通信配置
-                    let commConfig = '-';
-                    if (device.ip_address) {
-                        commConfig = `${device.ip_address}:${device.port_num || '-'} (${device.protocol || 'tcp'})`;
-                    } else if (device.port) {
-                        commConfig = `${device.port} ${device.baud_rate || 9600}${device.data_bits || 8}${device.stop_bits || 1}${device.parity || 'N'}`;
-                    }
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                                <i class="fas fa-microchip mr-2 text-gray-400"></i>${device.name}
-                            </td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${device.resource_id || '-'}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${commConfig}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${device.collect_interval}ms</td>
-                            <td class="px-4 py-3">${enabledBadge}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <button onclick="editDevice(${device.id})" class="text-blue-600 hover:text-blue-800 mr-3">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="deleteDevice(${device.id})" class="text-red-600 hover:text-red-800">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-                document.getElementById('devices-table-body').innerHTML = html || '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
-                document.getElementById('device-count').textContent = devices.length;
-                document.getElementById('device-enabled-count').textContent = enabledCount;
-            } catch (e) {
-                console.error('Failed to parse devices:', e);
-            }
-        }
-
-        // 加载驱动列表
-        function loadDrivers() {
-            htmx.ajax('GET', '/api/drivers', {
-                target: '#drivers-table',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderDriversTable(evt.detail.xhr.response);
-                    }
+                var html = '';
+                for (var i = 0; i < devices.length; i++) {
+                    var d = devices[i];
+                    html += '<tr style="transition: background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                    html += '<td style="font-weight: 500;">' + d.name + '</td>';
+                    html += '<td>' + (d.resource_name || '未配置') + '</td>';
+                    html += '<td style="font-family: monospace; font-size: 14px; color: #9ca3af;">' + (d.address || '-') + '</td>';
+                    html += '<td>' + (d.collect_interval || 1000) + 'ms</td>';
+                    html += '<td><span class="badge ' + (d.enabled === 1 ? 'badge-running' : 'badge-stopped') + '">' + (d.enabled === 1 ? '启用' : '禁用') + '</span></td>';
+                    html += '<td><div style="display: flex; gap: 4px;">';
+                    html += '<button onclick="toggleDevice(' + d.id + ')" class="action-btn" style="color: #facc15;" title="切换">&#9889;</button>';
+                    html += '<button onclick="deleteDevice(' + d.id + ')" class="action-btn" style="color: #f87171;">&#128465;</button>';
+                    html += '</div></td></tr>';
                 }
+                tbody.innerHTML = html;
             });
-        }
-
-        // 渲染驱动表格
-        function renderDriversTable(data) {
-            try {
-                const drivers = JSON.parse(data);
-                let html = '';
-                drivers.forEach(driver => {
-                    const statusBadge = driver.enabled === 1 
-                        ? '<span class="badge badge-green">启用</span>' 
-                        : '<span class="badge badge-red">禁用</span>';
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                                <i class="fas fa-code mr-2 text-gray-400"></i>${driver.name}
-                            </td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${driver.file_path || '-'}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${driver.version || '-'}</td>
-                            <td class="px-4 py-3">${statusBadge}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <button onclick="downloadDriver(${driver.id})" class="text-green-600 hover:text-green-800 mr-3" title="下载驱动">
-                                    <i class="fas fa-download"></i>
-                                </button>
-                                <button onclick="editDriver(${driver.id})" class="text-blue-600 hover:text-blue-800 mr-3" title="编辑">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="deleteDriver(${driver.id})" class="text-red-600 hover:text-red-800" title="删除">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-                document.getElementById('drivers-table').innerHTML = html || '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
-            } catch (e) {
-                console.error('Failed to parse drivers:', e);
-            }
-        }
-
-        // 上传驱动文件
-        function uploadDriverFile(input) {
-            const file = input.files[0];
-            if (!file) return;
-            
-            if (!file.name.toLowerCase().endsWith('.wasm')) {
-                alert('只支持 .wasm 文件');
-                input.value = '';
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            fetch('/api/drivers/upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert('上传成功: ' + data.filename);
-                    loadDrivers();
-                } else {
-                    alert('上传失败: ' + (data.error || '未知错误'));
-                }
-                input.value = '';
-            })
-            .catch(err => {
-                alert('上传失败: ' + err);
-                input.value = '';
-            });
-        }
-
-        // 下载驱动文件
-        function downloadDriver(id) {
-            window.open('/api/drivers/' + id + '/download', '_blank');
         }
 
         // 加载北向配置
         function loadNorthboundConfigs() {
-            htmx.ajax('GET', '/api/northbound', {
-                target: '#northbound-table-body',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderNorthboundTable(evt.detail.xhr.response);
-                    }
+            api('/api/northbound').then(function(configs) {
+                var tbody = document.getElementById('northbound-table');
+                if (configs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 48px; color: #6b7280;">暂无配置</td></tr>';
+                    return;
                 }
-            });
-        }
-
-        // 渲染北向配置表格
-        function renderNorthboundTable(data) {
-            try {
-                const configs = JSON.parse(data);
-                let html = '';
-                let enabledCount = 0;
-                
-                configs.forEach(config => {
-                    if (config.enabled === 1) enabledCount++;
-                    
-                    const statusBadge = config.enabled === 1 
-                        ? '<span class="badge badge-green">启用</span>' 
-                        : '<span class="badge badge-red">禁用</span>';
-                    
-                    const typeIcons = {xunji: 'fa-cloud', mqtt: 'fa-broadcast-tower', http: 'fa-globe'};
-                    const typeIcon = typeIcons[config.type] || 'fa-cloud';
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                                <i class="fas ${typeIcon} mr-2 text-gray-400"></i>${config.name}
-                            </td>
-                            <td class="px-4 py-3 text-sm text-gray-500 uppercase">${config.type}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${config.productKey || '-'}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${config.deviceKey || '-'}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${config.upload_interval}ms</td>
-                            <td class="px-4 py-3">${statusBadge}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <button onclick="editNorthboundConfig(${config.id})" class="text-blue-600 hover:text-blue-800 mr-3">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="deleteNorthboundConfig(${config.id})" class="text-red-600 hover:text-red-800">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-                document.getElementById('northbound-table-body').innerHTML = html || '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
-                document.getElementById('northbound-count').textContent = configs.length;
-                document.getElementById('northbound-enabled-count').textContent = enabledCount;
-            } catch (e) {
-                console.error('Failed to parse northbound data:', e);
-            }
-        }
-
-        // 加载阈值配置
-        function loadThresholds() {
-            htmx.ajax('GET', '/api/thresholds', {
-                target: '#thresholds-table',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderThresholdsTable(evt.detail.xhr.response);
-                    }
+                var html = '';
+                for (var i = 0; i < configs.length; i++) {
+                    var c = configs[i];
+                    html += '<tr style="transition: background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                    html += '<td style="font-weight: 500;">' + c.name + '</td>';
+                    html += '<td>' + c.type + '</td>';
+                    html += '<td style="font-family: monospace; font-size: 14px;">' + (c.product_key || '-') + '</td>';
+                    html += '<td style="font-family: monospace; font-size: 14px;">' + (c.device_key || '-') + '</td>';
+                    html += '<td>' + (c.upload_interval || 5000) + 'ms</td>';
+                    html += '<td><span class="badge ' + (c.enabled === 1 ? 'badge-running' : 'badge-stopped') + '">' + (c.enabled === 1 ? '启用' : '禁用') + '</span></td>';
+                    html += '<td><div style="display: flex; gap: 4px;">';
+                    html += '<button onclick="toggleNorthbound(' + c.id + ')" class="action-btn" style="color: #facc15;" title="切换">&#9889;</button>';
+                    html += '<button onclick="deleteNorthboundConfig(' + c.id + ')" class="action-btn" style="color: #f87171;">&#128465;</button>';
+                    html += '</div></td></tr>';
                 }
+                tbody.innerHTML = html;
             });
-        }
-
-        // 渲染阈值表格
-        function renderThresholdsTable(data) {
-            try {
-                const thresholds = JSON.parse(data);
-                let html = '';
-                thresholds.forEach(threshold => {
-                    const statusBadge = threshold.enabled === 1 
-                        ? '<span class="badge badge-green">启用</span>' 
-                        : '<span class="badge badge-red">禁用</span>';
-                    
-                    const severityBadge = threshold.severity === 'critical' ? 'badge-red' 
-                        : threshold.severity === 'error' ? 'badge-yellow' 
-                        : 'badge-blue';
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm text-gray-900">设备${threshold.device_id}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${threshold.field_name}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${threshold.operator} ${threshold.value}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${threshold.value}</td>
-                            <td class="px-4 py-3"><span class="badge ${severityBadge}">${threshold.severity}</span></td>
-                            <td class="px-4 py-3">${statusBadge}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <button onclick="editThreshold(${threshold.id})" class="text-blue-600 hover:text-blue-800 mr-3">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="deleteThreshold(${threshold.id})" class="text-red-600 hover:text-red-800">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-                document.getElementById('thresholds-table').innerHTML = html || '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
-            } catch (e) {
-                console.error('Failed to parse thresholds:', e);
-            }
         }
 
         // 加载报警日志
         function loadAlarms() {
-            htmx.ajax('GET', '/api/alarms', {
-                target: '#alarms-table',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderAlarmsTable(evt.detail.xhr.response);
-                    }
+            api('/api/alarms').then(function(alarms) {
+                var tbody = document.getElementById('alarms-table');
+                if (alarms.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 48px; color: #6b7280;">暂无报警</td></tr>';
+                    return;
                 }
+                var colors = { critical: '#f87171', warning: '#facc15', info: '#60a5fa' };
+                var html = '';
+                for (var i = 0; i < alarms.length; i++) {
+                    var a = alarms[i];
+                    html += '<tr style="transition: background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                    html += '<td style="color: #9ca3af;">' + new Date(a.created_at).toLocaleString('zh-CN') + '</td>';
+                    html += '<td>' + (a.device_name || a.device_id) + '</td>';
+                    html += '<td style="color: #60a5fa;">' + a.field_name + '</td>';
+                    html += '<td style="color: #f87171; font-family: monospace;">' + parseFloat(a.actual_value).toFixed(2) + '</td>';
+                    html += '<td style="color: #facc15; font-family: monospace;">' + a.threshold_value + '</td>';
+                    html += '<td style="color: ' + (colors[a.severity] || '#9ca3af') + ';">' + a.severity + '</td>';
+                    html += '<td><span class="badge ' + (a.acknowledged === 1 ? 'badge-running' : 'badge-warning') + '">' + (a.acknowledged === 1 ? '已确认' : '待确认') + '</span></td>';
+                    html += '<td>' + (a.acknowledged !== 1 ? '<button onclick="acknowledgeAlarm(' + a.id + ')" class="action-btn" style="color: #4ade80;">&#10004;</button>' : '-') + '</td>';
+                    html += '</tr>';
+                }
+                tbody.innerHTML = html;
             });
         }
 
-        function refreshAlarms() {
-            loadAlarms();
+        // 加载资源列表
+        function loadResources() {
+            api('/api/resources').then(function(resources) {
+                var tbody = document.getElementById('resources-table');
+                if (resources.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 48px; color: #6b7280;">暂无资源</td></tr>';
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < resources.length; i++) {
+                    var r = resources[i];
+                    html += '<tr style="transition: background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                    html += '<td style="font-weight: 500;">' + r.name + '</td>';
+                    html += '<td style="color: #c084fc;">' + r.type + '</td>';
+                    html += '<td style="font-family: monospace; font-size: 14px; color: #9ca3af;">' + (r.config || '-') + '</td>';
+                    html += '<td><span class="badge ' + (r.is_open === 1 ? 'badge-running' : 'badge-stopped') + '">' + (r.is_open === 1 ? '已开启' : '已关闭') + '</span></td>';
+                    html += '<td><div style="display: flex; gap: 4px;">';
+                    html += '<button onclick="openResource(' + r.id + ')" class="action-btn" style="color: #4ade80;" title="开启">&#9654;</button>';
+                    html += '<button onclick="closeResource(' + r.id + ')" class="action-btn" style="color: #facc15;" title="关闭">&#9632;</button>';
+                    html += '<button onclick="deleteResource(' + r.id + ')" class="action-btn" style="color: #f87171;">&#128465;</button>';
+                    html += '</div></td></tr>';
+                }
+                tbody.innerHTML = html;
+            });
         }
 
-        // 渲染报警表格
-        function renderAlarmsTable(data) {
-            try {
-                const alarms = JSON.parse(data);
-                let html = '';
-                alarms.forEach(alarm => {
-                    const severityBadge = alarm.severity === 'critical' ? 'badge-red' 
-                        : alarm.severity === 'error' ? 'badge-yellow' 
-                        : 'badge-blue';
-                    
-                    const statusBadge = alarm.acknowledged === 1 
-                        ? '<span class="badge badge-green">已确认</span>' 
-                        : '<span class="badge badge-yellow">待处理</span>';
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm text-gray-500">${new Date(alarm.triggered_at).toLocaleString()}</td>
-                            <td class="px-4 py-3 text-sm text-gray-900">设备${alarm.device_id}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${alarm.field_name}</td>
-                            <td class="px-4 py-3 text-sm text-red-600 font-mono">${alarm.actual_value}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${alarm.operator} ${alarm.threshold_value}</td>
-                            <td class="px-4 py-3"><span class="badge ${severityBadge}">${alarm.severity}</span></td>
-                            <td class="px-4 py-3">${statusBadge}</td>
-                        </tr>
-                    `;
-                });
-                document.getElementById('alarms-table').innerHTML = html || '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">暂无报警</td></tr>';
-                document.getElementById('alarm-count').textContent = alarms.length;
-                document.getElementById('alarm-today-count').textContent = alarms.filter(a => {
-                    const today = new Date().toDateString();
-                    return new Date(a.triggered_at).toDateString() === today;
-                }).length;
-            } catch (e) {
-                console.error('Failed to parse alarms:', e);
+        // 加载驱动列表
+        function loadDrivers() {
+            api('/api/drivers').then(function(drivers) {
+                var tbody = document.getElementById('drivers-table');
+                if (drivers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 48px; color: #6b7280;">暂无驱动</td></tr>';
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < drivers.length; i++) {
+                    var d = drivers[i];
+                    html += '<tr style="transition: background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                    html += '<td style="font-weight: 500;">' + d.name + '</td>';
+                    html += '<td style="font-family: monospace; font-size: 14px; color: #9ca3af;">' + (d.file_path || '-') + '</td>';
+                    html += '<td>' + (d.version || '1.0') + '</td>';
+                    html += '<td><span class="badge badge-running">已加载</span></td>';
+                    html += '<td><div style="display: flex; gap: 4px;">';
+                    html += '<button onclick="downloadDriver(' + d.id + ')" class="action-btn" style="color: #60a5fa;" title="下载">&#8595;</button>';
+                    html += '<button onclick="deleteDriver(' + d.id + ')" class="action-btn" style="color: #f87171;">&#128465;</button>';
+                    html += '</div></td></tr>';
+                }
+                tbody.innerHTML = html;
+            });
+        }
+
+        // 加载阈值配置
+        function loadThresholds() {
+            api('/api/thresholds').then(function(thresholds) {
+                var tbody = document.getElementById('thresholds-table');
+                if (thresholds.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 48px; color: #6b7280;">暂无配置</td></tr>';
+                    return;
+                }
+                var colors = { critical: '#f87171', warning: '#facc15', info: '#60a5fa' };
+                var html = '';
+                for (var i = 0; i < thresholds.length; i++) {
+                    var t = thresholds[i];
+                    html += '<tr style="transition: background 0.2s;" onmouseover="this.style.background=\'rgba(0,198,255,0.08)\'" onmouseout="this.style.background=\'\'">';
+                    html += '<td style="font-weight: 500;">' + t.field_name + '</td>';
+                    html += '<td>' + t.condition + '</td>';
+                    html += '<td style="font-family: monospace; color: ' + (colors[t.severity] || '#9ca3af') + ';">' + t.threshold_value + '</td>';
+                    html += '<td style="color: ' + (colors[t.severity] || '#9ca3af') + ';">' + t.severity + '</td>';
+                    html += '<td><span class="badge ' + (t.enabled === 1 ? 'badge-running' : 'badge-stopped') + '">' + (t.enabled === 1 ? '启用' : '禁用') + '</span></td>';
+                    html += '<td><button onclick="deleteThreshold(' + t.id + ')" class="action-btn" style="color: #f87171;">&#128465;</button></td>';
+                    html += '</tr>';
+                }
+                tbody.innerHTML = html;
+            });
+        }
+
+        // 采集器控制
+        function startCollector() {
+            api('/api/collector/start', { method: 'POST' }).then(function() { loadStatus(); });
+        }
+        function stopCollector() {
+            api('/api/collector/stop', { method: 'POST' }).then(function() { loadStatus(); });
+        }
+
+        // 确认报警
+        function acknowledgeAlarm(id) {
+            api('/api/alarms/' + id + '/acknowledge', { method: 'POST' }).then(function() { loadAlarms(); loadStatus(); });
+        }
+
+        // 设备操作
+        function toggleDevice(id) {
+            api('/api/devices/' + id + '/toggle', { method: 'POST' }).then(function() { loadDevices(); loadStatus(); });
+        }
+        function deleteDevice(id) {
+            if (confirm('确定删除?')) {
+                api('/api/devices/' + id, { method: 'DELETE' }).then(function() { loadDevices(); loadStatus(); });
             }
         }
 
-        // 模态框相关函数
+        // 北向配置操作
+        function toggleNorthbound(id) {
+            api('/api/northbound/' + id + '/toggle', { method: 'POST' }).then(function() { loadNorthboundConfigs(); loadStatus(); });
+        }
+        function deleteNorthboundConfig(id) {
+            if (confirm('确定删除?')) {
+                api('/api/northbound/' + id, { method: 'DELETE' }).then(function() { loadNorthboundConfigs(); loadStatus(); });
+            }
+        }
+
+        // 资源操作
+        function openResource(id) {
+            api('/api/resources/' + id + '/open', { method: 'POST' }).then(loadResources);
+        }
+        function closeResource(id) {
+            api('/api/resources/' + id + '/close', { method: 'POST' }).then(loadResources);
+        }
+        function deleteResource(id) {
+            if (confirm('确定删除?')) {
+                api('/api/resources/' + id, { method: 'DELETE' }).then(loadResources);
+            }
+        }
+
+        // 驱动操作
+        function downloadDriver(id) {
+            window.location.href = '/api/drivers/' + id + '/download';
+        }
+        function deleteDriver(id) {
+            if (confirm('确定删除?')) {
+                api('/api/drivers/' + id, { method: 'DELETE' }).then(loadDrivers);
+            }
+        }
+        function uploadDriverFile(input) {
+            var file = input.files[0];
+            if (!file) return;
+            var formData = new FormData();
+            formData.append('file', file);
+            fetch('/api/drivers/upload', { method: 'POST', body: formData }).then(function() { loadDrivers(); });
+            input.value = '';
+        }
+
+        // 阈值操作
+        function deleteThreshold(id) {
+            if (confirm('确定删除?')) {
+                api('/api/thresholds/' + id, { method: 'DELETE' }).then(loadThresholds);
+            }
+        }
+
+        // 模态框
+        function showModal(content) {
+            var container = document.getElementById('modal-container');
+            container.innerHTML = '<div style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.85);" onclick="closeModal()"></div>' +
+                '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10, 15, 35, 0.95); border: 1px solid rgba(0, 198, 255, 0.3); border-radius: 20px; padding: 32px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">' + content + '</div>';
+            container.classList.remove('hidden');
+        }
         function closeModal() {
             document.getElementById('modal-container').classList.add('hidden');
         }
-
-        // 显示资源添加/编辑模态框
-        function showResourceModal(id) {
-            const isEdit = id > 0;
-            const modalContent = `
-                <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4" onclick="event.stopPropagation()">
-                    <div class="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-xl">
-                        <h3 class="text-lg font-semibold text-white">${isEdit ? '编辑资源' : '添加资源'}</h3>
-                        <button onclick="closeModal()" class="text-white hover:text-gray-200">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
-                    <form id="resource-form" class="p-6">
-                        <input type="hidden" name="id" value="${id || ''}">
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">名称</label>
-                            <input type="text" name="name" class="input-field" required placeholder="资源名称">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">类型</label>
-                            <select name="type" class="input-field">
-                                <option value="serial">串口</option>
-                                <option value="di">DI (数字输入)</option>
-                                <option value="do">DO (数字输出)</option>
-                            </select>
-                        </div>
-                        <div id="serial-config">
-                            <div class="mb-4">
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">串口路径</label>
-                                <input type="text" name="port" class="input-field" placeholder="/dev/ttyUSB0">
-                            </div>
-                        </div>
-                        <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
-                            <button type="submit" class="btn-primary">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').innerHTML = modalContent;
-            document.getElementById('modal-container').classList.remove('hidden');
-            
-            // 绑定表单提交
-            document.getElementById('resource-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                fetch('/api/resources', {
-                    method: 'POST',
-                    body: new URLSearchParams(formData)
-                }).then(r => r.json()).then(data => {
-                    closeModal();
-                    loadResources();
-                });
-            });
-        }
-
-        // 显示设备添加/编辑模态框
-        function showDeviceModal(id) {
-            const isEdit = id > 0;
-            const modalContent = `
-                <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4" onclick="event.stopPropagation()">
-                    <div class="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-green-500 to-green-600 rounded-t-xl">
-                        <h3 class="text-lg font-semibold text-white">${isEdit ? '编辑设备' : '添加设备'}</h3>
-                        <button onclick="closeModal()" class="text-white hover:text-gray-200">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
-                    <form id="device-form" class="p-6 max-h-[70vh] overflow-y-auto">
-                        <input type="hidden" name="id" value="${id || ''}">
-                        <div class="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">名称</label>
-                                <input type="text" name="name" class="input-field" required placeholder="设备名称">
-                            </div>
-                            <div>
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">关联资源</label>
-                                <select name="resource_id" class="input-field">
-                                    <option value="">-- 选择资源 --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">关联驱动</label>
-                            <select name="driver_id" class="input-field">
-                                <option value="">-- 选择驱动 --</option>
-                            </select>
-                        </div>
-                        
-                        <!-- 串口参数 -->
-                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-3">串口参数</h4>
-                            <div class="grid grid-cols-4 gap-4">
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">波特率</label>
-                                    <input type="number" name="baud_rate" class="input-field" value="9600">
-                                </div>
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">数据位</label>
-                                    <select name="data_bits" class="input-field">
-                                        <option value="8">8</option>
-                                        <option value="7">7</option>
-                                        <option value="6">6</option>
-                                        <option value="5">5</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">停止位</label>
-                                    <select name="stop_bits" class="input-field">
-                                        <option value="1">1</option>
-                                        <option value="2">2</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">校验</label>
-                                    <select name="parity" class="input-field">
-                                        <option value="N">无(N)</option>
-                                        <option value="O">奇(O)</option>
-                                        <option value="E">偶(E)</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 网口参数 -->
-                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-3">网口参数</h4>
-                            <div class="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">IP地址</label>
-                                    <input type="text" name="ip_address" class="input-field" placeholder="192.168.1.100">
-                                </div>
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">端口</label>
-                                    <input type="number" name="port_num" class="input-field" placeholder="502">
-                                </div>
-                                <div>
-                                    <label class="block text-gray-600 text-xs mb-1">协议</label>
-                                    <select name="protocol" class="input-field">
-                                        <option value="tcp">TCP</option>
-                                        <option value="udp">UDP</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 周期参数 -->
-                        <div class="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">采集周期(ms)</label>
-                                <input type="number" name="collect_interval" class="input-field" value="5000">
-                            </div>
-                            <div>
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">上传周期(ms)</label>
-                                <input type="number" name="upload_interval" class="input-field" value="10000">
-                            </div>
-                        </div>
-                        <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
-                            <button type="submit" class="btn-primary">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').innerHTML = modalContent;
-            document.getElementById('modal-container').classList.remove('hidden');
-            
-            document.getElementById('device-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                fetch('/api/devices', {
-                    method: 'POST',
-                    body: new URLSearchParams(formData)
-                }).then(r => r.json()).then(data => {
-                    closeModal();
-                    loadDevices();
-                });
-            });
-        }
-
-        // 显示驱动添加/编辑模态框
-        function showDriverModal(id) {
-            const isEdit = id > 0;
-            const modalContent = `
-                <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4" onclick="event.stopPropagation()">
-                    <div class="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-purple-500 to-purple-600 rounded-t-xl">
-                        <h3 class="text-lg font-semibold text-white">${isEdit ? '编辑驱动' : '添加驱动'}</h3>
-                        <button onclick="closeModal()" class="text-white hover:text-gray-200">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
-                    <form id="driver-form" class="p-6">
-                        <input type="hidden" name="id" value="${id || ''}">
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">名称</label>
-                            <input type="text" name="name" class="input-field" required placeholder="驱动名称">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">文件路径</label>
-                            <input type="text" name="file_path" class="input-field" required placeholder="drivers/th.wasm">
-                            <p class="text-xs text-gray-500 mt-1">上传驱动文件后，路径会自动填充</p>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">版本</label>
-                            <input type="text" name="version" class="input-field" placeholder="1.0">
-                        </div>
-                        <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
-                            <button type="submit" class="btn-primary">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').innerHTML = modalContent;
-            document.getElementById('modal-container').classList.remove('hidden');
-            
-            document.getElementById('driver-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                fetch('/api/drivers', {
-                    method: 'POST',
-                    body: new URLSearchParams(formData)
-                }).then(r => r.json()).then(data => {
-                    closeModal();
-                    loadDrivers();
-                });
-            });
-        }
-
-        // 显示北向配置添加/编辑模态框
-        function showNorthboundModal(id) {
-            const isEdit = id > 0;
-            const modalContent = `
-                <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4" onclick="event.stopPropagation()">
-                    <div class="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-t-xl">
-                        <h3 class="text-lg font-semibold text-white">${isEdit ? '编辑北向配置' : '添加北向配置'}</h3>
-                        <button onclick="closeModal()" class="text-white hover:text-gray-200">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
-                    <form id="northbound-form" class="p-6">
-                        <input type="hidden" name="id" value="${id || ''}">
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">名称</label>
-                            <input type="text" name="name" class="input-field" required placeholder="配置名称">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">类型</label>
-                            <select name="type" class="input-field">
-                                <option value="xunji">XunJi</option>
-                                <option value="mqtt">MQTT</option>
-                                <option value="http">HTTP</option>
-                            </select>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">ProductKey</label>
-                            <input type="text" name="productKey" class="input-field" placeholder="产品Key">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">DeviceKey</label>
-                            <input type="text" name="deviceKey" class="input-field" placeholder="设备Key">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">上传周期(ms)</label>
-                            <input type="number" name="upload_interval" class="input-field" value="10000">
-                        </div>
-                        <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
-                            <button type="submit" class="btn-primary">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').innerHTML = modalContent;
-            document.getElementById('modal-container').classList.remove('hidden');
-            
-            document.getElementById('northbound-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                const config = {
-                    productKey: formData.get('productKey'),
-                    deviceKey: formData.get('deviceKey'),
-                    serverUrl: '',
-                    username: '',
-                    password: ''
-                };
-                formData.set('config', JSON.stringify(config));
-                fetch('/api/northbound', {
-                    method: 'POST',
-                    body: new URLSearchParams(formData)
-                }).then(r => r.json()).then(data => {
-                    closeModal();
-                    loadNorthboundConfigs();
-                });
-            });
-        }
-
-        // 显示阈值配置模态框
-        function showThresholdModal(id) {
-            const isEdit = id > 0;
-            const modalContent = `
-                <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4" onclick="event.stopPropagation()">
-                    <div class="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-t-xl">
-                        <h3 class="text-lg font-semibold text-white">${isEdit ? '编辑阈值' : '添加阈值'}</h3>
-                        <button onclick="closeModal()" class="text-white hover:text-gray-200">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
-                    <form id="threshold-form" class="p-6">
-                        <input type="hidden" name="id" value="${id || ''}">
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">设备</label>
-                            <select name="device_id" class="input-field">
-                                <option value="">-- 选择设备 --</option>
-                            </select>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">字段名</label>
-                            <input type="text" name="field_name" class="input-field" required placeholder="temperature">
-                        </div>
-                        <div class="grid grid-cols-3 gap-2 mb-4">
-                            <div>
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">操作符</label>
-                                <select name="operator" class="input-field">
-                                    <option value=">">></option>
-                                    <option value=">=">>=</option>
-                                    <option value="<"><</option>
-                                    <option value="<="><=</option>
-                                    <option value="==">==</option>
-                                </select>
-                            </div>
-                            <div class="col-span-2">
-                                <label class="block text-gray-700 text-sm font-semibold mb-2">阈值</label>
-                                <input type="number" name="value" class="input-field" step="0.1" required>
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 text-sm font-semibold mb-2">级别</label>
-                            <select name="severity" class="input-field">
-                                <option value="info">信息</option>
-                                <option value="warning">警告</option>
-                                <option value="error">错误</option>
-                                <option value="critical">严重</option>
-                            </select>
-                        </div>
-                        <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
-                            <button type="submit" class="btn-primary">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').innerHTML = modalContent;
-            document.getElementById('modal-container').classList.remove('hidden');
-            
-            document.getElementById('threshold-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                fetch('/api/thresholds', {
-                    method: 'POST',
-                    body: new URLSearchParams(formData)
-                }).then(r => r.json()).then(data => {
-                    closeModal();
-                    loadThresholds();
-                });
-            });
-        }
-
-        // 切换资源类型配置显示
-        function toggleResourceConfig(type) {
-            document.getElementById('serial-config').classList.toggle('hidden', type !== 'serial');
-            document.getElementById('network-config').classList.toggle('hidden', type !== 'network');
-        }
-
-        // 删除资源
-        function deleteResource(id) {
-            if (confirm('确定要删除此资源吗？')) {
-                fetch('/api/resources/' + id, { method: 'DELETE' })
-                    .then(r => r.json())
-                    .then(data => loadResources());
+        function createModalForm(title, fields, onSubmit) {
+            var html = '<h3 style="text-align: center; font-size: 20px; margin-bottom: 24px; color: #fff;">' + title + '</h3>';
+            html += '<form onsubmit="' + onSubmit + '">';
+            html += '<div style="display: flex; flex-direction: column; gap: 16px;">';
+            for (var i = 0; i < fields.length; i++) {
+                var f = fields[i];
+                html += '<div><label style="display: block; font-size: 14px; color: #d1d5db; margin-bottom: 8px;">' + f.label + '</label>';
+                if (f.type === 'select') {
+                    html += '<select name="' + f.name + '" class="select" required>';
+                    for (var j = 0; j < f.options.length; j++) {
+                        html += '<option value="' + f.options[j].value + '">' + f.options[j].text + '</option>';
+                    }
+                    html += '</select>';
+                } else {
+                    html += '<input type="' + (f.type || 'text') + '" name="' + f.name + '" class="input" placeholder="' + (f.placeholder || '') + '" ' + (f.required ? 'required' : '') + ')>';
+                }
+                html += '</div>';
             }
+            html += '</div>';
+            html += '<div style="display: flex; gap: 12px; margin-top: 24px;">';
+            html += '<button type="button" onclick="closeModal()" style="flex: 1; padding: 12px; border-radius: 10px; background: rgba(107, 114, 128, 0.3); border: 1px solid rgba(107, 114, 128, 0.5); color: #d1d5db; cursor: pointer;">取消</button>';
+            html += '<button type="submit" style="flex: 1; padding: 12px; border-radius: 10px; background: rgba(0, 198, 255, 0.2); border: 1px solid rgba(0, 198, 255, 0.4); color: #00c6ff; cursor: pointer;">确认</button>';
+            html += '</div></form>';
+            return html;
         }
 
-        // 删除设备
-        function deleteDevice(id) {
-            if (confirm('确定要删除此设备吗？')) {
-                fetch('/api/devices/' + id, { method: 'DELETE' })
-                    .then(r => r.json())
-                    .then(data => loadDevices());
-            }
+        function showResourceModal() {
+            showModal(createModalForm('添加资源', [
+                { label: '资源名称', name: 'name', required: true },
+                { label: '资源类型', name: 'type', type: 'select', options: [{value:'serial',text:'串口 (Serial)'},{value:'tcp',text:'TCP连接'},{value:'udp',text:'UDP连接'}] },
+                { label: '连接配置', name: 'config', required: true, placeholder: '串口: /dev/ttyUSB0,9600...' }
+            ], 'createResource(event)'));
+        }
+        function createResource(e) {
+            e.preventDefault();
+            var data = {};
+            var formData = new FormData(e.target);
+            for (var pair of formData.entries()) { data[pair[0]] = pair[1]; }
+            api('/api/resources', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }).then(function() { closeModal(); loadResources(); });
         }
 
-        // 删除驱动
-        function deleteDriver(id) {
-            if (confirm('确定要删除此驱动吗？')) {
-                fetch('/api/drivers/' + id, { method: 'DELETE' })
-                    .then(r => r.json())
-                    .then(data => loadDrivers());
-            }
+        function showDeviceModal() {
+            showModal(createModalForm('添加设备', [
+                { label: '设备名称', name: 'name', required: true },
+                { label: '设备地址', name: 'address', placeholder: '如: 1 (Modbus地址)' },
+                { label: '采集周期 (ms)', name: 'collect_interval', type: 'number', placeholder: '1000' }
+            ], 'createDevice(event)'));
+        }
+        function createDevice(e) {
+            e.preventDefault();
+            var data = {};
+            var formData = new FormData(e.target);
+            for (var pair of formData.entries()) { data[pair[0]] = pair[1]; }
+            api('/api/devices', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }).then(function() { closeModal(); loadDevices(); loadStatus(); });
         }
 
-        // 删除北向配置
-        function deleteNorthboundConfig(id) {
-            if (confirm('确定要删除此配置吗？')) {
-                fetch('/api/northbound/' + id, { method: 'DELETE' })
-                    .then(r => r.json())
-                    .then(data => loadNorthboundConfigs());
-            }
+        function showDriverModal() {
+            showModal(createModalForm('添加驱动', [
+                { label: '驱动名称', name: 'name', required: true },
+                { label: '文件路径', name: 'file_path', required: true },
+                { label: '版本号', name: 'version', placeholder: '1.0' }
+            ], 'createDriver(event)'));
+        }
+        function createDriver(e) {
+            e.preventDefault();
+            var data = {};
+            var formData = new FormData(e.target);
+            for (var pair of formData.entries()) { data[pair[0]] = pair[1]; }
+            api('/api/drivers', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }).then(function() { closeModal(); loadDrivers(); });
         }
 
-        // 删除阈值
-        function deleteThreshold(id) {
-            if (confirm('确定要删除此阈值吗？')) {
-                fetch('/api/thresholds/' + id, { method: 'DELETE' })
-                    .then(r => r.json())
-                    .then(data => loadThresholds());
-            }
+        function showNorthboundModal() {
+            showModal(createModalForm('添加北向配置', [
+                { label: '配置名称', name: 'name', required: true },
+                { label: '平台类型', name: 'type', type: 'select', options: [{value:'xunji',text:'迅集云平台'},{value:'http',text:'HTTP服务'},{value:'mqtt',text:'MQTT服务'}] },
+                { label: '产品Key', name: 'product_key' },
+                { label: '设备Key', name: 'device_key' },
+                { label: '上报周期 (ms)', name: 'upload_interval', type: 'number', placeholder: '5000' }
+            ], 'createNorthboundConfig(event)'));
+        }
+        function createNorthboundConfig(e) {
+            e.preventDefault();
+            var data = {};
+            var formData = new FormData(e.target);
+            for (var pair of formData.entries()) { data[pair[0]] = pair[1]; }
+            api('/api/northbound', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }).then(function() { closeModal(); loadNorthboundConfigs(); loadStatus(); });
         }
 
-        // 编辑资源
-        function editResource(id) {
-            showResourceModal(id);
+        function showThresholdModal() {
+            showModal(createModalForm('添加阈值配置', [
+                { label: '字段名称', name: 'field_name', required: true, placeholder: '如: temperature' },
+                { label: '条件', name: 'condition', type: 'select', options: [{value:'>',text:'大于 (>)'},{value:'>=',text:'大于等于 (>=)'},{value:'<',text:'小于 (<)'},{value:'<=',text:'小于等于 (<=)'}] },
+                { label: '阈值', name: 'threshold_value', type: 'number', required: true },
+                { label: '严重程度', name: 'severity', type: 'select', options: [{value:'info',text:'信息'},{value:'warning',text:'警告'},{value:'critical',text:'严重'}] }
+            ], 'createThreshold(event)'));
+        }
+        function createThreshold(e) {
+            e.preventDefault();
+            var data = {};
+            var formData = new FormData(e.target);
+            for (var pair of formData.entries()) { data[pair[0]] = pair[1]; }
+            api('/api/thresholds', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }).then(function() { closeModal(); loadThresholds(); });
         }
 
-        // 编辑设备
-        function editDevice(id) {
-            showDeviceModal(id);
-        }
-
-        // 编辑驱动
-        function editDriver(id) {
-            showDriverModal(id);
-        }
-
-        // 编辑北向配置
-        function editNorthboundConfig(id) {
-            showNorthboundModal(id);
-        }
-
-        // 编辑阈值
-        function editThreshold(id) {
-            showThresholdModal(id);
-        }
-
-        // 点击模态框外部关闭
-        document.getElementById('modal-container').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
-            }
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatus();
+            loadDevices();
+            loadNorthboundConfigs();
+            loadAlarms();
+            loadResources();
+            loadDrivers();
+            loadThresholds();
+            console.log('仪表盘加载完成');
         });
     </script>
 </body>

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -185,8 +186,13 @@ func main() {
 	// 创建路由器
 	r := mux.NewRouter()
 
-	// 静态文件服务
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	// 获取工作目录，确保静态文件路径正确
+	workDir, _ := os.Getwd()
+	staticDir := http.Dir(filepath.Join(workDir, "web", "static"))
+
+	// 静态文件服务 - 支持 /static/ 和 /web/static/ 两种路径
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(staticDir)))
+	r.PathPrefix("/web/static/").Handler(http.StripPrefix("/web/static/", http.FileServer(staticDir)))
 
 	// 页面路由
 	r.HandleFunc("/login", h.Login).Methods("GET")
