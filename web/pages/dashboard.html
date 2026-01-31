@@ -3,497 +3,488 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工业网关管理系统 - 仪表盘</title>
+    <title>HuShu智能网关 - 仪表盘</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .htmx-request .htmx-indicator { display: inline; }
         .htmx-indicator { display: none; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .status-running { @apply bg-green-100 text-green-800 border-green-200; }
+        .status-stopped { @apply bg-red-100 text-red-800 border-red-200; }
+        .status-warning { @apply bg-yellow-100 text-yellow-800 border-yellow-200; }
+        .card-hover { @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1; }
+        .btn-primary { @apply bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg shadow transition-all duration-200; }
+        .btn-danger { @apply bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg shadow transition-all duration-200; }
+        .btn-success { @apply bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-4 py-2 rounded-lg shadow transition-all duration-200; }
+        .input-field { @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200; }
+        .table-header { @apply bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 font-semibold; }
+        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+        .badge-green { @apply bg-green-100 text-green-800; }
+        .badge-red { @apply bg-red-100 text-red-800; }
+        .badge-yellow { @apply bg-yellow-100 text-yellow-800; }
+        .badge-blue { @apply bg-blue-100 text-blue-800; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- 导航栏 -->
-    <nav class="bg-blue-600 text-white p-4">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold">工业网关管理系统</h1>
-            <div class="flex items-center space-x-4">
-                <span id="user-info">用户</span>
-                <a href="/logout" class="bg-red-500 hover:bg-red-700 px-3 py-1 rounded">退出</a>
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen">
+    <!-- 顶部导航 -->
+    <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-server text-2xl"></i>
+                    <h1 class="text-xl font-bold">HuShu智能网关</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/realtime" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
+                        <i class="fas fa-chart-line"></i>
+                        <span>实时数据</span>
+                    </a>
+                    <a href="/history" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
+                        <i class="fas fa-history"></i>
+                        <span>历史数据</span>
+                    </a>
+                    <div class="flex items-center space-x-2 bg-blue-700 px-3 py-1 rounded-lg">
+                        <i class="fas fa-user-circle"></i>
+                        <span>admin</span>
+                    </div>
+                    <a href="/logout" class="flex items-center space-x-2 bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>退出</span>
+                    </a>
+                </div>
             </div>
         </div>
     </nav>
 
-    <!-- 主内容 -->
-    <div class="container mx-auto px-4 py-8">
+    <!-- 主内容区 -->
+    <div class="container mx-auto px-6 py-8">
         <!-- 状态卡片 -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-semibold mb-4">采集状态</h3>
-                <div id="collector-status" hx-get="/api/status" hx-trigger="load, every 5s">
-                    <span class="htmx-indicator">加载中...</span>
-                    <span id="status-text">未知</span>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- 采集状态 -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-play-circle text-blue-600 text-xl"></i>
+                    </div>
+                    <span id="collector-badge" class="badge badge-yellow">检查中</span>
                 </div>
-                <div class="mt-4">
-                    <button id="start-btn" class="bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded mr-2"
-                            hx-post="/api/collector/start" hx-target="#collector-status">
-                        启动采集
+                <h3 class="text-gray-500 text-sm font-medium">采集状态</h3>
+                <p id="collector-status-text" class="text-2xl font-bold text-gray-800 mt-1">未知</p>
+                <div class="flex space-x-2 mt-4">
+                    <button onclick="startCollector()" class="btn-success flex-1 text-sm py-2">
+                        <i class="fas fa-play mr-1"></i>启动
                     </button>
-                    <button id="stop-btn" class="bg-red-500 hover:bg-red-700 text-white px-4 py-2 rounded"
-                            hx-post="/api/collector/stop" hx-target="#collector-status">
-                        停止采集
+                    <button onclick="stopCollector()" class="btn-danger flex-1 text-sm py-2">
+                        <i class="fas fa-stop mr-1"></i>停止
                     </button>
                 </div>
             </div>
 
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-semibold mb-4">设备统计</h3>
-                <div hx-get="/api/devices" hx-trigger="load, every 30s" hx-target="#devices-container" swap="innerHTML">
-                    <span class="htmx-indicator">加载中...</span>
-                    <div id="devices-container"></div>
+            <!-- 设备统计 -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-microchip text-green-600 text-xl"></i>
+                    </div>
+                    <span class="badge badge-blue">在线</span>
                 </div>
+                <h3 class="text-gray-500 text-sm font-medium">设备总数</h3>
+                <p id="device-count" class="text-2xl font-bold text-gray-800 mt-1">-</p>
+                <p class="text-xs text-gray-400 mt-2">已启用: <span id="device-enabled-count">0</span></p>
             </div>
 
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-semibold mb-4">报警信息</h3>
-                <div hx-get="/api/alarms" hx-trigger="load, every 10s" hx-target="this">
-                    <span class="htmx-indicator">加载中...</span>
-                    <div id="alarm-count">加载中...</div>
+            <!-- 北向配置 -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-cloud-upload-alt text-purple-600 text-xl"></i>
+                    </div>
+                    <span id="northbound-badge" class="badge badge-green">活跃</span>
                 </div>
+                <h3 class="text-gray-500 text-sm font-medium">北向配置</h3>
+                <p id="northbound-count" class="text-2xl font-bold text-gray-800 mt-1">-</p>
+                <p class="text-xs text-gray-400 mt-2">已启用: <span id="northbound-enabled-count">0</span></p>
+            </div>
+
+            <!-- 报警信息 -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
+                    </div>
+                    <span class="badge badge-red">待处理</span>
+                </div>
+                <h3 class="text-gray-500 text-sm font-medium">报警数量</h3>
+                <p id="alarm-count" class="text-2xl font-bold text-gray-800 mt-1">-</p>
+                <p class="text-xs text-gray-400 mt-2">今日: <span id="alarm-today-count">0</span></p>
             </div>
         </div>
 
-        <!-- 标签页导航 -->
-        <div class="mb-4">
-            <div class="border-b border-gray-200">
-                <nav class="-mb-px flex space-x-8">
-                    <button class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium tab-btn active"
-                            data-tab="resources" onclick="switchTab('resources')">
-                        资源管理
+        <!-- 标签页 -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden">
+            <!-- 标签导航 -->
+            <div class="bg-gray-50 border-b px-6">
+                <nav class="flex space-x-8" aria-label="Tabs">
+                    <button onclick="switchTab('resources')" class="tab-btn active flex items-center space-x-2 py-4 px-2 border-b-2 border-blue-500 text-blue-600 font-medium">
+                        <i class="fas fa-plug"></i>
+                        <span>资源管理</span>
                     </button>
-                    <button class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium tab-btn"
-                            data-tab="devices" onclick="switchTab('devices')">
-                        设备管理
+                    <button onclick="switchTab('devices')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
+                        <i class="fas fa-microchip"></i>
+                        <span>设备管理</span>
                     </button>
-                    <button class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium tab-btn"
-                            data-tab="drivers" onclick="switchTab('drivers')">
-                        驱动管理
+                    <button onclick="switchTab('drivers')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
+                        <i class="fas fa-code"></i>
+                        <span>驱动管理</span>
                     </button>
-                    <button class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium tab-btn"
-                            data-tab="northbound" onclick="switchTab('northbound')">
-                        北向配置
+                    <button onclick="switchTab('northbound')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
+                        <i class="fas fa-cloud"></i>
+                        <span>北向配置</span>
                     </button>
-                    <button class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium tab-btn"
-                            data-tab="thresholds" onclick="switchTab('thresholds')">
-                        阈值配置
+                    <button onclick="switchTab('thresholds')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
+                        <i class="fas fa-bell"></i>
+                        <span>阈值配置</span>
                     </button>
-                    <button class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium tab-btn"
-                            data-tab="alarms" onclick="switchTab('alarms')">
-                        报警日志
+                    <button onclick="switchTab('alarms')" class="tab-btn flex items-center space-x-2 py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span>报警日志</span>
                     </button>
                 </nav>
             </div>
-        </div>
 
-        <!-- 资源管理 -->
-        <div id="tab-resources" class="tab-content bg-white rounded-lg shadow p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">资源列表</h3>
-                <button class="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                        onclick="showResourceModal()">
-                    添加资源
-                </button>
-            </div>
-            <div hx-get="/api/resources" hx-trigger="load" hx-target="#resources-table">
-                <span class="htmx-indicator">加载中...</span>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">配置</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="resources-table" class="bg-white divide-y divide-gray-200">
-                        <!-- 数据将通过HTMX加载 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <!-- 标签内容 -->
+            <div class="p-6">
+                <!-- 资源管理 -->
+                <div id="tab-resources" class="tab-content fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-plug mr-2 text-blue-500"></i>资源列表
+                        </h3>
+                        <button onclick="showResourceModal()" class="btn-primary">
+                            <i class="fas fa-plus mr-2"></i>添加资源
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="table-header">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">名称</th>
+                                    <th class="px-4 py-3 text-left">类型</th>
+                                    <th class="px-4 py-3 text-left">配置</th>
+                                    <th class="px-4 py-3 text-left">状态</th>
+                                    <th class="px-4 py-3 text-left">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resources-table" class="divide-y divide-gray-200">
+                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- 设备管理 -->
-        <div id="tab-devices" class="tab-content bg-white rounded-lg shadow p-6 hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">设备列表</h3>
-                <button class="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                        onclick="showDeviceModal()">
-                    添加设备
-                </button>
-            </div>
-            <div hx-get="/api/devices" hx-trigger="load" hx-target="#devices-table-body" swap="innerHTML" hx-swap="innerHTML">
-                <span class="htmx-indicator">加载中...</span>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">资源</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">驱动</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">采集周期</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="devices-table-body" class="bg-white divide-y divide-gray-200">
-                        <!-- 数据将通过HTMX加载 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 设备管理 -->
+                <div id="tab-devices" class="tab-content hidden fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-microchip mr-2 text-green-500"></i>设备列表
+                        </h3>
+                        <button onclick="showDeviceModal()" class="btn-primary">
+                            <i class="fas fa-plus mr-2"></i>添加设备
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="table-header">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">名称</th>
+                                    <th class="px-4 py-3 text-left">资源</th>
+                                    <th class="px-4 py-3 text-left">驱动</th>
+                                    <th class="px-4 py-3 text-left">采集周期</th>
+                                    <th class="px-4 py-3 text-left">使能</th>
+                                    <th class="px-4 py-3 text-left">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="devices-table-body" class="divide-y divide-gray-200">
+                                <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- 驱动管理 -->
-        <div id="tab-drivers" class="tab-content bg-white rounded-lg shadow p-6 hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">驱动列表</h3>
-                <button class="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                        onclick="showDriverModal()">
-                    添加驱动
-                </button>
-            </div>
-            <div hx-get="/api/drivers" hx-trigger="load" hx-target="#drivers-table">
-                <span class="htmx-indicator">加载中...</span>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">文件路径</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">版本</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="drivers-table" class="bg-white divide-y divide-gray-200">
-                        <!-- 数据将通过HTMX加载 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 驱动管理 -->
+                <div id="tab-drivers" class="tab-content hidden fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-code mr-2 text-purple-500"></i>驱动列表
+                        </h3>
+                        <button onclick="showDriverModal()" class="btn-primary">
+                            <i class="fas fa-plus mr-2"></i>添加驱动
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="table-header">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">名称</th>
+                                    <th class="px-4 py-3 text-left">文件路径</th>
+                                    <th class="px-4 py-3 text-left">版本</th>
+                                    <th class="px-4 py-3 text-left">状态</th>
+                                    <th class="px-4 py-3 text-left">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="drivers-table" class="divide-y divide-gray-200">
+                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- 北向配置 -->
-        <div id="tab-northbound" class="tab-content bg-white rounded-lg shadow p-6 hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">北向配置列表</h3>
-                <button class="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                        onclick="showNorthboundModal()">
-                    添加配置
-                </button>
-            </div>
-            <div hx-get="/api/northbound" hx-trigger="load" hx-target="#northbound-table">
-                <span class="htmx-indicator">加载中...</span>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ProductKey</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DeviceKey</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">上报周期</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="northbound-table-body" class="bg-white divide-y divide-gray-200">
-                        <!-- 数据将通过HTMX加载 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 北向配置 -->
+                <div id="tab-northbound" class="tab-content hidden fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-cloud mr-2 text-indigo-500"></i>北向配置列表
+                        </h3>
+                        <button onclick="showNorthboundModal()" class="btn-primary">
+                            <i class="fas fa-plus mr-2"></i>添加配置
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="table-header">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">名称</th>
+                                    <th class="px-4 py-3 text-left">类型</th>
+                                    <th class="px-4 py-3 text-left">ProductKey</th>
+                                    <th class="px-4 py-3 text-left">DeviceKey</th>
+                                    <th class="px-4 py-3 text-left">上传周期</th>
+                                    <th class="px-4 py-3 text-left">状态</th>
+                                    <th class="px-4 py-3 text-left">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="northbound-table-body" class="divide-y divide-gray-200">
+                                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- 阈值配置 -->
-        <div id="tab-thresholds" class="tab-content bg-white rounded-lg shadow p-6 hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">阈值配置列表</h3>
-                <button class="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                        onclick="showThresholdModal()">
-                    添加阈值
-                </button>
-            </div>
-            <div hx-get="/api/thresholds" hx-trigger="load" hx-target="#thresholds-table">
-                <span class="htmx-indicator">加载中...</span>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">设备</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">字段</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">条件</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">阈值</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">严重程度</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="thresholds-table" class="bg-white divide-y divide-gray-200">
-                        <!-- 数据将通过HTMX加载 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 阈值配置 -->
+                <div id="tab-thresholds" class="tab-content hidden fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-bell mr-2 text-yellow-500"></i>阈值配置列表
+                        </h3>
+                        <button onclick="showThresholdModal()" class="btn-primary">
+                            <i class="fas fa-plus mr-2"></i>添加阈值
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="table-header">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">设备</th>
+                                    <th class="px-4 py-3 text-left">字段</th>
+                                    <th class="px-4 py-3 text-left">条件</th>
+                                    <th class="px-4 py-3 text-left">阈值</th>
+                                    <th class="px-4 py-3 text-left">级别</th>
+                                    <th class="px-4 py-3 text-left">状态</th>
+                                    <th class="px-4 py-3 text-left">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="thresholds-table" class="divide-y divide-gray-200">
+                                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- 报警日志 -->
-        <div id="tab-alarms" class="tab-content bg-white rounded-lg shadow p-6 hidden">
-            <h3 class="text-lg font-semibold mb-4">报警日志</h3>
-            <div hx-get="/api/alarms" hx-trigger="load, every 30s" hx-target="#alarms-table">
-                <span class="htmx-indicator">加载中...</span>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">设备</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">字段</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">实际值</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">阈值</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">严重程度</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="alarms-table" class="bg-white divide-y divide-gray-200">
-                        <!-- 数据将通过HTMX加载 -->
-                    </tbody>
-                </table>
+                <!-- 报警日志 -->
+                <div id="tab-alarms" class="tab-content hidden fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">
+                            <i class="fas fa-exclamation-circle mr-2 text-red-500"></i>报警日志
+                        </h3>
+                        <button onclick="refreshAlarms()" class="btn-primary">
+                            <i class="fas fa-sync-alt mr-2"></i>刷新
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="table-header">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">时间</th>
+                                    <th class="px-4 py-3 text-left">设备</th>
+                                    <th class="px-4 py-3 text-left">字段</th>
+                                    <th class="px-4 py-3 text-left">实际值</th>
+                                    <th class="px-4 py-3 text-left">阈值</th>
+                                    <th class="px-4 py-3 text-left">级别</th>
+                                    <th class="px-4 py-3 text-left">状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alarms-table" class="divide-y divide-gray-200">
+                                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- 模态框容器 -->
-    <div id="modal-container" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full">
-        <!-- 模态框内容将通过JS动态插入 -->
+    <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <!-- 模态框内容由JS动态生成 -->
     </div>
 
     <script>
-        // 标签页切换
-        function switchTab(tabName) {
-            // 隐藏所有标签页内容
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.add('hidden');
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatus();
+            loadResources();
+            loadDevices();
+            loadDrivers();
+            loadNorthboundConfigs();
+            loadThresholds();
+            loadAlarms();
+            
+            // 定期刷新状态
+            setInterval(loadStatus, 5000);
+        });
+
+        // 加载系统状态
+        function loadStatus() {
+            htmx.ajax('GET', '/api/status', {
+                target: '#collector-status-text',
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        try {
+                            const status = JSON.parse(evt.detail.xhr.response);
+                            const badge = document.getElementById('collector-badge');
+                            const statusText = document.getElementById('collector-status-text');
+                            
+                            if (status.collector_running) {
+                                badge.className = 'badge badge-green';
+                                badge.textContent = '运行中';
+                                statusText.textContent = '采集中';
+                            } else {
+                                badge.className = 'badge badge-red';
+                                badge.textContent = '已停止';
+                                statusText.textContent = '已停止';
+                            }
+                        } catch (e) {}
+                    }
+                }
             });
-            // 显示选中的标签页内容
+        }
+
+        // 启动采集器
+        function startCollector() {
+            htmx.ajax('POST', '/api/collector/start', {
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        loadStatus();
+                        loadDevices();
+                        loadNorthboundConfigs();
+                    }
+                }
+            });
+        }
+
+        // 停止采集器
+        function stopCollector() {
+            htmx.ajax('POST', '/api/collector/stop', {
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        loadStatus();
+                    }
+                }
+            });
+        }
+
+        // 切换标签
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
             document.getElementById('tab-' + tabName).classList.remove('hidden');
-            // 更新标签按钮样式
+            
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('border-blue-500', 'text-blue-600');
                 btn.classList.add('border-transparent', 'text-gray-500');
             });
+            
             document.querySelector('[data-tab="' + tabName + '"]').classList.remove('border-transparent', 'text-gray-500');
             document.querySelector('[data-tab="' + tabName + '"]').classList.add('border-blue-500', 'text-blue-600');
         }
 
-        // 显示资源模态框
-        function showResourceModal() {
-            document.getElementById('modal-container').innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                    <h3 class="text-lg font-bold mb-4">添加资源</h3>
-                    <form hx-post="/api/resources" hx-target="#resources-table" onclick="closeModal()">
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">名称</label>
-                            <input type="text" name="name" class="w-full border rounded px-3 py-2" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">类型</label>
-                            <select name="type" class="w-full border rounded px-3 py-2">
-                                <option value="serial">串口</option>
-                                <option value="network">网口</option>
-                            </select>
-                        </div>
-                        <div id="serial-config">
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">串口</label>
-                                <input type="text" name="port" class="w-full border rounded px-3 py-2" placeholder="/dev/ttyUSB0">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">波特率</label>
-                                <input type="number" name="baud_rate" class="w-full border rounded px-3 py-2" value="9600">
-                            </div>
-                        </div>
-                        <div id="network-config" class="hidden">
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">IP地址</label>
-                                <input type="text" name="ip_address" class="w-full border rounded px-3 py-2" placeholder="192.168.1.100">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">端口</label>
-                                <input type="number" name="port_num" class="w-full border rounded px-3 py-2">
-                            </div>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="button" class="bg-gray-500 text-white px-4 py-2 rounded mr-2" onclick="closeModal()">取消</button>
-                            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').classList.remove('hidden');
-        }
-
-        // 关闭模态框
-        function closeModal() {
-            document.getElementById('modal-container').classList.add('hidden');
-        }
-
-        // 显示北向配置模态框
-        function showNorthboundModal() {
-            document.getElementById('modal-container').innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
-                    <h3 class="text-lg font-bold mb-4">添加北向配置</h3>
-                    <form id="northbound-form">
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">名称</label>
-                            <input type="text" name="name" class="w-full border rounded px-3 py-2" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">类型</label>
-                            <select name="type" class="w-full border rounded px-3 py-2" onchange="toggleNorthboundConfig()">
-                                <option value="xunji">XunJi</option>
-                                <option value="http">HTTP</option>
-                                <option value="mqtt">MQTT</option>
-                            </select>
-                        </div>
-                        
-                        <!-- XunJi 配置 -->
-                        <div id="xunji-config" class="config-section">
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">ProductKey</label>
-                                <input type="text" name="productKey" class="w-full border rounded px-3 py-2" placeholder="产品KEY">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">DeviceKey</label>
-                                <input type="text" name="deviceKey" class="w-full border rounded px-3 py-2" placeholder="设备KEY">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">服务器地址</label>
-                                <input type="text" name="serverUrl" class="w-full border rounded px-3 py-2" placeholder="mqtt://broker.example.com">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">用户名</label>
-                                <input type="text" name="username" class="w-full border rounded px-3 py-2" placeholder="MQTT用户名">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">密码</label>
-                                <input type="password" name="password" class="w-full border rounded px-3 py-2" placeholder="MQTT密码">
-                            </div>
-                        </div>
-                        
-                        <!-- HTTP 配置 -->
-                        <div id="http-config" class="config-section hidden">
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">服务器地址</label>
-                                <input type="text" name="httpUrl" class="w-full border rounded px-3 py-2" placeholder="http://server/api/upload">
-                            </div>
-                        </div>
-                        
-                        <!-- MQTT 配置 -->
-                        <div id="mqtt-config" class="config-section hidden">
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">Broker地址</label>
-                                <input type="text" name="mqttBroker" class="w-full border rounded px-3 py-2" placeholder="tcp://broker.example.com:1883">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">Topic</label>
-                                <input type="text" name="mqttTopic" class="w-full border rounded px-3 py-2" placeholder="device/data">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">ClientID</label>
-                                <input type="text" name="clientId" class="w-full border rounded px-3 py-2" placeholder="gateway_client">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">用户名</label>
-                                <input type="text" name="mqttUsername" class="w-full border rounded px-3 py-2">
-                            </div>
-                            <div class="mb-4">
-                                <label class="block text-sm font-bold mb-1">密码</label>
-                                <input type="password" name="mqttPassword" class="w-full border rounded px-3 py-2">
-                            </div>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">上报周期 (毫秒)</label>
-                            <input type="number" name="upload_interval" class="w-full border rounded px-3 py-2" value="10000">
-                        </div>
-                        <div class="mb-4">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="enabled" class="mr-2" checked>
-                                <span class="text-sm font-bold">启用</span>
-                            </label>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="button" class="bg-gray-500 text-white px-4 py-2 rounded mr-2" onclick="closeModal()">取消</button>
-                            <button type="button" class="bg-blue-500 text-white px-4 py-2 rounded" onclick="submitNorthboundForm()">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').classList.remove('hidden');
-        }
-
-        // 切换北向配置显示
-        function toggleNorthboundConfig() {
-            const type = document.querySelector('select[name="type"]').value;
-            document.querySelectorAll('.config-section').forEach(el => el.classList.add('hidden'));
-            document.getElementById(type + '-config').classList.remove('hidden');
-        }
-
-        // 提交北向配置表单
-        function submitNorthboundForm() {
-            const form = document.getElementById('northbound-form');
-            const formData = new FormData(form);
-            const type = formData.get('type');
-            
-            let config = {};
-            if (type === 'xunji') {
-                config = {
-                    productKey: formData.get('productKey') || '',
-                    deviceKey: formData.get('deviceKey') || '',
-                    serverUrl: formData.get('serverUrl') || '',
-                    username: formData.get('username') || '',
-                    password: formData.get('password') || ''
-                };
-            } else if (type === 'http') {
-                config = {
-                    url: formData.get('httpUrl') || ''
-                };
-            } else if (type === 'mqtt') {
-                config = {
-                    broker: formData.get('mqttBroker') || '',
-                    topic: formData.get('mqttTopic') || '',
-                    clientId: formData.get('clientId') || '',
-                    username: formData.get('mqttUsername') || '',
-                    password: formData.get('mqttPassword') || ''
-                };
-            }
-            
-            const data = {
-                name: formData.get('name'),
-                type: type,
-                config: JSON.stringify(config),
-                upload_interval: parseInt(formData.get('upload_interval') || '10000'),
-                enabled: formData.get('enabled') ? 1 : 0
-            };
-            
-            htmx.ajax('POST', '/api/northbound', {
-                target: '#northbound-table-body',
-                swap: 'innerHTML',
-                body: JSON.stringify(data),
-                headers: { 'Content-Type': 'application/json' }
-            }).then(() => {
-                closeModal();
-                htmx.ajax('GET', '/api/northbound', {
-                    target: '#northbound-table-body',
-                    swap: 'innerHTML',
-                    afterRequest: function(evt) {
-                        if (evt.detail.successful) {
-                            renderNorthboundTable(evt.detail.xhr.response);
-                        }
+        // 加载资源列表
+        function loadResources() {
+            htmx.ajax('GET', '/api/resources', {
+                target: '#resources-table',
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        renderResourcesTable(evt.detail.xhr.response);
                     }
+                }
+            });
+        }
+
+        // 渲染资源表格
+        function renderResourcesTable(data) {
+            try {
+                const resources = JSON.parse(data);
+                let html = '';
+                resources.forEach(resource => {
+                    const statusBadge = resource.enabled === 1 
+                        ? '<span class="badge badge-green">启用</span>' 
+                        : '<span class="badge badge-red">禁用</span>';
+                    
+                    const typeIcon = resource.type === 'serial' ? 'fa-plug' : 'fa-network-wired';
+                    const typeText = resource.type === 'serial' ? '串口' : '网口';
+                    
+                    let configText = '';
+                    if (resource.type === 'serial') {
+                        configText = `${resource.port || ''} ${resource.baud_rate || 9600}bps`;
+                    } else {
+                        configText = `${resource.ip_address || ''}:${resource.port_num || ''}`;
+                    }
+                    
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                <i class="fas ${typeIcon} mr-2 text-gray-400"></i>${resource.name}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${typeText}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${configText}</td>
+                            <td class="px-4 py-3">${statusBadge}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <button onclick="editResource(${resource.id})" class="text-blue-600 hover:text-blue-800 mr-3">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteResource(${resource.id})" class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
                 });
+                document.getElementById('resources-table').innerHTML = html || '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
+            } catch (e) {
+                console.error('Failed to parse resources:', e);
+            }
+        }
+
+        // 加载设备列表
+        function loadDevices() {
+            htmx.ajax('GET', '/api/devices', {
+                target: '#devices-table-body',
+                afterRequest: function(evt) {
+                    if (evt.detail.successful) {
+                        renderDevicesTable(evt.detail.xhr.response);
+                    }
+                }
             });
         }
 
@@ -501,518 +492,264 @@
         function renderDevicesTable(data) {
             try {
                 const devices = JSON.parse(data);
-                
-                // 更新设备统计
-                const totalDevices = devices.length;
-                const enabledDevices = devices.filter(d => d.enabled === 1).length;
-                document.getElementById('devices-container').innerHTML = `
-                    <p class="text-2xl font-bold text-blue-600">${totalDevices}</p>
-                    <p class="text-sm text-gray-500">总设备数 (启用: ${enabledDevices})</p>
-                `;
-
-                // 渲染设备表格
                 let html = '';
+                let enabledCount = 0;
+                
                 devices.forEach(device => {
-                    const statusClass = device.enabled === 1 ? 'text-green-600' : 'text-red-600';
-                    const statusText = device.enabled === 1 ? '启用' : '禁用';
+                    if (device.enabled === 1) enabledCount++;
+                    
+                    const enabledBadge = device.enabled === 1 
+                        ? '<span class="badge badge-green">启用</span>' 
+                        : '<span class="badge badge-red">禁用</span>';
+                    
                     html += `
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${device.name}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${device.resource_id || '-'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${device.driver_id || '-'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${device.collect_interval}ms</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <button class="text-blue-600 hover:text-blue-900 mr-3" onclick="editDevice(${device.id})">编辑</button>
-                                <button class="text-red-600 hover:text-red-900" onclick="deleteDevice(${device.id})">删除</button>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                <i class="fas fa-microchip mr-2 text-gray-400"></i>${device.name}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${device.resource_id || '-'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${device.driver_id || '-'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${device.collect_interval}ms</td>
+                            <td class="px-4 py-3">${enabledBadge}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <button onclick="editDevice(${device.id})" class="text-blue-600 hover:text-blue-800 mr-3">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteDevice(${device.id})" class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     `;
                 });
-                document.getElementById('devices-table-body').innerHTML = html || '<tr><td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">暂无设备</td></tr>';
+                document.getElementById('devices-table-body').innerHTML = html || '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
+                document.getElementById('device-count').textContent = devices.length;
+                document.getElementById('device-enabled-count').textContent = enabledCount;
             } catch (e) {
-                console.error('Failed to parse devices data:', e);
+                console.error('Failed to parse devices:', e);
             }
         }
 
-        // 编辑设备
-        function editDevice(id) {
-            console.log('Edit device:', id);
-        }
-
-        // 删除设备
-        function deleteDevice(id) {
-            if (!confirm('确定要删除此设备吗？')) {
-                return;
-            }
-            htmx.ajax('DELETE', '/api/devices/' + id, {
-                target: '#devices-table-body',
-                swap: 'innerHTML',
+        // 加载驱动列表
+        function loadDrivers() {
+            htmx.ajax('GET', '/api/drivers', {
+                target: '#drivers-table',
                 afterRequest: function(evt) {
                     if (evt.detail.successful) {
-                        htmx.ajax('GET', '/api/devices', {
-                            target: '#devices-table-body',
-                            swap: 'innerHTML',
-                            afterRequest: function(e) {
-                                if (e.detail.successful) {
-                                    renderDevicesTable(e.detail.xhr.response);
-                                }
-                            }
-                        });
+                        renderDriversTable(evt.detail.xhr.response);
                     }
                 }
             });
         }
 
-        // 显示设备模态框
-        function showDeviceModal() {
-            document.getElementById('modal-container').innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                    <h3 class="text-lg font-bold mb-4">添加设备</h3>
-                    <form id="device-form">
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">名称</label>
-                            <input type="text" name="name" class="w-full border rounded px-3 py-2" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">描述</label>
-                            <input type="text" name="description" class="w-full border rounded px-3 py-2">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">采集周期 (毫秒)</label>
-                            <input type="number" name="collect_interval" class="w-full border rounded px-3 py-2" value="5000">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">上传周期 (毫秒)</label>
-                            <input type="number" name="upload_interval" class="w-full border rounded px-3 py-2" value="10000">
-                        </div>
-                        <div class="mb-4">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="enabled" class="mr-2" checked>
-                                <span class="text-sm font-bold">启用</span>
-                            </label>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="button" class="bg-gray-500 text-white px-4 py-2 rounded mr-2" onclick="closeModal()">取消</button>
-                            <button type="button" class="bg-blue-500 text-white px-4 py-2 rounded" onclick="submitDeviceForm()">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').classList.remove('hidden');
+        // 渲染驱动表格
+        function renderDriversTable(data) {
+            try {
+                const drivers = JSON.parse(data);
+                let html = '';
+                drivers.forEach(driver => {
+                    const statusBadge = driver.enabled === 1 
+                        ? '<span class="badge badge-green">启用</span>' 
+                        : '<span class="badge badge-red">禁用</span>';
+                    
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                <i class="fas fa-code mr-2 text-gray-400"></i>${driver.name}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${driver.file_path}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${driver.version || '-'}</td>
+                            <td class="px-4 py-3">${statusBadge}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <button onclick="editDriver(${driver.id})" class="text-blue-600 hover:text-blue-800 mr-3">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteDriver(${driver.id})" class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('drivers-table').innerHTML = html || '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
+            } catch (e) {
+                console.error('Failed to parse drivers:', e);
+            }
         }
 
-        // 提交设备表单
-        function submitDeviceForm() {
-            const form = document.getElementById('device-form');
-            const formData = new FormData(form);
-            
-            const data = {
-                name: formData.get('name'),
-                description: formData.get('description') || '',
-                collect_interval: parseInt(formData.get('collect_interval') || '5000'),
-                upload_interval: parseInt(formData.get('upload_interval') || '10000'),
-                enabled: formData.get('enabled') ? 1 : 0,
-                resource_id: null,
-                driver_id: null,
-                device_config: '{}'
-            };
-            
-            htmx.ajax('POST', '/api/devices', {
-                target: '#devices-table',
-                swap: 'innerHTML',
-                body: JSON.stringify(data),
-                headers: { 'Content-Type': 'application/json' }
-            }).then(() => {
-                closeModal();
-                htmx.ajax('GET', '/api/devices', { target: '#devices-table' });
-            });
-        }
-
-        // 显示驱动模态框
-        function showDriverModal() {
-            document.getElementById('modal-container').innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                    <h3 class="text-lg font-bold mb-4">添加驱动</h3>
-                    <form id="driver-form">
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">名称</label>
-                            <input type="text" name="name" class="w-full border rounded px-3 py-2" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">文件路径</label>
-                            <input type="text" name="file_path" class="w-full border rounded px-3 py-2" placeholder="drivers/th.wasm" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">版本</label>
-                            <input type="text" name="version" class="w-full border rounded px-3 py-2" value="1.0">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">描述</label>
-                            <input type="text" name="description" class="w-full border rounded px-3 py-2">
-                        </div>
-                        <div class="mb-4">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="enabled" class="mr-2" checked>
-                                <span class="text-sm font-bold">启用</span>
-                            </label>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="button" class="bg-gray-500 text-white px-4 py-2 rounded mr-2" onclick="closeModal()">取消</button>
-                            <button type="button" class="bg-blue-500 text-white px-4 py-2 rounded" onclick="submitDriverForm()">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').classList.remove('hidden');
-        }
-
-        // 提交驱动表单
-        function submitDriverForm() {
-            const form = document.getElementById('driver-form');
-            const formData = new FormData(form);
-            
-            const data = {
-                name: formData.get('name'),
-                file_path: formData.get('file_path'),
-                version: formData.get('version') || '1.0',
-                description: formData.get('description') || '',
-                config_schema: '{}',
-                enabled: formData.get('enabled') ? 1 : 0
-            };
-            
-            htmx.ajax('POST', '/api/drivers', {
-                target: '#drivers-table',
-                swap: 'innerHTML',
-                body: JSON.stringify(data),
-                headers: { 'Content-Type': 'application/json' }
-            }).then(() => {
-                closeModal();
-                htmx.ajax('GET', '/api/drivers', { target: '#drivers-table' });
-            });
-        }
-
-        // 显示阈值模态框
-        function showThresholdModal() {
-            document.getElementById('modal-container').innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                    <h3 class="text-lg font-bold mb-4">添加阈值</h3>
-                    <form id="threshold-form">
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">设备ID</label>
-                            <input type="number" name="device_id" class="w-full border rounded px-3 py-2" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">字段名</label>
-                            <input type="text" name="field_name" class="w-full border rounded px-3 py-2" placeholder="temperature" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">条件</label>
-                            <select name="operator" class="w-full border rounded px-3 py-2">
-                                <option value=">">大于 (>)</option>
-                                <option value="<">小于 (<)</option>
-                                <option value=">=">大于等于 (>=)</option>
-                                <option value="<=">小于等于 (<=)</option>
-                                <option value="==">等于 (==)</option>
-                                <option value="!=">不等于 (!=)</option>
-                            </select>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">阈值</label>
-                            <input type="number" name="value" step="any" class="w-full border rounded px-3 py-2" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">严重程度</label>
-                            <select name="severity" class="w-full border rounded px-3 py-2">
-                                <option value="info">信息</option>
-                                <option value="warning">警告</option>
-                                <option value="error">错误</option>
-                                <option value="critical">严重</option>
-                            </select>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">消息</label>
-                            <input type="text" name="message" class="w-full border rounded px-3 py-2" placeholder="报警描述">
-                        </div>
-                        <div class="mb-4">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="enabled" class="mr-2" checked>
-                                <span class="text-sm font-bold">启用</span>
-                            </label>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="button" class="bg-gray-500 text-white px-4 py-2 rounded mr-2" onclick="closeModal()">取消</button>
-                            <button type="button" class="bg-blue-500 text-white px-4 py-2 rounded" onclick="submitThresholdForm()">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').classList.remove('hidden');
-        }
-
-        // 提交阈值表单
-        function submitThresholdForm() {
-            const form = document.getElementById('threshold-form');
-            const formData = new FormData(form);
-            
-            const data = {
-                device_id: parseInt(formData.get('device_id')),
-                field_name: formData.get('field_name'),
-                operator: formData.get('operator'),
-                value: parseFloat(formData.get('value')),
-                severity: formData.get('severity'),
-                message: formData.get('message') || '',
-                enabled: formData.get('enabled') ? 1 : 0
-            };
-            
-            htmx.ajax('POST', '/api/thresholds', {
-                target: '#thresholds-table',
-                swap: 'innerHTML',
-                body: JSON.stringify(data),
-                headers: { 'Content-Type': 'application/json' }
-            }).then(() => {
-                closeModal();
-                htmx.ajax('GET', '/api/thresholds', { target: '#thresholds-table' });
-            });
-        }
-
-        // 页面加载时更新状态和表格数据
-        document.addEventListener('DOMContentLoaded', function() {
-            htmx.ajax('GET', '/api/status', { target: '#collector-status' });
-            
-            // 加载北向配置数据并渲染
+        // 加载北向配置
+        function loadNorthboundConfigs() {
             htmx.ajax('GET', '/api/northbound', {
                 target: '#northbound-table-body',
-                swap: 'innerHTML',
                 afterRequest: function(evt) {
                     if (evt.detail.successful) {
                         renderNorthboundTable(evt.detail.xhr.response);
                     }
                 }
             });
-            
-            // 加载设备数据并渲染
-            htmx.ajax('GET', '/api/devices', {
-                target: '#devices-table-body',
-                swap: 'innerHTML',
-                afterRequest: function(evt) {
-                    if (evt.detail.successful) {
-                        renderDevicesTable(evt.detail.xhr.response);
-                    }
-                }
-            });
-        });
+        }
 
         // 渲染北向配置表格
         function renderNorthboundTable(data) {
             try {
                 const configs = JSON.parse(data);
                 let html = '';
+                let enabledCount = 0;
+                
                 configs.forEach(config => {
-                    const statusText = config.enabled === 1 ? '启用' : '禁用';
-                    const statusClass = config.enabled === 1 ? 'text-green-600' : 'text-red-600';
+                    if (config.enabled === 1) enabledCount++;
+                    
+                    const statusBadge = config.enabled === 1 
+                        ? '<span class="badge badge-green">启用</span>' 
+                        : '<span class="badge badge-red">禁用</span>';
+                    
+                    const typeIcons = {xunji: 'fa-cloud', mqtt: 'fa-broadcast-tower', http: 'fa-globe'};
+                    const typeIcon = typeIcons[config.type] || 'fa-cloud';
+                    
                     html += `
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${config.name}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${config.type}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${config.productKey || '-'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${config.deviceKey || '-'}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${config.upload_interval}ms</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <button class="text-blue-600 hover:text-blue-900 mr-3" onclick="editNorthboundConfig(${config.id})">编辑</button>
-                                <button class="text-red-600 hover:text-red-900" onclick="deleteNorthboundConfig(${config.id})">删除</button>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                <i class="fas ${typeIcon} mr-2 text-gray-400"></i>${config.name}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500 uppercase">${config.type}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${config.productKey || '-'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">${config.deviceKey || '-'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${config.upload_interval}ms</td>
+                            <td class="px-4 py-3">${statusBadge}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <button onclick="editNorthboundConfig(${config.id})" class="text-blue-600 hover:text-blue-800 mr-3">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteNorthboundConfig(${config.id})" class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     `;
                 });
-                document.getElementById('northbound-table-body').innerHTML = html || '<tr><td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">暂无数据</td></tr>';
+                document.getElementById('northbound-table-body').innerHTML = html || '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
+                document.getElementById('northbound-count').textContent = configs.length;
+                document.getElementById('northbound-enabled-count').textContent = enabledCount;
             } catch (e) {
                 console.error('Failed to parse northbound data:', e);
             }
         }
 
-        // 编辑北向配置
-        function editNorthboundConfig(id) {
-            // 获取配置详情并打开编辑模态框
-            htmx.ajax('GET', '/api/northbound', {
-                target: 'body',
-                swap: 'beforeend',
+        // 加载阈值配置
+        function loadThresholds() {
+            htmx.ajax('GET', '/api/thresholds', {
+                target: '#thresholds-table',
                 afterRequest: function(evt) {
                     if (evt.detail.successful) {
-                        try {
-                            const configs = JSON.parse(evt.detail.xhr.response);
-                            const config = configs.find(c => c.id === id);
-                            if (config) {
-                                showNorthboundEditModal(config);
-                            }
-                        } catch (e) {
-                            console.error('Failed to parse config:', e);
-                        }
+                        renderThresholdsTable(evt.detail.xhr.response);
                     }
                 }
             });
         }
 
-        // 显示编辑北向配置模态框
-        function showNorthboundEditModal(config) {
-            let configHtml = '';
-            if (config.type === 'xunji') {
-                configHtml = `
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">ProductKey</label>
-                        <input type="text" id="edit-productKey" name="productKey" class="w-full border rounded px-3 py-2" value="${config.productKey || ''}">
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">DeviceKey</label>
-                        <input type="text" id="edit-deviceKey" name="deviceKey" class="w-full border rounded px-3 py-2" value="${config.deviceKey || ''}">
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">服务器地址</label>
-                        <input type="text" id="edit-serverUrl" name="serverUrl" class="w-full border rounded px-3 py-2" value="${config.serverUrl || ''}">
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">用户名</label>
-                        <input type="text" id="edit-username" name="username" class="w-full border rounded px-3 py-2">
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">密码</label>
-                        <input type="password" id="edit-password" name="password" class="w-full border rounded px-3 py-2">
-                    </div>
-                `;
-            } else if (config.type === 'http') {
-                configHtml = `
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">服务器地址</label>
-                        <input type="text" name="httpUrl" class="w-full border rounded px-3 py-2" value="${config.serverUrl || ''}">
-                    </div>
-                `;
-            } else if (config.type === 'mqtt') {
-                configHtml = `
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">Broker地址</label>
-                        <input type="text" name="mqttBroker" class="w-full border rounded px-3 py-2">
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-sm font-bold mb-1">Topic</label>
-                        <input type="text" name="mqttTopic" class="w-full border rounded px-3 py-2">
-                    </div>
-                `;
-            }
-
-            document.getElementById('modal-container').innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
-                    <h3 class="text-lg font-bold mb-4">编辑北向配置</h3>
-                    <form id="northbound-edit-form">
-                        <input type="hidden" name="id" value="${config.id}">
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">名称</label>
-                            <input type="text" name="name" class="w-full border rounded px-3 py-2" value="${config.name}" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">类型</label>
-                            <select name="type" class="w-full border rounded px-3 py-2" disabled>
-                                <option value="${config.type}">${config.type.toUpperCase()}</option>
-                            </select>
-                        </div>
-                        ${configHtml}
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold mb-1">上报周期 (毫秒)</label>
-                            <input type="number" name="upload_interval" class="w-full border rounded px-3 py-2" value="${config.upload_interval}">
-                        </div>
-                        <div class="mb-4">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="enabled" class="mr-2" ${config.enabled === 1 ? 'checked' : ''}>
-                                <span class="text-sm font-bold">启用</span>
-                            </label>
-                        </div>
-                        <div class="flex justify-end">
-                            <button type="button" class="bg-gray-500 text-white px-4 py-2 rounded mr-2" onclick="closeModal()">取消</button>
-                            <button type="button" class="bg-blue-500 text-white px-4 py-2 rounded" onclick="submitNorthboundEditForm()">保存</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal-container').classList.remove('hidden');
-        }
-
-        // 提交编辑北向配置表单
-        function submitNorthboundEditForm() {
-            const form = document.getElementById('northbound-edit-form');
-            const formData = new FormData(form);
-            const type = formData.get('type');
-            
-            let config = {};
-            if (type === 'xunji') {
-                config = {
-                    productKey: formData.get('productKey') || '',
-                    deviceKey: formData.get('deviceKey') || '',
-                    serverUrl: formData.get('serverUrl') || '',
-                    username: formData.get('username') || '',
-                    password: formData.get('password') || ''
-                };
-            } else if (type === 'http') {
-                config = {
-                    url: formData.get('httpUrl') || ''
-                };
-            } else if (type === 'mqtt') {
-                config = {
-                    broker: formData.get('mqttBroker') || '',
-                    topic: formData.get('mqttTopic') || ''
-                };
-            }
-            
-            const data = {
-                id: parseInt(formData.get('id')),
-                name: formData.get('name'),
-                type: type,
-                config: JSON.stringify(config),
-                upload_interval: parseInt(formData.get('upload_interval') || '10000'),
-                enabled: formData.get('enabled') ? 1 : 0
-            };
-            
-            htmx.ajax('PUT', '/api/northbound/' + data.id, {
-                target: '#northbound-table-body',
-                swap: 'innerHTML',
-                body: JSON.stringify(data),
-                headers: { 'Content-Type': 'application/json' }
-            }).then(() => {
-                closeModal();
-                htmx.ajax('GET', '/api/northbound', {
-                    target: '#northbound-table-body',
-                    swap: 'innerHTML',
-                    afterRequest: function(evt) {
-                        if (evt.detail.successful) {
-                            renderNorthboundTable(evt.detail.xhr.response);
-                        }
-                    }
+        // 渲染阈值表格
+        function renderThresholdsTable(data) {
+            try {
+                const thresholds = JSON.parse(data);
+                let html = '';
+                thresholds.forEach(threshold => {
+                    const statusBadge = threshold.enabled === 1 
+                        ? '<span class="badge badge-green">启用</span>' 
+                        : '<span class="badge badge-red">禁用</span>';
+                    
+                    const severityBadge = threshold.severity === 'critical' ? 'badge-red' 
+                        : threshold.severity === 'error' ? 'badge-yellow' 
+                        : 'badge-blue';
+                    
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm text-gray-900">设备${threshold.device_id}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${threshold.field_name}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${threshold.operator} ${threshold.value}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${threshold.value}</td>
+                            <td class="px-4 py-3"><span class="badge ${severityBadge}">${threshold.severity}</span></td>
+                            <td class="px-4 py-3">${statusBadge}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <button onclick="editThreshold(${threshold.id})" class="text-blue-600 hover:text-blue-800 mr-3">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteThreshold(${threshold.id})" class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
                 });
-            });
+                document.getElementById('thresholds-table').innerHTML = html || '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">暂无数据</td></tr>';
+            } catch (e) {
+                console.error('Failed to parse thresholds:', e);
+            }
         }
 
-        // 删除北向配置
-        function deleteNorthboundConfig(id) {
-            if (!confirm('确定要删除此北向配置吗？')) {
-                return;
-            }
-            htmx.ajax('DELETE', '/api/northbound/' + id, {
-                target: '#northbound-table-body',
-                swap: 'innerHTML',
+        // 加载报警日志
+        function loadAlarms() {
+            htmx.ajax('GET', '/api/alarms', {
+                target: '#alarms-table',
                 afterRequest: function(evt) {
                     if (evt.detail.successful) {
-                        htmx.ajax('GET', '/api/northbound', {
-                            target: '#northbound-table-body',
-                            swap: 'innerHTML',
-                            afterRequest: function(e) {
-                                if (e.detail.successful) {
-                                    renderNorthboundTable(e.detail.xhr.response);
-                                }
-                            }
-                        });
+                        renderAlarmsTable(evt.detail.xhr.response);
                     }
                 }
             });
         }
+
+        function refreshAlarms() {
+            loadAlarms();
+        }
+
+        // 渲染报警表格
+        function renderAlarmsTable(data) {
+            try {
+                const alarms = JSON.parse(data);
+                let html = '';
+                alarms.forEach(alarm => {
+                    const severityBadge = alarm.severity === 'critical' ? 'badge-red' 
+                        : alarm.severity === 'error' ? 'badge-yellow' 
+                        : 'badge-blue';
+                    
+                    const statusBadge = alarm.acknowledged === 1 
+                        ? '<span class="badge badge-green">已确认</span>' 
+                        : '<span class="badge badge-yellow">待处理</span>';
+                    
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm text-gray-500">${new Date(alarm.triggered_at).toLocaleString()}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">设备${alarm.device_id}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${alarm.field_name}</td>
+                            <td class="px-4 py-3 text-sm text-red-600 font-mono">${alarm.actual_value}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${alarm.operator} ${alarm.threshold_value}</td>
+                            <td class="px-4 py-3"><span class="badge ${severityBadge}">${alarm.severity}</span></td>
+                            <td class="px-4 py-3">${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('alarms-table').innerHTML = html || '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">暂无报警</td></tr>';
+                document.getElementById('alarm-count').textContent = alarms.length;
+                document.getElementById('alarm-today-count').textContent = alarms.filter(a => {
+                    const today = new Date().toDateString();
+                    return new Date(a.triggered_at).toDateString() === today;
+                }).length;
+            } catch (e) {
+                console.error('Failed to parse alarms:', e);
+            }
+        }
+
+        // 模态框相关函数
+        function closeModal() {
+            document.getElementById('modal-container').classList.add('hidden');
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('modal-container').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
     </script>
 </body>
 </html>

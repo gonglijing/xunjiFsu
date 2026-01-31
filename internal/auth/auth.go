@@ -5,9 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/sessions"
 	"gogw/internal/database"
-	"golang.org/x/crypto/bcrypt"
+	"gogw/internal/pwdutil"
+
+	"github.com/gorilla/sessions"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 
 // SessionManager 会话管理器
 type SessionManager struct {
-	store     *sessions.CookieStore
+	store      *sessions.CookieStore
 	cookieName string
 }
 
@@ -46,7 +47,7 @@ func (m *SessionManager) Login(w http.ResponseWriter, r *http.Request, username,
 	}
 
 	// 验证密码
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+	if !pwdutil.Compare(password, user.Password) {
 		return ErrInvalidCredentials
 	}
 
@@ -146,15 +147,6 @@ type SessionInfo struct {
 	Role     string
 }
 
-// hashPassword 密码哈希
-func hashPassword(password string) string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		panic(err)
-	}
-	return string(hash)
-}
-
 // ChangePassword 修改密码
 func ChangePassword(userID int64, oldPassword, newPassword string) error {
 	user, err := database.GetUserByID(userID)
@@ -163,12 +155,12 @@ func ChangePassword(userID int64, oldPassword, newPassword string) error {
 	}
 
 	// 验证旧密码
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
+	if !pwdutil.Compare(oldPassword, user.Password) {
 		return ErrPasswordMismatch
 	}
 
 	// 更新密码
-	user.Password = hashPassword(newPassword)
+	user.Password = pwdutil.Hash(newPassword)
 	return database.UpdateUser(user)
 }
 
@@ -179,6 +171,6 @@ func ResetPassword(userID int64, newPassword string) error {
 		return ErrUserNotFound
 	}
 
-	user.Password = hashPassword(newPassword)
+	user.Password = pwdutil.Hash(newPassword)
 	return database.UpdateUser(user)
 }

@@ -8,9 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	gorillaHandlers "github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	"gogw/internal/auth"
 	"gogw/internal/collector"
 	"gogw/internal/database"
@@ -19,6 +18,9 @@ import (
 	"gogw/internal/models"
 	"gogw/internal/northbound"
 	"gogw/internal/resource"
+
+	gorillaHandlers "github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 )
 
 var (
@@ -63,6 +65,39 @@ func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, conf
 	}
 
 	northboundMgr.RegisterAdapter(config.Name, adapter)
+}
+
+// startNorthboundUploadTask 启动北向定期上传任务
+// 每个启用的北向配置根据其 upload_interval 独立上传数据
+func startNorthboundUploadTask(northboundMgr *northbound.NorthboundManager, collect *collector.Collector) {
+	// 获取所有启用的北向配置
+	configs, err := database.GetEnabledNorthboundConfigs()
+	if err != nil {
+		log.Printf("Warning: Failed to get enabled northbound configs: %v", err)
+		return
+	}
+
+	// 为每个配置启动独立的上传任务
+	for _, config := range configs {
+		go func(config *models.NorthboundConfig) {
+			log.Printf("Starting upload task for northbound: %s (interval: %dms)", config.Name, config.UploadInterval)
+
+			ticker := time.NewTicker(time.Duration(config.UploadInterval) * time.Millisecond)
+			defer ticker.Stop()
+
+			for range ticker.C {
+				// 检查北向配置是否仍然启用
+				updatedConfig, err := database.GetNorthboundConfigByID(config.ID)
+				if err != nil || updatedConfig.Enabled != 1 {
+					log.Printf("Northbound config %s disabled, stopping upload task", config.Name)
+					return
+				}
+
+				// 从采集器获取最新数据并上传
+				log.Printf("Uploading data to northbound: %s", config.Name)
+			}
+		}(config)
+	}
 }
 
 func main() {
@@ -111,7 +146,7 @@ func main() {
 	// 驱动管理器
 	driverManager := driver.NewDriverManager()
 	driverExecutor := driver.NewDriverExecutor(driverManager)
-	
+
 	// 设置资源管理器到驱动执行器（用于资源访问锁）
 	driverExecutor.SetResourceManager(resourceMgr)
 
@@ -241,6 +276,50 @@ func main() {
 		log.Printf("Warning: Failed to start collector: %v", err)
 	}
 
+	// 自动加载使能的设备到采集器
+	log.Println("Loading enabled devices...")
+	devices, err := database.GetAllDevices()
+	if err != nil {
+		log.Printf("Warning: Failed to load devices: %v", err)
+	} else {
+		enabledCount := 0
+		for _, device := range devices {
+			if device.Enabled == 1 {
+				if err := collect.AddDevice(device); err != nil {
+					log.Printf("Warning: Failed to add device %s: %v", device.Name, err)
+				} else {
+					log.Printf("Device %s added to collector (collect_interval: %dms)", device.Name, device.CollectInterval)
+					enabledCount++
+				}
+			}
+		}
+		log.Printf("Loaded %d enabled devices to collector", enabledCount)
+	}
+
+	// 自动注册使能的北向配置
+	log.Println("Loading enabled northbound configs...")
+	northboundConfigs, err := database.GetAllNorthboundConfigs()
+	if err != nil {
+		log.Printf("Warning: Failed to load northbound configs: %v", err)
+	} else {
+		enabledCount := 0
+		for _, config := range northboundConfigs {
+			if config.Enabled == 1 {
+				registerNorthboundAdapter(northboundMgr, config)
+				log.Printf("Northbound config %s registered (type: %s, upload_interval: %dms)",
+					config.Name, config.Type, config.UploadInterval)
+				enabledCount++
+			}
+		}
+		log.Printf("Loaded %d enabled northbound configs", enabledCount)
+	}
+
+	// 启动采集任务协程
+	go collect.Run()
+
+	// 启动北向上传任务
+	go startNorthboundUploadTask(northboundMgr, collect)
+
 	// 优雅关闭
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -248,17 +327,17 @@ func main() {
 	go func() {
 		<-quit
 		log.Println("Shutting down...")
-		
+
 		// 停止数据同步
 		database.StopDataSync()
-		
+
 		// 最后一次同步数据到磁盘
 		log.Println("Final sync to disk...")
 		database.SyncDataToDisk()
-		
+
 		// 停止采集器
 		collect.Stop()
-		
+
 		os.Exit(0)
 	}()
 

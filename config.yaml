@@ -1,8 +1,4 @@
 # GoGW 配置文件
-# 数据库配置
-database:
-  path: "gogw.db"
-
 # 服务器配置
 server:
   addr: ":8080"

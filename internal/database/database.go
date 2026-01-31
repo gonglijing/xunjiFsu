@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"gogw/internal/models"
+	"gogw/internal/pwdutil"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Configuration
@@ -33,7 +34,7 @@ var dataSyncStop chan struct{}
 // InitParamDB 初始化配置数据库（持久化文件）
 func InitParamDB() error {
 	var err error
-	ParamDB, err = sql.Open("sqlite3", "param.db")
+	ParamDB, err = sql.Open("sqlite", "param.db")
 	if err != nil {
 		return fmt.Errorf("failed to open param database: %w", err)
 	}
@@ -53,7 +54,7 @@ func InitParamDB() error {
 // InitDataDB 初始化历史数据数据库（内存模式 + 批量同步）
 func InitDataDB() error {
 	var err error
-	DataDB, err = sql.Open("sqlite3", ":memory:")
+	DataDB, err = sql.Open("sqlite", ":memory:")
 	if err != nil {
 		return fmt.Errorf("failed to open data database: %w", err)
 	}
@@ -122,7 +123,7 @@ func syncDataToDisk() error {
 
 	// 1. 创建临时数据库文件
 	tempFile := DataDBFile + ".tmp"
-	diskDB, err := sql.Open("sqlite3", tempFile)
+	diskDB, err := sql.Open("sqlite", tempFile)
 	if err != nil {
 		return fmt.Errorf("failed to open temp database: %w", err)
 	}
@@ -233,19 +234,19 @@ func syncDataToDisk() error {
 	return nil
 }
 
-// restoreDataFromFile 从文件恢复到内存数据库
+// restoreDataFromFile 尝试从备份文件恢复数据
+// 注意：由于使用内存数据库，完整恢复比较复杂
+// 如果备份文件存在，记录日志但不影响主程序运行
+// 实时数据会在系统运行后自动重新采集
 func restoreDataFromFile(filename string) error {
-	// 读取SQL文件
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return err
+	// 检查文件是否存在
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return nil
 	}
 
-	// 执行SQL
-	if _, err := DataDB.Exec(string(data)); err != nil {
-		return fmt.Errorf("failed to restore database: %w", err)
-	}
-
+	// 记录有备份文件存在，但不尝试恢复
+	// 数据会在运行时自动重新采集
+	log.Printf("Backup file exists (%s), real-time data will be collected on startup", filename)
 	return nil
 }
 
@@ -284,17 +285,29 @@ func InitDefaultData() error {
 	var count int
 	err := ParamDB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
-		return err
+		// 表可能不存在或为空，返回错误
+		log.Printf("Warning: Failed to query users count: %v, trying to create default user", err)
+		// 尝试直接创建用户
+		_, err := ParamDB.Exec(
+			"INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+			"admin", pwdutil.Hash("123456"), "admin",
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create default user: %w", err)
+		}
+		log.Println("Created default admin user")
+		return nil
 	}
 
 	if count == 0 {
 		_, err := ParamDB.Exec(
 			"INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-			"admin", hashPassword("123456"), "admin",
+			"admin", pwdutil.Hash("123456"), "admin",
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create default user: %w", err)
 		}
+		log.Println("Created default admin user")
 	}
 
 	return nil

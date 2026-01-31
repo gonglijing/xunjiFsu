@@ -3,40 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工业网关管理系统 - 登录</title>
+    <title>HuShu智能网关 - 登录</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .htmx-request .htmx-indicator { display: inline; }
         .htmx-indicator { display: none; }
+        .login-gradient { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover { @apply transition-all duration-300 hover:shadow-xl; }
+        .input-field { @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-8">
-            <h1 class="text-2xl font-bold text-center mb-6">工业网关管理系统</h1>
-            <form action="/login" method="POST">
-                <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2" for="username">
-                        用户名
+<body class="login-gradient min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-md px-4">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <i class="fas fa-server text-4xl text-purple-600"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-white">HuShu智能网关</h1>
+            <p class="text-purple-200 mt-2">HuShu Intelligent Gateway</p>
+        </div>
+
+        <!-- 登录卡片 -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8 card-hover">
+            <h2 class="text-2xl font-bold text-gray-800 text-center mb-6">
+                <i class="fas fa-sign-in-alt mr-2 text-purple-500"></i>用户登录
+            </h2>
+            
+            <form action="/login" method="POST" class="space-y-6">
+                <div>
+                    <label class="block text-gray-700 text-sm font-semibold mb-2" for="username">
+                        <i class="fas fa-user mr-2 text-gray-400"></i>用户名
                     </label>
-                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                           id="username" name="username" type="text" required>
+                    <input class="input-field" 
+                           id="username" 
+                           name="username" 
+                           type="text" 
+                           placeholder="请输入用户名"
+                           required>
                 </div>
-                <div class="mb-6">
-                    <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
-                        密码
+                
+                <div>
+                    <label class="block text-gray-700 text-sm font-semibold mb-2" for="password">
+                        <i class="fas fa-lock mr-2 text-gray-400"></i>密码
                     </label>
-                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                           id="password" name="password" type="password" required>
+                    <input class="input-field" 
+                           id="password" 
+                           name="password" 
+                           type="password" 
+                           placeholder="请输入密码"
+                           required>
                 </div>
+                
                 <div class="flex items-center justify-between">
-                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                    <button class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transform transition-all duration-200 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                             type="submit">
-                        登录
+                        <i class="fas fa-sign-in-alt mr-2"></i>登录
                     </button>
                 </div>
             </form>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-500">
+                    默认账号: <span class="font-mono text-purple-600">admin</span> 
+                    密码: <span class="font-mono text-purple-600">123456</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- 底部信息 -->
+        <div class="text-center mt-8 text-white text-sm">
+            <p>&copy; 2024 HuShu智能网关. All rights reserved.</p>
         </div>
     </div>
 </body>

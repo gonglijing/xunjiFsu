@@ -3,64 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工业网关管理系统 - 历史数据</title>
+    <title>HuShu智能网关 - 历史数据</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .htmx-request .htmx-indicator { display: inline; }
         .htmx-indicator { display: none; }
+        .table-header { @apply bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 font-semibold; }
+        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+        .badge-green { @apply bg-green-100 text-green-800; }
+        .badge-blue { @apply bg-blue-100 text-blue-800; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- 导航栏 -->
-    <nav class="bg-blue-600 text-white p-4">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold">工业网关管理系统</h1>
-            <div class="flex items-center space-x-4">
-                <a href="/" class="hover:text-gray-200">仪表盘</a>
-                <a href="/realtime" class="hover:text-gray-200">实时数据</a>
-                <a href="/history" class="text-white font-bold">历史数据</a>
-                <span id="user-info">用户</span>
-                <a href="/logout" class="bg-red-500 hover:bg-red-700 px-3 py-1 rounded">退出</a>
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen">
+    <!-- 顶部导航 -->
+    <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-history text-2xl"></i>
+                    <h1 class="text-xl font-bold">HuShu智能网关 - 历史数据</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
+                        <i class="fas fa-home"></i>
+                        <span>仪表盘</span>
+                    </a>
+                    <a href="/realtime" class="flex items-center space-x-2 hover:text-blue-200 transition-colors">
+                        <i class="fas fa-chart-line"></i>
+                        <span>实时数据</span>
+                    </a>
+                    <a href="/history" class="flex items-center space-x-2 text-white font-bold">
+                        <i class="fas fa-history"></i>
+                        <span>历史数据</span>
+                    </a>
+                    <div class="flex items-center space-x-2 bg-blue-700 px-3 py-1 rounded-lg">
+                        <i class="fas fa-user-circle"></i>
+                        <span>admin</span>
+                    </div>
+                    <a href="/logout" class="flex items-center space-x-2 bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>退出</span>
+                    </a>
+                </div>
             </div>
         </div>
     </nav>
 
     <!-- 主内容 -->
-    <div class="container mx-auto px-4 py-8">
-        <h2 class="text-2xl font-bold mb-6">历史数据查询</h2>
-        
-        <!-- 查询条件 -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="container mx-auto px-6 py-8">
+        <!-- 查询条件卡片 -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <div class="flex items-center mb-4">
+                <i class="fas fa-filter text-blue-500 mr-2"></i>
+                <h3 class="text-lg font-semibold text-gray-800">查询条件</h3>
+            </div>
+            
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">设备</label>
-                    <select id="device-select" class="w-full border rounded-lg px-4 py-2">
-                        <option value="">-- 所有设备 --</option>
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-microchip mr-2 text-gray-400"></i>设备
+                    </label>
+                    <div class="relative">
+                        <select id="device-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white">
+                            <option value="">-- 所有设备 --</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                            <i class="fas fa-chevron-down text-gray-400"></i>
+                        </div>
+                    </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">字段</label>
-                    <select id="field-select" class="w-full border rounded-lg px-4 py-2">
-                        <option value="">-- 所有字段 --</option>
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-tag mr-2 text-gray-400"></i>字段
+                    </label>
+                    <div class="relative">
+                        <select id="field-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white">
+                            <option value="">-- 所有字段 --</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                            <i class="fas fa-chevron-down text-gray-400"></i>
+                        </div>
+                    </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">时间范围</label>
-                    <select id="time-range" class="w-full border rounded-lg px-4 py-2" onchange="updateTimeInputs()">
-                        <option value="1h">最近1小时</option>
-                        <option value="6h">最近6小时</option>
-                        <option value="24h" selected>最近24小时</option>
-                        <option value="7d">最近7天</option>
-                        <option value="30d">最近30天</option>
-                        <option value="custom">自定义</option>
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-clock mr-2 text-gray-400"></i>时间范围
+                    </label>
+                    <div class="relative">
+                        <select id="time-range" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white" onchange="updateTimeInputs()">
+                            <option value="1h">最近1小时</option>
+                            <option value="6h">最近6小时</option>
+                            <option value="24h" selected>最近24小时</option>
+                            <option value="7d">最近7天</option>
+                            <option value="30d">最近30天</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                            <i class="fas fa-chevron-down text-gray-400"></i>
+                        </div>
+                    </div>
                 </div>
                 <div class="flex items-end">
-                    <button class="bg-blue-500 hover:bg-blue-700 text-white px-6 py-2 rounded-lg w-full"
-                            onclick="searchHistory()">
-                        <span class="htmx-indicator">查询中...</span>
-                        查询
+                    <button class="btn-primary w-full" onclick="searchHistory()">
+                        <i class="fas fa-search mr-2"></i>查询
                     </button>
                 </div>
             </div>
@@ -68,77 +115,133 @@
             <!-- 自定义时间输入 -->
             <div id="custom-time" class="grid grid-cols-2 gap-4 mt-4 hidden">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">开始时间</label>
-                    <input type="datetime-local" id="start-time" class="w-full border rounded-lg px-4 py-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calendar-start mr-2 text-gray-400"></i>开始时间
+                    </label>
+                    <input type="datetime-local" id="start-time" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">结束时间</label>
-                    <input type="datetime-local" id="end-time" class="w-full border rounded-lg px-4 py-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calendar-end mr-2 text-gray-400"></i>结束时间
+                    </label>
+                    <input type="datetime-local" id="end-time" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
             </div>
         </div>
 
         <!-- 统计信息 -->
         <div id="stats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 hidden">
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-sm text-gray-500">数据点数量</div>
-                <div id="data-count" class="text-3xl font-bold text-blue-600">-</div>
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+                        <i class="fas fa-database text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">数据点数量</div>
+                        <div id="data-count" class="text-3xl font-bold text-gray-800">-</div>
+                    </div>
+                </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-sm text-gray-500">最早记录</div>
-                <div id="first-time" class="text-lg font-medium">-</div>
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4">
+                        <i class="fas fa-play-circle text-green-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">最早记录</div>
+                        <div id="first-time" class="text-lg font-medium text-gray-800">-</div>
+                    </div>
+                </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-sm text-gray-500">最晚记录</div>
-                <div id="last-time" class="text-lg font-medium">-</div>
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
+                        <i class="fas fa-stop-circle text-purple-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">最晚记录</div>
+                        <div id="last-time" class="text-lg font-medium text-gray-800">-</div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- 历史数据表格 -->
-        <div class="bg-white rounded-lg shadow overflow-hidden">
-            <div class="px-6 py-4 border-b flex justify-between items-center">
-                <h3 class="text-lg font-medium">查询结果</h3>
-                <div class="flex items-center gap-2">
-                    <button class="text-sm text-blue-600 hover:text-blue-800" onclick="exportCSV()">导出CSV</button>
-                    <button class="text-sm text-blue-600 hover:text-blue-800" onclick="refreshData()">刷新</button>
+        <div class="bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                <div class="flex items-center">
+                    <i class="fas fa-table text-blue-500 mr-2"></i>
+                    <h3 class="text-lg font-medium text-gray-800">查询结果</h3>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="flex items-center space-x-2 text-sm text-green-600 hover:text-green-800 px-3 py-1 rounded-lg hover:bg-green-50 transition-colors" onclick="exportCSV()">
+                        <i class="fas fa-file-export"></i>
+                        <span>导出CSV</span>
+                    </button>
+                    <button class="flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-800 px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>刷新</span>
+                    </button>
                 </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full">
-                    <thead class="bg-gray-50">
+                    <thead class="table-header">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">设备</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">字段</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">值</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                <i class="far fa-clock mr-2"></i>时间
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                <i class="fas fa-microchip mr-2"></i>设备
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                <i class="fas fa-tag mr-2"></i>字段
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                <i class="fas fa-chart-line mr-2"></i>值
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="history-table" class="bg-white divide-y divide-gray-200">
                         <tr>
                             <td colspan="4" class="px-6 py-12 text-center text-gray-500">
-                                请选择查询条件并点击查询
+                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-search text-3xl text-gray-300"></i>
+                                </div>
+                                <p>请选择查询条件并点击查询</p>
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
             <!-- 分页 -->
-            <div id="pagination" class="px-6 py-4 border-t hidden">
+            <div id="pagination" class="px-6 py-4 border-t bg-gray-50 hidden">
                 <div class="flex items-center justify-between">
                     <div class="text-sm text-gray-500">
-                        共 <span id="total-count">0</span> 条记录
+                        共 <span id="total-count" class="font-semibold text-gray-800">0</span> 条记录
                     </div>
                     <div class="flex items-center gap-2">
-                        <button id="prev-page" class="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50"
-                                onclick="changePage(-1)">上一页</button>
-                        <span id="page-info" class="text-sm">1 / 1</span>
-                        <button id="next-page" class="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50"
-                                onclick="changePage(1)">下一页</button>
+                        <button id="prev-page" class="flex items-center space-x-1 px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" onclick="changePage(-1)">
+                            <i class="fas fa-chevron-left"></i>
+                            <span>上一页</span>
+                        </button>
+                        <span id="page-info" class="text-sm px-3 py-1 bg-blue-100 text-blue-800 rounded-lg">
+                            1 / 1
+                        </span>
+                        <button id="next-page" class="flex items-center space-x-1 px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" onclick="changePage(1)">
+                            <span>下一页</span>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <style>
+        .btn-primary { @apply bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3 rounded-lg shadow transition-all duration-200; }
+        .card-hover { @apply transition-all duration-300 hover:shadow-lg; }
+    </style>
 
     <script>
         let currentData = [];
@@ -313,21 +416,28 @@
 
             let html = '';
             if (pageData.length === 0) {
-                html = '<tr><td colspan="4" class="px-6 py-12 text-center text-gray-500">暂无数据</td></tr>';
+                html = `<tr><td colspan="4" class="px-6 py-12 text-center text-gray-500">
+                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-inbox text-3xl text-gray-300"></i>
+                    </div>
+                    <p>暂无数据</p>
+                </td></tr>`;
             } else {
                 pageData.forEach(item => {
                     html += `
-                        <tr class="hover:bg-gray-50">
+                        <tr class="hover:bg-gray-50 transition-colors">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <i class="far fa-clock mr-2 text-gray-400"></i>
                                 ${new Date(item.collected_at).toLocaleString()}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <i class="fas fa-microchip mr-2 text-blue-400"></i>
                                 ${item.device_name}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                ${item.field_name}
+                                <span class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">${item.field_name}</span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-mono">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-mono font-semibold">
                                 ${item.value}
                             </td>
                         </tr>
