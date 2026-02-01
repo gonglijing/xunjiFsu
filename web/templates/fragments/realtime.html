@@ -1,3 +1,4 @@
+{{ define "realtime.html" }}
 {{ if .DataPoints }}
 <div class="data-grid">
     {{ range .DataPoints }}
@@ -23,4 +24,6 @@
         <div>暂无实时数据，请等待采集器采集</div>
     </div>
 </div>
+{{ end }}
+
 {{ end }}

@@ -1,4 +1,4 @@
-{{ define "content" }}
+{{ define "dashboard-content" }}
         <!-- 统计卡片 - HTMX 自动刷新 -->
         <div hx-get="/api/status" hx-trigger="load, every 5s" hx-target="this">
             <div class="grid grid-cols-4 mb-8">

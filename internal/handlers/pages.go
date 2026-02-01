@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"net/http"
 	"html/template"
+	"path/filepath"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -15,28 +17,31 @@ var tmpl *template.Template
 // Dashboard 仪表盘页面
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"Title":  "仪表盘",
-		"Active": "dashboard",
+		"Title":           "仪表盘",
+		"Active":          "dashboard",
+		"ContentTemplate": "dashboard-content",
 	}
-	renderTemplate(w, "dashboard.html", data)
+	renderTemplate(w, "dashboard.html", "dashboard-content", data)
 }
 
 // RealTime 实时数据页面
 func (h *Handler) RealTime(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"Title":  "实时数据",
-		"Active": "realtime",
+		"Title":           "实时数据",
+		"Active":          "realtime",
+		"ContentTemplate": "realtime-content",
 	}
-	renderTemplate(w, "realtime.html", data)
+	renderTemplate(w, "realtime.html", "realtime-content", data)
 }
 
 // History 历史数据页面
 func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"Title":  "历史数据",
-		"Active": "history",
+		"Title":           "历史数据",
+		"Active":          "history",
+		"ContentTemplate": "history-content",
 	}
-	renderTemplate(w, "history.html", data)
+	renderTemplate(w, "history.html", "history-content", data)
 }
 
 // StatusData 状态数据结构
@@ -174,8 +179,31 @@ func (h *Handler) StopCollector(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, map[string]string{"status": "stopped"})
 }
 
-// renderTemplate 渲染模板
-func renderTemplate(w http.ResponseWriter, name string, data interface{}) {
+// renderTemplate 渲染模板（支持继承 base.html）
+func renderTemplate(w http.ResponseWriter, page string, name string, data interface{}) {
+	// 先将 data 转换为 map
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		dataMap = make(map[string]interface{})
+	}
+
+	// 检查是否存在 base 模板，如果存在则先渲染内容，再渲染 base
+	if tmpl.Lookup("base") != nil {
+		// 渲染内容模板到缓冲区
+		var contentBuf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&contentBuf, name, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// 将渲染后的内容添加到数据中
+		dataMap["Content"] = contentBuf.String()
+		// 渲染 base 模板
+		if err := tmpl.ExecuteTemplate(w, "base", dataMap); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	// 否则直接渲染模板
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -184,9 +212,25 @@ func renderTemplate(w http.ResponseWriter, name string, data interface{}) {
 // InitTemplates 初始化模板
 func InitTemplates(pattern string) error {
 	var err error
-	tmpl, err = template.ParseGlob(pattern + "/*.html")
+	
+	// 使用 template.ParseFiles 加载所有模板
+	files, err := filepath.Glob(pattern + "/*.html")
 	if err != nil {
 		return err
 	}
+	
+	// 添加 fragments 目录中的模板
+	fragmentFiles, err := filepath.Glob(pattern + "/fragments/*.html")
+	if err != nil {
+		return err
+	}
+	
+	files = append(files, fragmentFiles...)
+	
+	tmpl, err = template.ParseFiles(files...)
+	if err != nil {
+		return err
+	}
+	
 	return nil
 }

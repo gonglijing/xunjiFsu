@@ -10,7 +10,10 @@ import (
 
 // Login GET显示登录页面
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "web/pages/login.html")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.ExecuteTemplate(w, "login.html", nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // LoginPost 处理登录
@@ -28,7 +31,9 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	// 设置 HX-Redirect 头，让 HTMX 自动处理重定向
+	w.Header().Set("HX-Redirect", "/")
+	w.WriteHeader(http.StatusOK)
 }
 
 // Logout 登出

@@ -232,7 +232,7 @@ func main() {
 
 	// 初始化模板
 	logger.Info("Initializing templates...")
-	if err := handlers.InitTemplates("templates"); err != nil {
+	if err := handlers.InitTemplates("web/templates"); err != nil {
 		logger.Warn("Failed to initialize templates", "error", err)
 	}
 
