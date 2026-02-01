@@ -1,0 +1,33 @@
+{{ if .Points }}
+<div class="table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>时间戳</th>
+                <th>设备</th>
+                <th>变量</th>
+                <th>值</th>
+                <th>单位</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Points }}
+            <tr>
+                <td>{{ .Timestamp }}</td>
+                <td>{{ .DeviceName }}</td>
+                <td>{{ .Variable }}</td>
+                <td>{{ .Value }}</td>
+                <td>{{ .Unit }}</td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{ else }}
+<div class="card">
+    <div style="text-align: center; padding: 48px; color: #6b7280;">
+        <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+        <div>暂无历史数据，请调整查询条件后重试</div>
+    </div>
+</div>
+{{ end }}

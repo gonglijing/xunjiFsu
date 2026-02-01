@@ -1,0 +1,22 @@
+{{ define "base" }}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - 循迹智联网关</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    {{ template "nav" . }}
+    
+    <main class="container" style="padding-top: 32px; padding-bottom: 32px;">
+        {{ template "content" . }}
+    </main>
+    
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+    
+    {{ template "scripts" . }}
+</body>
+</html>{{ end }}

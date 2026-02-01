@@ -1,0 +1,26 @@
+{{ if .DataPoints }}
+<div class="data-grid">
+    {{ range .DataPoints }}
+    <div class="data-card">
+        <div class="data-card-header">
+            <span class="data-card-title">{{ .DeviceName }} - {{ .Variable }}</span>
+            <span class="data-card-badge">实时</span>
+        </div>
+        <div>
+            <span class="data-value">{{ .Value }}</span>
+            <span class="data-unit">{{ .Unit }}</span>
+        </div>
+        <div class="data-meta">
+            更新时间: {{ .Timestamp }}
+        </div>
+    </div>
+    {{ end }}
+</div>
+{{ else }}
+<div class="card">
+    <div style="text-align: center; padding: 48px; color: #6b7280;">
+        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+        <div>暂无实时数据，请等待采集器采集</div>
+    </div>
+</div>
+{{ end }}

@@ -1,21 +1,24 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"flag"
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
 	"github.com/gonglijing/xunjiFsu/internal/collector"
+	"github.com/gonglijing/xunjiFsu/internal/config"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/graceful"
 	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 	"github.com/gonglijing/xunjiFsu/internal/resource"
@@ -24,24 +27,67 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var (
-	dbPath     string
-	listenAddr string
-	secretKey  []byte
-)
+var cfg *config.Config
 
 func init() {
-	// 解析命令行参数
-	flag.StringVar(&dbPath, "db", "gogw.db", "数据库路径")
-	flag.StringVar(&listenAddr, "addr", ":8080", "监听地址")
-	flag.Parse()
-
-	// 生成随机密钥
-	secretKey = make([]byte, 32)
-	_, err := rand.Read(secretKey)
+	// 加载配置
+	var err error
+	cfg, err = config.Load()
 	if err != nil {
-		log.Fatalf("Failed to generate secret key: %v", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	// 初始化结构化日志
+	level := logger.ParseLevel(cfg.LogLevel)
+	logger.SetLevel(level)
+	logger.SetJSONOutput(cfg.LogJSON)
+
+	// 解析命令行参数（会覆盖环境变量配置）
+	flag.StringVar(&cfg.DBPath, "db", cfg.DBPath, "数据库路径")
+	flag.StringVar(&cfg.ListenAddr, "addr", cfg.ListenAddr, "监听地址")
+	flag.Parse()
+}
+
+// loadOrGenerateSecretKey 加载或生成固定的会话密钥
+func loadOrGenerateSecretKey() []byte {
+	// 1. 优先从环境变量读取
+	if key := os.Getenv("SESSION_SECRET"); key != "" {
+		h := sha256.Sum256([]byte(key))
+		return h[:]
+	}
+
+	// 2. 从 config 目录读取
+	configDir := "config"
+	keyFile := filepath.Join(configDir, "session_secret.key")
+	if data, err := os.ReadFile(keyFile); err == nil {
+		key := string(data)
+		if len(key) >= 32 {
+			h := sha256.Sum256([]byte(key))
+			return h[:]
+		}
+	}
+
+	// 3. 确保 config 目录存在
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		logger.Warn("Failed to create config directory", "error", err)
+	}
+
+	// 4. 生成新密钥并保存到 config 目录
+	newKey := make([]byte, 32)
+	_, err := rand.Read(newKey)
+	if err != nil {
+		logger.Fatal("Failed to generate secret key", err)
+	}
+
+	// 保存到文件
+	if err := os.WriteFile(keyFile, newKey, 0600); err != nil {
+		logger.Warn("Failed to save session secret key", "error", err)
+	} else {
+		logger.Info("Generated new session secret key")
+	}
+
+	h := sha256.Sum256(newKey)
+	return h[:]
 }
 
 // registerNorthboundAdapter 注册北向适配器
@@ -69,77 +115,80 @@ func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, conf
 }
 
 // startNorthboundUploadTask 启动北向定期上传任务
-// 每个启用的北向配置根据其 upload_interval 独立上传数据
 func startNorthboundUploadTask(northboundMgr *northbound.NorthboundManager, collect *collector.Collector) {
-	// 获取所有启用的北向配置
 	configs, err := database.GetEnabledNorthboundConfigs()
 	if err != nil {
-		log.Printf("Warning: Failed to get enabled northbound configs: %v", err)
+		logger.Warn("Failed to get enabled northbound configs", "error", err)
 		return
 	}
 
-	// 为每个配置启动独立的上传任务
 	for _, config := range configs {
 		go func(config *models.NorthboundConfig) {
-			log.Printf("Starting upload task for northbound: %s (interval: %dms)", config.Name, config.UploadInterval)
+			logger.Info("Starting upload task for northbound",
+				"name", config.Name,
+				"interval", config.UploadInterval)
 
 			ticker := time.NewTicker(time.Duration(config.UploadInterval) * time.Millisecond)
 			defer ticker.Stop()
 
 			for range ticker.C {
-				// 检查北向配置是否仍然启用
 				updatedConfig, err := database.GetNorthboundConfigByID(config.ID)
 				if err != nil || updatedConfig.Enabled != 1 {
-					log.Printf("Northbound config %s disabled, stopping upload task", config.Name)
+					logger.Info("Northbound config disabled, stopping upload task", "name", config.Name)
 					return
 				}
 
-				// 从采集器获取最新数据并上传
-				log.Printf("Uploading data to northbound: %s", config.Name)
+				logger.Info("Uploading data to northbound", "name", config.Name)
 			}
 		}(config)
 	}
 }
 
 func main() {
+	secretKey := loadOrGenerateSecretKey()
+
 	// 初始化数据库
-	// param.db: 持久化文件（配置操作频率低，直接写磁盘）
-	// data.db: 内存模式 + 批量同步（采集数据高频写入）
-	log.Println("Initializing param database (persistent mode)...")
+	logger.Info("Initializing param database (persistent mode)...")
 	if err := database.InitParamDB(); err != nil {
-		log.Fatalf("Failed to initialize param database: %v", err)
+		logger.Fatal("Failed to initialize param database", err)
 	}
 	defer database.ParamDB.Close()
 
-	log.Println("Initializing data database (memory mode + batch sync)...")
+	logger.Info("Initializing data database (memory mode + batch sync)...")
 	if err := database.InitDataDB(); err != nil {
-		log.Fatalf("Failed to initialize data database: %v", err)
+		logger.Fatal("Failed to initialize data database", err)
 	}
 	defer database.DataDB.Close()
 
 	// 初始化数据库schema
-	log.Println("Initializing param database schema...")
+	logger.Info("Initializing param database schema...")
 	if err := database.InitParamSchema(); err != nil {
-		log.Fatalf("Failed to initialize param schema: %v", err)
+		logger.Fatal("Failed to initialize param schema", err)
 	}
 
-	log.Println("Initializing data database schema...")
+	logger.Info("Initializing data database schema...")
 	if err := database.InitDataSchema(); err != nil {
-		log.Fatalf("Failed to initialize data schema: %v", err)
+		logger.Fatal("Failed to initialize data schema", err)
 	}
 
 	// 初始化默认数据
-	log.Println("Initializing default data...")
+	logger.Info("Initializing default data...")
 	if err := database.InitDefaultData(); err != nil {
-		log.Fatalf("Failed to initialize default data: %v", err)
+		logger.Fatal("Failed to initialize default data", err)
 	}
 
 	// 启动数据同步任务（内存 -> 磁盘批量写入）
-	log.Println("Starting data sync task...")
+	logger.Info("Starting data sync task...")
 	database.StartDataSync()
 
+	// 启动阈值缓存服务（如果启用）
+	if cfg.ThresholdCacheEnabled {
+		logger.Info("Starting threshold cache...")
+		collector.StartThresholdCache()
+	}
+
 	// 初始化组件
-	log.Println("Initializing components...")
+	logger.Info("Initializing components...")
 
 	// 资源管理器
 	resourceMgr := resource.NewResourceManagerImpl()
@@ -147,23 +196,21 @@ func main() {
 	// 驱动管理器
 	driverManager := driver.NewDriverManager()
 	driverExecutor := driver.NewDriverExecutor(driverManager)
-
-	// 设置资源管理器到驱动执行器（用于资源访问锁）
 	driverExecutor.SetResourceManager(resourceMgr)
 
 	// 北向管理器
 	northboundMgr := northbound.NewNorthboundManager()
 
 	// 加载数据库中的北向配置
-	log.Println("Loading northbound configs from database...")
+	logger.Info("Loading northbound configs from database...")
 	configs, err := database.GetAllNorthboundConfigs()
 	if err != nil {
-		log.Printf("Warning: Failed to load northbound configs: %v", err)
+		logger.Warn("Failed to load northbound configs", "error", err)
 	} else {
 		for _, config := range configs {
 			if config.Enabled == 1 {
 				registerNorthboundAdapter(northboundMgr, config)
-				log.Printf("Loaded northbound config: %s (%s)", config.Name, config.Type)
+				logger.Info("Loaded northbound config", "name", config.Name, "type", config.Type)
 			}
 		}
 	}
@@ -182,6 +229,12 @@ func main() {
 		resourceMgr,
 		northboundMgr,
 	)
+
+	// 初始化模板
+	logger.Info("Initializing templates...")
+	if err := handlers.InitTemplates("templates"); err != nil {
+		logger.Warn("Failed to initialize templates", "error", err)
+	}
 
 	// 创建路由器
 	r := mux.NewRouter()
@@ -204,6 +257,14 @@ func main() {
 
 	// API路由 - 状态
 	r.HandleFunc("/api/status", h.GetStatus).Methods("GET")
+
+	// 健康检查路由 (无需认证)
+	r.HandleFunc("/health", handlers.Health).Methods("GET")
+	r.HandleFunc("/ready", handlers.Readiness).Methods("GET")
+	r.HandleFunc("/live", handlers.Liveness).Methods("GET")
+
+	// 指标监控路由 (无需认证)
+	r.HandleFunc("/metrics", handlers.Metrics).Methods("GET")
 
 	// API路由 - 采集控制
 	r.HandleFunc("/api/collector/start", h.StartCollector).Methods("POST")
@@ -232,6 +293,7 @@ func main() {
 	r.HandleFunc("/api/devices/{id}", h.UpdateDevice).Methods("PUT")
 	r.HandleFunc("/api/devices/{id}", h.DeleteDevice).Methods("DELETE")
 	r.HandleFunc("/api/devices/{id}/toggle", h.ToggleDeviceEnable).Methods("POST")
+	r.HandleFunc("/api/devices/{id}/execute", h.ExecuteDriverFunction).Methods("POST")
 
 	// API路由 - 北向配置
 	r.HandleFunc("/api/northbound", h.GetNorthboundConfigs).Methods("GET")
@@ -257,6 +319,7 @@ func main() {
 	// API路由 - 历史数据
 	r.HandleFunc("/api/data/points/{id}", h.GetDataPoints).Methods("GET")
 	r.HandleFunc("/api/data/points", h.GetLatestDataPoints).Methods("GET")
+	r.HandleFunc("/api/data/history", h.GetHistoryData).Methods("GET")
 
 	// API路由 - 存储配置
 	r.HandleFunc("/api/storage", h.GetStorageConfigs).Methods("GET")
@@ -272,57 +335,74 @@ func main() {
 	r.HandleFunc("/api/users/{id}", h.DeleteUser).Methods("DELETE")
 	r.HandleFunc("/api/users/password", h.ChangePassword).Methods("PUT")
 
+	// 中间件栈
 	// CORS中间件
 	corsHandler := gorillaHandlers.CORS(
-		gorillaHandlers.AllowedOrigins([]string{"*"}),
+		gorillaHandlers.AllowedOrigins(cfg.GetAllowedOrigins()),
 		gorillaHandlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
 		gorillaHandlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+		gorillaHandlers.AllowCredentials(),
 	)
 
 	// 日志中间件
 	loggingHandler := gorillaHandlers.LoggingHandler(os.Stdout, r)
 
+	// Gzip压缩中间件
+	gzipHandler := handlers.GzipMiddleware(loggingHandler)
+
+	// 超时中间件配置
+	timeoutConfig := handlers.DefaultTimeoutConfig()
+	timeoutConfig.ReadTimeout = cfg.HTTPReadTimeout
+	timeoutConfig.WriteTimeout = cfg.HTTPWriteTimeout
+	timeoutConfig.IdleTimeout = cfg.HTTPIdleTimeout
+
+	// 构建最终处理器链
+	finalHandler := corsHandler(gzipHandler)
+	finalHandler = handlers.TimeoutMiddleware(timeoutConfig)(finalHandler)
+
 	// 启动采集器
 	if err := collect.Start(); err != nil {
-		log.Printf("Warning: Failed to start collector: %v", err)
+		logger.Warn("Failed to start collector", "error", err)
 	}
 
 	// 自动加载使能的设备到采集器
-	log.Println("Loading enabled devices...")
+	logger.Info("Loading enabled devices...")
 	devices, err := database.GetAllDevices()
 	if err != nil {
-		log.Printf("Warning: Failed to load devices: %v", err)
+		logger.Warn("Failed to load devices", "error", err)
 	} else {
 		enabledCount := 0
 		for _, device := range devices {
 			if device.Enabled == 1 {
 				if err := collect.AddDevice(device); err != nil {
-					log.Printf("Warning: Failed to add device %s: %v", device.Name, err)
+					logger.Warn("Failed to add device", "name", device.Name, "error", err)
 				} else {
-					log.Printf("Device %s added to collector (collect_interval: %dms)", device.Name, device.CollectInterval)
+					logger.Info("Device added to collector", "name", device.Name, "interval", device.CollectInterval)
 					enabledCount++
 				}
 			}
 		}
-		log.Printf("Loaded %d enabled devices to collector", enabledCount)
+		logger.Info("Loaded enabled devices to collector", "count", enabledCount)
 	}
 
 	// 自动注册使能的北向配置
-	log.Println("Loading enabled northbound configs...")
+	logger.Info("Loading enabled northbound configs...")
 	northboundConfigs, err := database.GetAllNorthboundConfigs()
 	if err != nil {
-		log.Printf("Warning: Failed to load northbound configs: %v", err)
+		logger.Warn("Failed to load northbound configs", "error", err)
 	} else {
 		enabledCount := 0
 		for _, config := range northboundConfigs {
 			if config.Enabled == 1 {
 				registerNorthboundAdapter(northboundMgr, config)
-				log.Printf("Northbound config %s registered (type: %s, upload_interval: %dms)",
-					config.Name, config.Type, config.UploadInterval)
+				logger.Info("Northbound config registered",
+					"name", config.Name,
+					"type", config.Type,
+					"upload_interval", config.UploadInterval)
 				enabledCount++
 			}
 		}
-		log.Printf("Loaded %d enabled northbound configs", enabledCount)
+		logger.Info("Loaded enabled northbound configs", "count", enabledCount)
 	}
 
 	// 启动采集任务协程
@@ -331,30 +411,56 @@ func main() {
 	// 启动北向上传任务
 	go startNorthboundUploadTask(northboundMgr, collect)
 
-	// 优雅关闭
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	// 优雅关闭管理器
+	gracefulMgr := graceful.NewGracefulShutdown(30 * time.Second)
 
-	go func() {
-		<-quit
-		log.Println("Shutting down...")
-
-		// 停止数据同步
-		database.StopDataSync()
-
-		// 最后一次同步数据到磁盘
-		log.Println("Final sync to disk...")
-		database.SyncDataToDisk()
-
-		// 停止采集器
+	// 注册关闭函数
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping collector...")
 		collect.Stop()
+		return nil
+	})
 
-		os.Exit(0)
-	}()
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping data sync...")
+		database.StopDataSync()
+		return nil
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Final sync to disk...")
+		database.SyncDataToDisk()
+		return nil
+	})
+
+	if cfg.ThresholdCacheEnabled {
+		gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+			logger.Info("Stopping threshold cache...")
+			collector.StopThresholdCache()
+			return nil
+		})
+	}
+
+	// 启动优雅关闭监听
+	gracefulMgr.Start()
 
 	// 启动服务器
-	log.Printf("Starting server on %s...", listenAddr)
-	if err := http.ListenAndServe(listenAddr, corsHandler(loggingHandler)); err != nil {
-		log.Fatalf("Server error: %v", err)
+	logger.Info("Starting server", "addr", cfg.ListenAddr)
+
+	server := &http.Server{
+		Addr:         cfg.ListenAddr,
+		Handler:      finalHandler,
+		ReadTimeout:  cfg.HTTPReadTimeout,
+		WriteTimeout: cfg.HTTPWriteTimeout,
+		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
+
+	gracefulMgr.SetHTTPServer(server)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Fatal("Server error", err)
+	}
+
+	// 等待优雅关闭完成
+	gracefulMgr.Wait()
 }

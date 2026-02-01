@@ -1,7 +1,7 @@
 # GoGW 配置文件
 # 服务器配置
 server:
-  addr: ":8080"
+  addr: ":80"
   read_timeout: 30s
   write_timeout: 30s
 

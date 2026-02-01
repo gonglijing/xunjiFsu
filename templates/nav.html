@@ -1,0 +1,20 @@
+{{ define "nav" }}
+<nav class="nav">
+    <div class="container nav-inner">
+        <div class="nav-brand">
+            <div class="nav-logo">☰</div>
+            <div>
+                <div class="nav-title">循迹智联网关</div>
+                <div class="nav-subtitle">工业物联网网关管理系统</div>
+            </div>
+        </div>
+        <button class="nav-toggle">☰</button>
+        <div class="nav-links">
+            <a href="/" class="nav-link {{ if eq .Active "dashboard" }}active{{ end }}">⌂ 仪表盘</a>
+            <a href="/realtime" class="nav-link {{ if eq .Active "realtime" }}active{{ end }}">⚡ 实时数据</a>
+            <a href="/history" class="nav-link {{ if eq .Active "history" }}active{{ end }}">⌛ 历史数据</a>
+            <a href="/logout" class="btn btn-danger"> 退出</a>
+        </div>
+    </div>
+</nav>
+{{ end }}

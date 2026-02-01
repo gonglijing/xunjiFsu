@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gonglijing/xunjiFsu/internal/circuit"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -35,6 +36,16 @@ type NorthboundManager struct {
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
 	running     bool
+	breakers    map[string]*circuit.CircuitBreaker
+}
+
+// DefaultBreakerConfig 默认熔断器配置
+var DefaultBreakerConfig = circuit.Config{
+	FailureThreshold:  5,            // 5次失败后打开熔断
+	FailureWindow:     time.Minute,  // 1分钟窗口
+	SuccessThreshold:  3,            // 半开状态下需要3次成功
+	RecoveryTimeout:   30 * time.Second, // 30秒后尝试恢复
+	RequestTimeout:    10 * time.Second, // 单次请求超时
 }
 
 // NewNorthboundManager 创建北向管理器
@@ -43,6 +54,7 @@ func NewNorthboundManager() *NorthboundManager {
 		adapters:    make(map[string]Northbound),
 		uploadTimes: make(map[string]time.Time),
 		stopChan:    make(chan struct{}),
+		breakers:    make(map[string]*circuit.CircuitBreaker),
 	}
 }
 
@@ -79,6 +91,10 @@ func (m *NorthboundManager) RegisterAdapter(name string, adapter Northbound) {
 	defer m.mu.Unlock()
 	m.adapters[name] = adapter
 	m.uploadTimes[name] = time.Time{}
+	// 为每个适配器创建熔断器
+	cfg := DefaultBreakerConfig
+	m.breakers[name] = circuit.NewCircuitBreaker(&cfg)
+	log.Printf("Northbound adapter registered: %s (with circuit breaker)", name)
 }
 
 // UnregisterAdapter 注销适配器
@@ -89,6 +105,11 @@ func (m *NorthboundManager) UnregisterAdapter(name string) {
 		adapter.Close()
 		delete(m.adapters, name)
 		delete(m.uploadTimes, name)
+		// 清理熔断器
+		if breaker, exists := m.breakers[name]; exists {
+			breaker.Reset()
+			delete(m.breakers, name)
+		}
 	}
 }
 
@@ -119,14 +140,24 @@ func (m *NorthboundManager) RemoveAdapter(name string) {
 func (m *NorthboundManager) SendData(data *models.CollectData) {
 	m.mu.RLock()
 	adapters := make([]Northbound, 0, len(m.adapters))
-	for _, adapter := range m.adapters {
+	names := make([]string, 0, len(m.adapters))
+	for name, adapter := range m.adapters {
 		adapters = append(adapters, adapter)
+		names = append(names, name)
 	}
 	m.mu.RUnlock()
 
-	for _, adapter := range adapters {
-		if err := adapter.Send(data); err != nil {
-			log.Printf("Failed to send data to %s: %v", adapter.Name(), err)
+	for i, adapter := range adapters {
+		name := names[i]
+		err := m.executeWithBreaker(name, func() error {
+			return adapter.Send(data)
+		})
+		if err != nil {
+			if _, ok := err.(*circuit.CircuitOpenError); ok {
+				log.Printf("Circuit breaker OPEN for %s, skipping data send", name)
+			} else {
+				log.Printf("Failed to send data to %s: %v", name, err)
+			}
 		}
 	}
 }
@@ -135,16 +166,49 @@ func (m *NorthboundManager) SendData(data *models.CollectData) {
 func (m *NorthboundManager) SendAlarm(alarm *models.AlarmPayload) {
 	m.mu.RLock()
 	adapters := make([]Northbound, 0, len(m.adapters))
-	for _, adapter := range m.adapters {
+	names := make([]string, 0, len(m.adapters))
+	for name, adapter := range m.adapters {
 		adapters = append(adapters, adapter)
+		names = append(names, name)
 	}
 	m.mu.RUnlock()
 
-	for _, adapter := range adapters {
-		if err := adapter.SendAlarm(alarm); err != nil {
-			log.Printf("Failed to send alarm to %s: %v", adapter.Name(), err)
+	for i, adapter := range adapters {
+		name := names[i]
+		err := m.executeWithBreaker(name, func() error {
+			return adapter.SendAlarm(alarm)
+		})
+		if err != nil {
+			if _, ok := err.(*circuit.CircuitOpenError); ok {
+				log.Printf("Circuit breaker OPEN for %s, skipping alarm send", name)
+			} else {
+				log.Printf("Failed to send alarm to %s: %v", name, err)
+			}
 		}
 	}
+}
+
+// executeWithBreaker 使用熔断器执行函数
+func (m *NorthboundManager) executeWithBreaker(name string, fn func() error) error {
+	m.mu.RLock()
+	breaker, exists := m.breakers[name]
+	m.mu.RUnlock()
+
+	if !exists {
+		return fn()
+	}
+
+	return breaker.Execute(fn)
+}
+
+// GetBreakerState 获取熔断器状态
+func (m *NorthboundManager) GetBreakerState(name string) circuit.CircuitState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if breaker, exists := m.breakers[name]; exists {
+		return breaker.State() // State现在是方法调用
+	}
+	return circuit.Closed
 }
 
 // XunJiAdapter 循迹适配器

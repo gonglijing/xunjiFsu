@@ -16,6 +16,16 @@ func (h *Handler) GetResources(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		if err := tmpl.ExecuteTemplate(w, "resources.html", map[string]interface{}{"Resources": resources}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	WriteSuccess(w, resources)
 }
 

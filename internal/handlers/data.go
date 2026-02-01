@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -16,6 +17,16 @@ func (h *Handler) GetThresholds(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		if err := tmpl.ExecuteTemplate(w, "thresholds.html", map[string]interface{}{"Thresholds": thresholds}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	WriteSuccess(w, thresholds)
 }
 
@@ -85,6 +96,16 @@ func (h *Handler) GetAlarmLogs(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		if err := tmpl.ExecuteTemplate(w, "alarms.html", map[string]interface{}{"Alarms": logs}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	WriteSuccess(w, logs)
 }
 
@@ -147,6 +168,74 @@ func (h *Handler) GetDataPoints(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		// 转换为模板需要的格式
+		pointsMap := make([]map[string]interface{}, len(points))
+		for i, p := range points {
+			pointsMap[i] = map[string]interface{}{
+				"Timestamp":  p.CollectedAt.Format("2006-01-02 15:04:05"),
+				"DeviceName": p.DeviceName,
+				"Variable":   p.FieldName,
+				"Value":      p.Value,
+				"Unit":       "",
+			}
+		}
+		if err := tmpl.ExecuteTemplate(w, "history.html", map[string]interface{}{"Points": pointsMap}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	WriteSuccess(w, points)
+}
+
+// GetHistoryData 获取历史数据（带时间范围过滤）
+func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
+	// 解析查询参数
+	deviceID := r.URL.Query().Get("device_id")
+
+	var points []*database.DataPoint
+	var err error
+
+	if deviceID != "" {
+		id, parseErr := strconv.ParseInt(deviceID, 10, 64)
+		if parseErr != nil {
+			WriteBadRequest(w, "Invalid device_id")
+			return
+		}
+		points, err = database.GetDataPointsByDevice(id, 1000)
+	} else {
+		points, err = database.GetLatestDataPoints(1000)
+	}
+
+	if err != nil {
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		// 转换为模板需要的格式
+		pointsMap := make([]map[string]interface{}, len(points))
+		for i, p := range points {
+			pointsMap[i] = map[string]interface{}{
+				"Timestamp":  p.CollectedAt.Format("2006-01-02 15:04:05"),
+				"DeviceName": p.DeviceName,
+				"Variable":   p.FieldName,
+				"Value":      p.Value,
+				"Unit":       "",
+			}
+		}
+		if err := tmpl.ExecuteTemplate(w, "history.html", map[string]interface{}{"Points": pointsMap}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	WriteSuccess(w, points)
 }
 
@@ -157,6 +246,27 @@ func (h *Handler) GetLatestDataPoints(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		// 转换为模板需要的格式
+		pointsMap := make([]map[string]interface{}, len(points))
+		for i, p := range points {
+			pointsMap[i] = map[string]interface{}{
+				"Timestamp":  p.CollectedAt.Format("2006-01-02 15:04:05"),
+				"DeviceName": p.DeviceName,
+				"Variable":   p.FieldName,
+				"Value":      p.Value,
+				"Unit":       "",
+			}
+		}
+		if err := tmpl.ExecuteTemplate(w, "realtime.html", map[string]interface{}{"DataPoints": pointsMap}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	WriteSuccess(w, points)
 }
 

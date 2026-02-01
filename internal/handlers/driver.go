@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -21,6 +22,16 @@ func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		if err := tmpl.ExecuteTemplate(w, "drivers.html", map[string]interface{}{"Drivers": drivers}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	WriteSuccess(w, drivers)
 }
 
@@ -41,12 +52,42 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	driver.ID = id
 
 	// 加载驱动
-	if err := h.driverManager.LoadDriver(&driver); err != nil {
+	wasmData, err := readDriverFile(driver.FilePath, driver.Name)
+	if err != nil {
+		WriteServerError(w, "Failed to read driver file: "+err.Error())
+		return
+	}
+
+	// 从 ConfigSchema 中解析 resource_id
+	var cfg struct {
+		ResourceID int64 `json:"resource_id"`
+	}
+	resourceID := int64(0)
+	if driver.ConfigSchema != "" {
+		if err := json.Unmarshal([]byte(driver.ConfigSchema), &cfg); err == nil {
+			resourceID = cfg.ResourceID
+		}
+	}
+
+	if err := h.driverManager.LoadDriver(&driver, wasmData, resourceID); err != nil {
 		WriteServerError(w, err.Error())
 		return
 	}
 
 	WriteCreated(w, driver)
+}
+
+// readDriverFile 读取驱动文件
+func readDriverFile(filePath, driverName string) ([]byte, error) {
+	if filePath == "" {
+		filePath = filepath.Join("drivers", driverName+".wasm")
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // UpdateDriver 更新驱动

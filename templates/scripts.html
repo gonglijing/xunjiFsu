@@ -1,0 +1,38 @@
+{{ define "scripts" }}
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script>
+    // HTMX 事件处理
+    document.addEventListener('htmx:afterRequest', function(evt) {
+        console.log('HTMX Request completed:', evt.detail.xhr.status);
+    });
+    
+    document.addEventListener('htmx:responseError', function(evt) {
+        console.error('HTMX Error:', evt.detail.xhr.status);
+    });
+    
+    // 关闭模态框
+    function closeModal() {
+        document.getElementById('modal-container').classList.remove('active');
+    }
+    
+    // 打开模态框
+    function openModal(modalId) {
+        document.getElementById(modalId).classList.add('active');
+    }
+    
+    // 切换标签页
+    function switchTab(tabName) {
+        // 隐藏所有内容
+        document.querySelectorAll('.tab-content').forEach(function(el) {
+            el.classList.remove('active');
+        });
+        // 取消所有按钮激活状态
+        document.querySelectorAll('.tab-btn').forEach(function(el) {
+            el.classList.remove('active');
+        });
+        // 激活当前
+        document.getElementById('tab-' + tabName).classList.add('active');
+        document.getElementById('tab-btn-' + tabName).classList.add('active');
+    }
+</script>
+{{ end }}

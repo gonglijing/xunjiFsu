@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"container/heap"
 	"fmt"
 	"log"
 	"sync"
@@ -21,24 +22,50 @@ type Collector struct {
 	stopChan       chan struct{}
 	wg             sync.WaitGroup
 	// 设备采集任务
-	tasks map[int64]*collectTask
+	tasks      map[int64]*collectTask
+	taskHeap   *taskHeap // 优先队列，按下次采集时间排序
 }
 
+// collectTask 采集任务
 type collectTask struct {
 	device     *models.Device
 	interval   time.Duration
+	nextRun    time.Time
 	lastRun    time.Time
 	lastUpload time.Time
 }
 
+// taskHeap 任务优先队列（小根堆）
+type taskHeap []*collectTask
+
+func (h taskHeap) Len() int { return len(h) }
+func (h taskHeap) Less(i, j int) bool {
+	return h[i].nextRun.Before(h[j].nextRun)
+}
+func (h taskHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h *taskHeap) Push(x interface{}) {
+	*h = append(*h, x.(*collectTask))
+}
+func (h *taskHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	task := old[n-1]
+	old[n-1] = nil
+	*h = old[0 : n-1]
+	return task
+}
+
 // NewCollector 创建采集器
 func NewCollector(driverExecutor *driver.DriverExecutor, northboundMgr *northbound.NorthboundManager) *Collector {
+	h := &taskHeap{}
+	heap.Init(h)
 	return &Collector{
 		driverExecutor: driverExecutor,
 		northboundMgr:  northboundMgr,
 		running:        false,
 		stopChan:       make(chan struct{}),
 		tasks:          make(map[int64]*collectTask),
+		taskHeap:       h,
 	}
 }
 
@@ -89,13 +116,16 @@ func (c *Collector) AddDevice(device *models.Device) error {
 		return fmt.Errorf("device %d already in collector", device.ID)
 	}
 
+	interval := time.Duration(device.CollectInterval) * time.Millisecond
 	task := &collectTask{
 		device:   device,
-		interval: time.Duration(device.CollectInterval) * time.Millisecond,
+		interval: interval,
+		nextRun:  time.Now().Add(interval),
 		lastRun:  time.Time{},
 	}
 
 	c.tasks[device.ID] = task
+	heap.Push(c.taskHeap, task)
 	return nil
 }
 
@@ -120,68 +150,103 @@ func (c *Collector) UpdateDevice(device *models.Device) error {
 
 	task.device = device
 	task.interval = time.Duration(device.CollectInterval) * time.Millisecond
+	task.nextRun = time.Now().Add(task.interval)
 	return nil
 }
 
-// Run 运行采集任务
+// Run 运行采集任务（使用时间轮调度）
 func (c *Collector) Run() {
 	c.wg.Add(1)
 	defer c.wg.Done()
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
 	for {
-		select {
-		case <-c.stopChan:
-			return
-		case <-ticker.C:
-			c.collectAll()
-		}
-	}
-}
+		c.mu.RLock()
+		taskCount := len(c.tasks)
+		c.mu.RUnlock()
 
-// collectAll 采集所有设备数据
-func (c *Collector) collectAll() {
-	c.mu.RLock()
-	tasks := make([]*collectTask, 0, len(c.tasks))
-	for _, task := range c.tasks {
-		tasks = append(tasks, task)
-	}
-	c.mu.RUnlock()
-
-	now := time.Now()
-	for _, task := range tasks {
-		// 检查是否需要采集
-		if now.Sub(task.lastRun) >= task.interval {
-			c.collectDevice(task, now)
+		if taskCount == 0 {
+			select {
+			case <-c.stopChan:
+				return
+			case <-time.After(time.Second):
+				continue
+			}
 		}
+
+		// 获取下一个要执行的任务
+		c.mu.Lock()
+		if c.taskHeap.Len() == 0 {
+			c.mu.Unlock()
+			select {
+			case <-c.stopChan:
+				return
+			case <-time.After(time.Second):
+				continue
+			}
+		}
+
+		task := heap.Pop(c.taskHeap).(*collectTask)
+		now := time.Now()
+
+		// 如果还没到执行时间，等待
+		waitTime := task.nextRun.Sub(now)
+		c.mu.Unlock()
+
+		if waitTime > 0 {
+			select {
+			case <-c.stopChan:
+				return
+			case <-time.After(waitTime):
+				// 时间到，执行采集
+			}
+		}
+
+		// 执行采集
+		c.collectDevice(task)
 	}
 }
 
 // collectDevice 采集单个设备数据
-func (c *Collector) collectDevice(task *collectTask, now time.Time) {
+func (c *Collector) collectDevice(task *collectTask) {
 	device := task.device
 	if device.Enabled != 1 {
 		return
 	}
 
 	data, err := c.driverExecutor.CollectData(device)
-	if err != nil {
+	if err := err; err != nil {
 		log.Printf("Failed to collect data from device %s: %v", device.Name, err)
+		// 重新加入队列，稍后重试
+		c.requeueTask(task)
 		return
 	}
 
+	now := time.Now()
 	task.lastRun = now
+	task.nextRun = now.Add(task.interval)
 
-	// 保存数据到缓存和历史数据
+	// 收集数据点用于批量保存
+	dataPoints := make([]database.DataPointEntry, 0, len(data.Fields))
 	for fieldName, value := range data.Fields {
+		// 更新缓存
 		if err := database.SaveDataCache(device.ID, device.Name, fieldName, value, "float64"); err != nil {
 			log.Printf("Failed to save data cache: %v", err)
 		}
-		// 保存历史数据点
-		if err := database.SaveDataPoint(device.ID, device.Name, fieldName, value, "float64"); err != nil {
-			log.Printf("Failed to save data point: %v", err)
+		// 收集历史数据点
+		dataPoints = append(dataPoints, database.DataPointEntry{
+			DeviceID:    device.ID,
+			DeviceName:  device.Name,
+			FieldName:   fieldName,
+			Value:       value,
+			ValueType:   "float64",
+			CollectedAt: now,
+		})
+	}
+
+	// 批量保存历史数据点
+	if len(dataPoints) > 0 {
+		if err := database.BatchSaveDataPoints(dataPoints); err != nil {
+			log.Printf("Failed to batch save data points: %v", err)
 		}
 	}
 
@@ -195,11 +260,28 @@ func (c *Collector) collectDevice(task *collectTask, now time.Time) {
 		c.uploadToNorthbound(data)
 		task.lastUpload = now
 	}
+
+	// 重新加入队列
+	c.mu.Lock()
+	c.tasks[device.ID] = task
+	heap.Push(c.taskHeap, task)
+	c.mu.Unlock()
+}
+
+// requeueTask 重新加入任务队列
+func (c *Collector) requeueTask(task *collectTask) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 30秒后重试
+	task.nextRun = time.Now().Add(30 * time.Second)
+	c.tasks[task.device.ID] = task
+	heap.Push(c.taskHeap, task)
 }
 
 // checkThresholds 检查阈值
 func (c *Collector) checkThresholds(device *models.Device, data *models.CollectData) error {
-	thresholds, err := database.GetEnabledThresholdsByDeviceID(device.ID)
+	thresholds, err := GetDeviceThresholds(device.ID)
 	if err != nil {
 		return err
 	}

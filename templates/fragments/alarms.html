@@ -1,0 +1,48 @@
+<div class="table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>级别</th>
+                <th>设备</th>
+                <th>消息</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Alarms }}
+            <tr>
+                <td>{{ .Time }}</td>
+                <td>
+                    {{ if eq .Level "critical" }}
+                    <span class="badge badge-stopped">严重</span>
+                    {{ else if eq .Level "warning" }}
+                    <span class="badge badge-warning">警告</span>
+                    {{ else }}
+                    <span class="badge badge-running">信息</span>
+                    {{ end }}
+                </td>
+                <td>{{ .Device }}</td>
+                <td>{{ .Message }}</td>
+                <td>
+                    {{ if eq .Acknowledged 1 }}
+                    <span class="badge badge-running">已确认</span>
+                    {{ else }}
+                    <span class="badge badge-warning">待处理</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if ne .Acknowledged 1 }}
+                    <button hx-post="/api/alarms/{{ .ID }}/acknowledge" hx-target="closest tr" class="btn btn-success" style="padding: 4px 8px;">确认</button>
+                    {{ end }}
+                </td>
+            </tr>
+            {{ else }}
+            <tr>
+                <td colspan="6" style="text-align: center; color: #6b7280; padding: 32px;">暂无报警日志</td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>

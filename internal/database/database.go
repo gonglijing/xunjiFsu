@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,8 +18,16 @@ import (
 
 // Configuration
 const (
-	SyncInterval = 5 * time.Minute // 同步间隔
-	DataDBFile   = "data.db"       // 数据数据库文件名
+	SyncInterval     = 5 * time.Minute     // 同步间隔
+	SyncBatchTrigger = 1000                // 数据量触发同步的阈值
+	DataDBFile       = "data.db"           // 数据数据库文件名
+	MaxDataPoints    = 100000              // 内存数据库最大数据点数
+	MaxDataCache     = 10000               // 内存缓存最大条目数
+
+	// 连接池配置（可调整）
+	DefaultMaxOpenConns = 25  // 默认最大打开连接数
+	DefaultMaxIdleConns = 10  // 默认最大空闲连接数
+	ConnMaxLifetime     = time.Hour // 连接最大生命周期
 )
 
 // ParamDB 配置数据库连接（持久化文件）
@@ -39,15 +49,18 @@ func InitParamDB() error {
 		return fmt.Errorf("failed to open param database: %w", err)
 	}
 
-	ParamDB.SetMaxOpenConns(10)
-	ParamDB.SetMaxIdleConns(5)
-	ParamDB.SetConnMaxLifetime(time.Hour)
+	// 配置连接池
+	maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
+	maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
+	ParamDB.SetMaxOpenConns(maxOpen)
+	ParamDB.SetMaxIdleConns(maxIdle)
+	ParamDB.SetConnMaxLifetime(ConnMaxLifetime)
 
 	if err := ParamDB.Ping(); err != nil {
 		return fmt.Errorf("failed to ping param database: %w", err)
 	}
 
-	log.Println("Param database initialized (persistent mode)")
+	log.Printf("Param database initialized (max_open=%d, max_idle=%d)", maxOpen, maxIdle)
 	return nil
 }
 
@@ -59,9 +72,12 @@ func InitDataDB() error {
 		return fmt.Errorf("failed to open data database: %w", err)
 	}
 
-	DataDB.SetMaxOpenConns(10)
-	DataDB.SetMaxIdleConns(5)
-	DataDB.SetConnMaxLifetime(time.Hour)
+	// 配置连接池
+	maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
+	maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
+	DataDB.SetMaxOpenConns(maxOpen)
+	DataDB.SetMaxIdleConns(maxIdle)
+	DataDB.SetConnMaxLifetime(ConnMaxLifetime)
 
 	if err := DataDB.Ping(); err != nil {
 		return fmt.Errorf("failed to ping data database: %w", err)
@@ -84,7 +100,7 @@ func StartDataSync() {
 	dataSyncTicker = time.NewTicker(SyncInterval)
 
 	go func() {
-		log.Printf("Data sync started (interval: %v)", SyncInterval)
+		log.Printf("Data sync started (interval: %v, batch_trigger: %d)", SyncInterval, SyncBatchTrigger)
 		for {
 			select {
 			case <-dataSyncTicker.C:
@@ -97,6 +113,19 @@ func StartDataSync() {
 			}
 		}
 	}()
+}
+
+// TriggerSyncIfNeeded 检查是否需要触发同步
+// 返回true表示已触发同步
+func TriggerSyncIfNeeded() bool {
+	var count int
+	DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count)
+	if count >= SyncBatchTrigger {
+		log.Printf("Triggering sync due to data count: %d", count)
+		go syncDataToDisk()
+		return true
+	}
+	return false
 }
 
 // SyncDataToDisk 手动触发数据同步（公开函数，供优雅关闭调用）
@@ -277,6 +306,48 @@ func InitDataSchema() error {
 		return fmt.Errorf("failed to execute data migration: %w", err)
 	}
 
+	// 执行索引迁移
+	if err := initDataIndexes(); err != nil {
+		log.Printf("Warning: failed to create data indexes: %v", err)
+	}
+
+	return nil
+}
+
+// initDataIndexes 创建数据表索引
+func initDataIndexes() error {
+	indexes, err := os.ReadFile("migrations/004_indexes.sql")
+	if err != nil {
+		return fmt.Errorf("failed to read index migration: %w", err)
+	}
+
+	// 分割并执行每个索引创建语句
+	indexSQL := string(indexes)
+	// 移除注释
+	lines := strings.Split(indexSQL, "\n")
+	var statements []string
+	var current strings.Builder
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") || trimmed == "" {
+			continue
+		}
+		current.WriteString(line)
+		current.WriteString("\n")
+		if strings.HasSuffix(trimmed, ";") {
+			statements = append(statements, current.String())
+			current.Reset()
+		}
+	}
+
+	for _, stmt := range statements {
+		_, err := DataDB.Exec(stmt)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+	}
+
+	log.Println("Data indexes initialized")
 	return nil
 }
 
@@ -958,11 +1029,27 @@ func DeleteStorageConfig(id int64) error {
 // SaveDataCache 保存实时数据缓存（内存）
 func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType string) error {
 	_, err := DataDB.Exec(
-		`INSERT OR REPLACE INTO data_cache (device_id, field_name, value, value_type, updated_at) 
+		`INSERT OR REPLACE INTO data_cache (device_id, field_name, value, value_type, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		deviceID, fieldName, value, valueType,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 检查并清理过量的缓存条目
+	enforceDataCacheLimit()
+	return nil
+}
+
+// enforceDataCacheLimit 强制执行缓存大小限制
+func enforceDataCacheLimit() {
+	var count int
+	DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count)
+	if count > MaxDataCache {
+		DataDB.Exec("DELETE FROM data_cache WHERE id IN (SELECT id FROM data_cache ORDER BY updated_at ASC LIMIT ?)", count-MaxDataCache)
+		log.Printf("Cleaned up data cache, removed %d entries", count-MaxDataCache)
+	}
 }
 
 // GetDataCacheByDeviceID 根据设备ID获取数据缓存（从内存）
@@ -1024,11 +1111,82 @@ type DataPoint struct {
 // SaveDataPoint 保存历史数据点（内存暂存）
 func SaveDataPoint(deviceID int64, deviceName, fieldName, value, valueType string) error {
 	_, err := DataDB.Exec(
-		`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) 
+		`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		deviceID, deviceName, fieldName, value, valueType,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 检查并清理过量的数据点
+	enforceDataPointsLimit()
+	return nil
+}
+
+// DataPointEntry 单个数据点条目
+type DataPointEntry struct {
+	DeviceID    int64
+	DeviceName  string
+	FieldName   string
+	Value       string
+	ValueType   string
+	CollectedAt time.Time
+}
+
+// BatchSaveDataPoints 批量保存历史数据点（提高写入性能）
+func BatchSaveDataPoints(entries []DataPointEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	// 使用事务批量插入
+	tx, err := DataDB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO data_points
+		(device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, entry := range entries {
+		collectedAt := entry.CollectedAt
+		if collectedAt.IsZero() {
+			collectedAt = time.Now()
+		}
+		if _, err := stmt.Exec(entry.DeviceID, entry.DeviceName, entry.FieldName,
+			entry.Value, entry.ValueType, collectedAt); err != nil {
+			return fmt.Errorf("failed to insert data point: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// 检查并清理过量的数据点
+	enforceDataPointsLimit()
+
+	// 检查是否需要触发同步
+	TriggerSyncIfNeeded()
+
+	return nil
+}
+
+// enforceDataPointsLimit 强制执行数据点大小限制
+func enforceDataPointsLimit() {
+	var count int
+	DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count)
+	if count > MaxDataPoints {
+		DataDB.Exec("DELETE FROM data_points WHERE id IN (SELECT id FROM data_points ORDER BY collected_at ASC LIMIT ?)", count-MaxDataPoints)
+		log.Printf("Cleaned up data points, removed %d old entries", count-MaxDataPoints)
+	}
 }
 
 // GetDataPointsByDeviceAndTime 根据设备ID和时间范围获取历史数据（从内存）
@@ -1147,4 +1305,14 @@ func CleanupData(before string) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+// getEnvInt 从环境变量获取整数配置
+func getEnvInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if val, err := strconv.Atoi(v); err == nil {
+			return val
+		}
+	}
+	return defaultVal
 }

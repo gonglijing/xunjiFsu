@@ -1,12 +1,14 @@
 package driver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	extism "github.com/extism/go-sdk"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/resource"
 )
@@ -23,9 +25,17 @@ var ErrDriverExecutionFailed = errors.New("driver execution failed")
 // DriverResult 驱动执行结果
 type DriverResult struct {
 	Success   bool              `json:"success"`
-	Data      map[string]string `json:"data"`
+	Data      map[string]string `json:"data"`   // 旧格式: {"temperature": "25.3"}
+	Points    []DriverPoint     `json:"points"` // 新格式: [{"field_name":"temperature","value":25.3,"rw":"R"}]
 	Error     string            `json:"error"`
 	Timestamp time.Time         `json:"timestamp"`
+}
+
+// DriverPoint 驱动测点数据
+type DriverPoint struct {
+	FieldName string  `json:"field_name"`
+	Value     float64 `json:"value"`
+	RW        string  `json:"rw"` // "R" | "W" | "RW"
 }
 
 // DriverContext 驱动上下文
@@ -38,15 +48,10 @@ type DriverContext struct {
 	DeviceConfig string            `json:"device_config"`
 }
 
-// DriverPlugin 驱动插件接口
-type DriverPlugin interface {
-	// Initialize 初始化驱动
-	Initialize(config string) error
-	// Read 读取数据
-	Read(ctx *DriverContext) (*DriverResult, error)
-	// Write 写入数据
-	Write(ctx *DriverContext, data map[string]string) error
-	// Close 关闭驱动
+// SerialPort 串口接口
+type SerialPort interface {
+	Write([]byte) (int, error)
+	Read([]byte) (int, error)
 	Close() error
 }
 
@@ -54,29 +59,125 @@ type DriverPlugin interface {
 type WasmDriver struct {
 	ID         int64
 	Name       string
-	plugin     interface{} // Extism plugin
+	plugin     *extism.Plugin
 	mu         sync.RWMutex
 	lastActive time.Time
 	config     string
+	resourceID int64 // 关联的串口资源ID
 }
 
 // DriverManager 驱动管理器
 type DriverManager struct {
-	mu      sync.RWMutex
-	drivers map[int64]*WasmDriver
-	plugins map[int64]interface{} // Extism plugins
+	mu       sync.RWMutex
+	drivers  map[int64]*WasmDriver
+	executor *DriverExecutor // 引用执行器以访问串口
 }
 
 // NewDriverManager 创建驱动管理器
 func NewDriverManager() *DriverManager {
 	return &DriverManager{
 		drivers: make(map[int64]*WasmDriver),
-		plugins: make(map[int64]interface{}),
 	}
 }
 
+// SetExecutor 设置驱动执行器（用于访问串口资源）
+func (m *DriverManager) SetExecutor(executor *DriverExecutor) {
+	m.executor = executor
+}
+
+// createHostFunctions 创建 Host Functions
+func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunction {
+	executor := m.executor
+	if executor == nil {
+		return nil
+	}
+
+	// serial_read: 从串口读取数据
+	serialRead := extism.NewHostFunctionWithStack(
+		"serial_read",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			size := int32(stack[1]) // 读取请求的大小
+			buf := make([]byte, size)
+
+			port := executor.GetSerialPort(resourceID)
+			if port == nil {
+				stack[0] = 0 // 返回 0 表示失败
+				return
+			}
+
+			n, err := port.Read(buf)
+			if err != nil {
+				stack[0] = 0
+				return
+			}
+
+			// 将数据写入插件内存
+			p.Memory().Write(uint32(stack[0]), buf[:n])
+			stack[0] = uint64(n) // 返回实际读取的字节数
+		},
+		[]extism.ValueType{extism.ValueTypeI32, extism.ValueTypeI32},
+		[]extism.ValueType{extism.ValueTypeI32},
+	)
+
+	// serial_write: 向串口写入数据
+	serialWrite := extism.NewHostFunctionWithStack(
+		"serial_write",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			ptr := int32(stack[0])
+			size := int32(stack[1])
+
+			// 从插件内存读取数据
+			data, _ := p.Memory().Read(uint32(ptr), uint32(size))
+
+			port := executor.GetSerialPort(resourceID)
+			if port == nil {
+				stack[0] = 0
+				return
+			}
+
+			n, err := port.Write(data)
+			if err != nil {
+				stack[0] = 0
+				return
+			}
+
+			stack[0] = uint64(n) // 返回实际写入的字节数
+		},
+		[]extism.ValueType{extism.ValueTypeI32, extism.ValueTypeI32},
+		[]extism.ValueType{extism.ValueTypeI32},
+	)
+
+	// sleep_ms: 毫秒延时
+	sleepMs := extism.NewHostFunctionWithStack(
+		"sleep_ms",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			ms := int(stack[0])
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		},
+		[]extism.ValueType{extism.ValueTypeI32},
+		[]extism.ValueType{},
+	)
+
+	// output: 输出日志
+	outputLog := extism.NewHostFunctionWithStack(
+		"output",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			ptr := int32(stack[0])
+			size := int32(stack[1])
+
+			// 从插件内存读取数据
+			data, _ := p.Memory().Read(uint32(ptr), uint32(size))
+			fmt.Printf("[Driver] %s\n", string(data))
+		},
+		[]extism.ValueType{extism.ValueTypeI32, extism.ValueTypeI32},
+		[]extism.ValueType{},
+	)
+
+	return []extism.HostFunction{serialRead, serialWrite, sleepMs, outputLog}
+}
+
 // LoadDriver 加载驱动
-func (m *DriverManager) LoadDriver(driver *models.Driver) error {
+func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resourceID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -84,16 +185,52 @@ func (m *DriverManager) LoadDriver(driver *models.Driver) error {
 		return fmt.Errorf("driver %d already loaded", driver.ID)
 	}
 
+	// 从 driver config 中解析 resource_id (如果没有传入)
+	if resourceID == 0 && driver.ConfigSchema != "" {
+		var cfg struct {
+			ResourceID int64 `json:"resource_id"`
+		}
+		if err := json.Unmarshal([]byte(driver.ConfigSchema), &cfg); err == nil {
+			resourceID = cfg.ResourceID
+		}
+	}
+
+	// 创建 Extism plugin (包含 Host Functions)
+	manifest := extism.Manifest{
+		Wasm: []extism.Wasm{
+			&extism.WasmData{
+				Name: driver.Name,
+				Data: wasmData,
+			},
+		},
+	}
+
+	// 创建设置配置 (传递给插件)
+	config := map[string]string{
+		"resource_id": fmt.Sprintf("%d", resourceID),
+	}
+
+	ctx := context.Background()
+	hostFuncs := m.createHostFunctions(resourceID)
+
+	plugin, err := extism.NewPlugin(ctx, manifest, extism.PluginConfig{
+		EnableWasi: true,
+	}, hostFuncs)
+	if err != nil {
+		return fmt.Errorf("failed to create plugin: %w", err)
+	}
+
+	// 设置配置
+	plugin.Config = config
+
 	wasmDriver := &WasmDriver{
 		ID:         driver.ID,
 		Name:       driver.Name,
-		config:     driver.ConfigSchema,
+		plugin:     plugin,
 		lastActive: time.Now(),
+		config:     driver.ConfigSchema,
+		resourceID: resourceID,
 	}
-
-	// 加载WASM插件
-	// 注意：需要使用Extism Go SDK加载WASM文件
-	// 这里使用纯Go实现，不依赖cgo
 
 	m.drivers[driver.ID] = wasmDriver
 	return nil
@@ -110,23 +247,21 @@ func (m *DriverManager) UnloadDriver(id int64) error {
 	}
 
 	// 关闭插件
-	if _, exists := m.plugins[id]; exists {
-		// 清理插件资源
-		delete(m.plugins, id)
+	if driver.plugin != nil {
+		ctx := context.Background()
+		driver.plugin.Close(ctx)
 	}
 
 	delete(m.drivers, id)
-	_ = driver // 使用driver变量
-
 	return nil
 }
 
 // ExecuteDriver 执行驱动
-func (m *DriverManager) ExecuteDriver(id int64, function string, ctx *DriverContext) (*DriverResult, error) {
+func (m *DriverManager) ExecuteDriver(id int64, function string, driverCtx *DriverContext) (*DriverResult, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	driver, exists := m.drivers[id]
+	m.mu.RUnlock()
+
 	if !exists {
 		return nil, ErrDriverNotFound
 	}
@@ -137,42 +272,33 @@ func (m *DriverManager) ExecuteDriver(id int64, function string, ctx *DriverCont
 
 	// 准备输入数据
 	input := map[string]interface{}{
-		"device_id":     ctx.DeviceID,
-		"device_name":   ctx.DeviceName,
-		"resource_id":   ctx.ResourceID,
-		"resource_type": ctx.ResourceType,
-		"config":        ctx.Config,
-		"device_config": ctx.DeviceConfig,
+		"device_id":     driverCtx.DeviceID,
+		"device_name":   driverCtx.DeviceName,
+		"resource_id":   driverCtx.ResourceID,
+		"resource_type": driverCtx.ResourceType,
+		"config":        driverCtx.Config,
+		"device_config": driverCtx.DeviceConfig,
 	}
 
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal input: %w", err)
 	}
-	_ = inputJSON // 暂时不使用，后续用于Extism调用
 
-	// 调用Extism插件
-	// 注意：需要使用Extism Go SDK调用WASM函数
-	// 这里使用纯Go实现
-
-	// 模拟执行结果
-	result := &DriverResult{
-		Success:   true,
-		Data:      make(map[string]string),
-		Timestamp: time.Now(),
+	// 调用插件函数
+	_, output, err := driver.plugin.Call(function, inputJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call plugin: %w", err)
 	}
 
-	// 根据驱动名称返回模拟数据
-	switch driver.Name {
-	case "th.wasm":
-		// 温湿度驱动模拟
-		result.Data["temperature"] = "25.5"
-		result.Data["humidity"] = "60.2"
-	default:
-		result.Data["value"] = "0"
+	// 解析输出
+	var result DriverResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse output: %w", err)
 	}
 
-	return result, nil
+	result.Timestamp = time.Now()
+	return &result, nil
 }
 
 // GetDriver 获取驱动
@@ -208,25 +334,61 @@ func (m *DriverManager) IsLoaded(id int64) bool {
 	return exists
 }
 
+// GetDriverResourceID 获取驱动关联的资源ID
+func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	driver, exists := m.drivers[id]
+	if !exists {
+		return 0, ErrDriverNotFound
+	}
+
+	return driver.resourceID, nil
+}
+
 // DriverExecutor 驱动执行器
 type DriverExecutor struct {
 	manager     *DriverManager
 	resourceMgr *resource.ResourceManagerImpl
+	serialPorts map[int64]SerialPort // 资源ID到串口的映射
 	mu          sync.RWMutex
 	executing   map[int64]bool
 }
 
 // NewDriverExecutor 创建驱动执行器
 func NewDriverExecutor(manager *DriverManager) *DriverExecutor {
-	return &DriverExecutor{
-		manager:   manager,
-		executing: make(map[int64]bool),
+	executor := &DriverExecutor{
+		manager:     manager,
+		serialPorts: make(map[int64]SerialPort),
+		executing:   make(map[int64]bool),
 	}
+
+	// 双向绑定
+	if manager != nil {
+		manager.SetExecutor(executor)
+	}
+
+	return executor
 }
 
 // SetResourceManager 设置资源管理器（用于资源访问锁）
 func (e *DriverExecutor) SetResourceManager(rm *resource.ResourceManagerImpl) {
 	e.resourceMgr = rm
+}
+
+// RegisterSerialPort 注册串口
+func (e *DriverExecutor) RegisterSerialPort(resourceID int64, port SerialPort) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.serialPorts[resourceID] = port
+}
+
+// GetSerialPort 获取串口
+func (e *DriverExecutor) GetSerialPort(resourceID int64) SerialPort {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.serialPorts[resourceID]
 }
 
 // Execute 执行驱动读取（带资源访问锁）
@@ -249,28 +411,43 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 		e.mu.Unlock()
 	}()
 
+	// 确定资源ID
+	resourceID := device.ResourceID
+	if resourceID == nil || *resourceID == 0 {
+		// 尝试从已加载的驱动获取
+		driverResourceID, err := e.manager.GetDriverResourceID(*device.DriverID)
+		if err == nil {
+			tmp := driverResourceID
+			resourceID = &tmp
+		}
+	}
+
 	ctx := &DriverContext{
 		DeviceID:     device.ID,
 		DeviceName:   device.Name,
-		ResourceID:   0, // 需要从数据库获取
+		ResourceID:   0,
 		ResourceType: "serial",
 		Config:       make(map[string]string),
 		DeviceConfig: device.DeviceConfig,
 	}
 
-	// 如果配置了资源管理器，使用资源访问锁确保串行访问
-	if e.resourceMgr != nil && device.ResourceID != nil && *device.ResourceID > 0 {
-		locker := e.resourceMgr.GetLocker()
-		if locker != nil {
-			// 尝试获取资源锁，设置超时避免永久阻塞
-			if err := locker.LockWithTimeout(*device.ResourceID, 10*time.Second); err != nil {
-				return nil, fmt.Errorf("failed to lock resource %d: %w", *device.ResourceID, err)
+	if resourceID != nil && *resourceID > 0 {
+		ctx.ResourceID = *resourceID
+
+		// 如果配置了资源管理器，使用资源访问锁确保串行访问
+		if e.resourceMgr != nil {
+			locker := e.resourceMgr.GetLocker()
+			if locker != nil {
+				// 尝试获取资源锁，设置超时避免永久阻塞
+				if err := locker.LockWithTimeout(*resourceID, 10*time.Second); err != nil {
+					return nil, fmt.Errorf("failed to lock resource %d: %w", *resourceID, err)
+				}
+				defer locker.Unlock(*resourceID)
 			}
-			defer locker.Unlock(*device.ResourceID)
 		}
 	}
 
-	return e.manager.ExecuteDriver(*device.DriverID, "read", ctx)
+	return e.manager.ExecuteDriver(*device.DriverID, "collect", ctx)
 }
 
 // CollectData 采集数据
@@ -284,10 +461,25 @@ func (e *DriverExecutor) CollectData(device *models.Device) (*models.CollectData
 		return nil, errors.New(result.Error)
 	}
 
+	// 解析返回数据
+	fields := make(map[string]string)
+
+	// 优先使用新格式 (points)
+	if len(result.Points) > 0 {
+		for _, point := range result.Points {
+			fields[point.FieldName] = fmt.Sprintf("%.6f", point.Value)
+		}
+	} else {
+		// 兼容旧格式
+		for k, v := range result.Data {
+			fields[k] = v
+		}
+	}
+
 	return &models.CollectData{
 		DeviceID:   device.ID,
 		DeviceName: device.Name,
 		Timestamp:  result.Timestamp,
-		Fields:     result.Data,
+		Fields:     fields,
 	}, nil
 }
