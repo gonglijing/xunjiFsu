@@ -1,47 +1,33 @@
 package handlers
 
 import (
-	"bytes"
 	"net/http"
-	"html/template"
-	"path/filepath"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 )
 
-var tmpl *template.Template
-
 // ==================== 页面渲染 ====================
 
 // Dashboard 仪表盘页面
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":           "仪表盘",
-		"Active":          "dashboard",
-		"ContentTemplate": "dashboard-content",
-	}
-	renderTemplate(w, "dashboard.html", "dashboard-content", data)
+	h.SPA(w, r)
 }
 
 // RealTime 实时数据页面
 func (h *Handler) RealTime(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":           "实时数据",
-		"Active":          "realtime",
-		"ContentTemplate": "realtime-content",
-	}
-	renderTemplate(w, "realtime.html", "realtime-content", data)
+	h.SPA(w, r)
 }
 
 // History 历史数据页面
 func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":           "历史数据",
-		"Active":          "history",
-		"ContentTemplate": "history-content",
-	}
-	renderTemplate(w, "history.html", "history-content", data)
+	h.SPA(w, r)
+}
+
+// SPA 统一入口，返回最小 HTML，由前端 Preact 接管路由
+func (h *Handler) SPA(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>HuShu智能网关</title><link rel="stylesheet" href="/static/style.css"><script defer src="/static/dist/main.js"></script></head><body><div id="app-root"></div></body></html>`))
 }
 
 // StatusData 状态数据结构
@@ -68,9 +54,9 @@ type NorthboundStats struct {
 
 // AlarmStats 报警统计
 type AlarmStats struct {
-	Total      int `json:"total"`
-	Unacked    int `json:"unacked"`
-	Today      int `json:"today"`
+	Total   int `json:"total"`
+	Unacked int `json:"unacked"`
+	Today   int `json:"today"`
 }
 
 // DriverStats 驱动统计
@@ -140,15 +126,6 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now(),
 	}
 
-	// HTMX 请求，返回 HTML 片段
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("Content-Type", "text/html")
-		if err := tmpl.ExecuteTemplate(w, "status-cards.html", status); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
 	WriteSuccess(w, status)
 }
 
@@ -167,58 +144,4 @@ func (h *Handler) StopCollector(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, map[string]string{"status": "stopped"})
 }
 
-// renderTemplate 渲染模板（支持继承 base.html）
-func renderTemplate(w http.ResponseWriter, page string, name string, data interface{}) {
-	// 先将 data 转换为 map
-	dataMap, ok := data.(map[string]interface{})
-	if !ok {
-		dataMap = make(map[string]interface{})
-	}
-
-	// 检查是否存在 base 模板，如果存在则先渲染内容，再渲染 base
-	if tmpl.Lookup("base") != nil {
-		// 渲染内容模板到缓冲区
-		var contentBuf bytes.Buffer
-		if err := tmpl.ExecuteTemplate(&contentBuf, name, data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		// 将渲染后的内容添加到数据中（使用 template.HTML 避免转义）
-		dataMap["Content"] = template.HTML(contentBuf.String())
-		// 渲染 base 模板
-		if err := tmpl.ExecuteTemplate(w, "base", dataMap); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	// 否则直接渲染模板
-	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// InitTemplates 初始化模板
-func InitTemplates(pattern string) error {
-	var err error
-	
-	// 使用 template.ParseFiles 加载所有模板
-	files, err := filepath.Glob(pattern + "/*.html")
-	if err != nil {
-		return err
-	}
-	
-	// 添加 fragments 目录中的模板
-	fragmentFiles, err := filepath.Glob(pattern + "/fragments/*.html")
-	if err != nil {
-		return err
-	}
-	
-	files = append(files, fragmentFiles...)
-	
-	tmpl, err = template.ParseFiles(files...)
-	if err != nil {
-		return err
-	}
-	
-	return nil
-}
+// 模板渲染与解析已移除（前端接管）

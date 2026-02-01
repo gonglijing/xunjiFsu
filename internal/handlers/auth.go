@@ -11,9 +11,7 @@ import (
 // Login GET显示登录页面
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "login.html", nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	_, _ = w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>Login</title><link rel="stylesheet" href="/static/style.css"></head><body style="max-width:420px;margin:80px auto;color:#f1f5f9;"><h2>HuShu 智能网关</h2><form method="POST" action="/login" class="form" style="margin-top:24px;"><div class="form-group"><label class="form-label">用户名</label><input class="form-input" name="username" value="admin" /></div><div class="form-group"><label class="form-label">密码</label><input class="form-input" name="password" type="password" value="123456" /></div><button class="btn btn-primary" style="width:100%;">登录</button></form></body></html>`))
 }
 
 // LoginPost 处理登录

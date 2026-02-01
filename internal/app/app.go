@@ -1,0 +1,124 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/collector"
+	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/graceful"
+	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"github.com/gonglijing/xunjiFsu/internal/northbound"
+)
+
+// Run boots the application and blocks until shutdown completes.
+func Run(cfg *config.Config) error {
+	secretKey := loadOrGenerateSecretKey()
+
+	if err := initDatabases(cfg); err != nil {
+		return err
+	}
+	defer database.ParamDB.Close()
+	defer database.DataDB.Close()
+
+	if err := initSchemasAndDefaultData(); err != nil {
+		return err
+	}
+
+	logger.Info("Starting data sync task...")
+	database.StartDataSync()
+	logger.Info("Starting retention cleanup task...")
+	database.StartRetentionCleanup(6 * time.Hour)
+
+	if cfg.ThresholdCacheEnabled {
+		logger.Info("Starting threshold cache...")
+		collector.StartThresholdCache()
+	}
+
+	driverManager := driver.NewDriverManager()
+	driverExecutor := driver.NewDriverExecutor(driverManager)
+	northboundMgr := northbound.NewNorthboundManager()
+
+	loadEnabledNorthboundConfigs(northboundMgr)
+
+	// 开启北向上传调度（按配置）
+	startNorthboundSchedulers(northboundMgr)
+	northboundMgr.Start()
+
+	collect := collector.NewCollector(driverExecutor, northboundMgr)
+	sessionManager := auth.NewSessionManager(secretKey)
+	h := handlers.NewHandler(sessionManager, collect, driverManager, northboundMgr)
+
+	router := buildRouter(h, sessionManager)
+	finalHandler := buildHandlerChain(cfg, router)
+
+	if err := collect.Start(); err != nil {
+		logger.Warn("Failed to start collector", "error", err)
+	}
+
+	gracefulMgr := graceful.NewGracefulShutdown(30 * time.Second)
+	registerShutdown(gracefulMgr, collect, northboundMgr, cfg)
+	gracefulMgr.Start()
+
+	logger.Info("Starting server", "addr", cfg.ListenAddr)
+	server := &http.Server{
+		Addr:         cfg.ListenAddr,
+		Handler:      finalHandler,
+		ReadTimeout:  cfg.HTTPReadTimeout,
+		WriteTimeout: cfg.HTTPWriteTimeout,
+		IdleTimeout:  cfg.HTTPIdleTimeout,
+	}
+
+	gracefulMgr.SetHTTPServer(server)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("server error: %w", err)
+	}
+
+	gracefulMgr.Wait()
+	return nil
+}
+
+func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector.Collector, northMgr *northbound.NorthboundManager, cfg *config.Config) {
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping collector...")
+		return collect.Stop()
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping data sync...")
+		database.StopDataSync()
+		return nil
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping retention cleanup...")
+		database.StopRetentionCleanup()
+		return nil
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Final sync to disk...")
+		return database.SyncDataToDisk()
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping northbound manager...")
+		northMgr.Stop()
+		return nil
+	})
+
+	if cfg.ThresholdCacheEnabled {
+		gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+			logger.Info("Stopping threshold cache...")
+			collector.StopThresholdCache()
+			return nil
+		})
+	}
+}

@@ -47,15 +47,6 @@ func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// HTMX 请求，返回 HTML 片段
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("Content-Type", "text/html")
-		if err := tmpl.ExecuteTemplate(w, "drivers.html", map[string]interface{}{"Drivers": drivers}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
 	WriteSuccess(w, drivers)
 }
 

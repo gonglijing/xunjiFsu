@@ -13,20 +13,22 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/pwdutil"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/glebarez/go-sqlite"
 )
 
 // Configuration
 const (
-	SyncInterval     = 5 * time.Minute     // 同步间隔
-	SyncBatchTrigger = 1000                // 数据量触发同步的阈值
-	DataDBFile       = "data.db"           // 数据数据库文件名
-	MaxDataPoints    = 100000              // 内存数据库最大数据点数
-	MaxDataCache     = 10000               // 内存缓存最大条目数
+	SyncInterval         = 5 * time.Minute // 同步间隔
+	SyncBatchTrigger     = 1000            // 数据量触发同步的阈值
+	DefaultParamDBFile   = "param.db"      // 配置数据库文件名
+	DataDBFile           = "data.db"       // 数据数据库文件名
+	MaxDataPoints        = 100000          // 内存数据库最大数据点数
+	MaxDataCache         = 10000           // 内存缓存最大条目数
+	DefaultRetentionDays = 30              // 默认历史保留天数
 
 	// 连接池配置（可调整）
-	DefaultMaxOpenConns = 25  // 默认最大打开连接数
-	DefaultMaxIdleConns = 10  // 默认最大空闲连接数
+	DefaultMaxOpenConns = 25        // 默认最大打开连接数
+	DefaultMaxIdleConns = 10        // 默认最大空闲连接数
 	ConnMaxLifetime     = time.Hour // 连接最大生命周期
 )
 
@@ -36,15 +38,44 @@ var ParamDB *sql.DB
 // DataDB 历史数据数据库连接（内存模式）
 var DataDB *sql.DB
 
+var paramDBFile = DefaultParamDBFile
+var dataDBFile = DataDBFile
+var retentionDaysDefault = 30 // fallback if no storage policy
+
+// StoragePolicy 数据保留策略
+type StoragePolicy struct {
+	ID         int64     `json:"id" db:"id"`
+	ProductKey string    `json:"product_key" db:"product_key"`
+	DeviceKey  string    `json:"device_key" db:"device_key"`
+	Retention  int       `json:"retention" db:"retention"` // days
+	Enabled    int       `json:"enabled" db:"enabled"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+}
+
 // 数据同步相关
 var dataSyncMu sync.Mutex
 var dataSyncTicker *time.Ticker
 var dataSyncStop chan struct{}
 
+// 数据清理相关
+var retentionTicker *time.Ticker
+var retentionStop chan struct{}
+
 // InitParamDB 初始化配置数据库（持久化文件）
 func InitParamDB() error {
+	return InitParamDBWithPath(DefaultParamDBFile)
+}
+
+// InitParamDBWithPath 初始化配置数据库并指定路径
+func InitParamDBWithPath(path string) error {
+	if path == "" {
+		path = DefaultParamDBFile
+	}
+	paramDBFile = path
+
 	var err error
-	ParamDB, err = sql.Open("sqlite", "param.db")
+	ParamDB, err = sql.Open("sqlite", path)
 	if err != nil {
 		return fmt.Errorf("failed to open param database: %w", err)
 	}
@@ -66,6 +97,16 @@ func InitParamDB() error {
 
 // InitDataDB 初始化历史数据数据库（内存模式 + 批量同步）
 func InitDataDB() error {
+	return InitDataDBWithPath(DataDBFile)
+}
+
+// InitDataDBWithPath 初始化历史数据数据库并指定落盘路径
+func InitDataDBWithPath(path string) error {
+	if path == "" {
+		path = DataDBFile
+	}
+	dataDBFile = path
+
 	var err error
 	DataDB, err = sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -84,9 +125,9 @@ func InitDataDB() error {
 	}
 
 	// 从文件恢复数据（如果存在）
-	if _, err := os.Stat(DataDBFile); err == nil {
+	if _, err := os.Stat(dataDBFile); err == nil {
 		log.Println("Restoring data database from file...")
-		if err := restoreDataFromFile(DataDBFile); err != nil {
+		if err := restoreDataFromFile(dataDBFile); err != nil {
 			log.Printf("Warning: failed to restore data database: %v", err)
 		}
 	}
@@ -143,6 +184,40 @@ func StopDataSync() {
 	}
 }
 
+// StartRetentionCleanup 启动定期历史数据清理
+func StartRetentionCleanup(interval time.Duration) {
+	if interval <= 0 {
+		interval = 6 * time.Hour
+	}
+	retentionStop = make(chan struct{})
+	retentionTicker = time.NewTicker(interval)
+
+	go func() {
+		log.Printf("Retention cleanup started (interval: %v)", interval)
+		for {
+			select {
+			case <-retentionTicker.C:
+				if _, err := CleanupOldDataByConfig(); err != nil {
+					log.Printf("Retention cleanup error: %v", err)
+				}
+			case <-retentionStop:
+				log.Println("Retention cleanup stopped")
+				return
+			}
+		}
+	}()
+}
+
+// StopRetentionCleanup 停止历史数据清理任务
+func StopRetentionCleanup() {
+	if retentionTicker != nil {
+		retentionTicker.Stop()
+	}
+	if retentionStop != nil {
+		close(retentionStop)
+	}
+}
+
 // syncDataToDisk 将内存数据批量同步到磁盘
 func syncDataToDisk() error {
 	dataSyncMu.Lock()
@@ -151,7 +226,7 @@ func syncDataToDisk() error {
 	log.Println("Syncing data to disk...")
 
 	// 1. 创建临时数据库文件
-	tempFile := DataDBFile + ".tmp"
+	tempFile := dataDBFile + ".tmp"
 	diskDB, err := sql.Open("sqlite", tempFile)
 	if err != nil {
 		return fmt.Errorf("failed to open temp database: %w", err)
@@ -255,7 +330,7 @@ func syncDataToDisk() error {
 	}
 
 	// 5. 原子替换文件
-	if err := os.Rename(tempFile, DataDBFile); err != nil {
+	if err := os.Rename(tempFile, dataDBFile); err != nil {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
@@ -294,6 +369,25 @@ func InitParamSchema() error {
 	return nil
 }
 
+// InitStoragePolicyTable 创建存储策略表
+func InitStoragePolicyTable() error {
+	// 不做向前兼容，直接使用当前结构重建
+	if _, err := ParamDB.Exec(`DROP TABLE IF EXISTS storage_policies`); err != nil {
+		return err
+	}
+	_, err := ParamDB.Exec(`CREATE TABLE storage_policies (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		product_key TEXT,
+		device_key TEXT,
+		storage_days INTEGER DEFAULT 30,
+		enabled INTEGER DEFAULT 1,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	return err
+}
+
 // InitDataSchema 初始化历史数据数据库schema
 func InitDataSchema() error {
 	migration, err := os.ReadFile("migrations/003_data_schema.sql")
@@ -309,6 +403,11 @@ func InitDataSchema() error {
 	// 执行索引迁移
 	if err := initDataIndexes(); err != nil {
 		log.Printf("Warning: failed to create data indexes: %v", err)
+	}
+
+	// 确保 alarm_logs 表存在
+	if err := ensureAlarmLogsTable(); err != nil {
+		return err
 	}
 
 	return nil
@@ -348,6 +447,29 @@ func initDataIndexes() error {
 	}
 
 	log.Println("Data indexes initialized")
+	return nil
+}
+
+// ensureAlarmLogsTable 创建 alarm_logs 表（若缺失）
+func ensureAlarmLogsTable() error {
+	_, err := ParamDB.Exec(`CREATE TABLE IF NOT EXISTS alarm_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER,
+		threshold_id INTEGER,
+		field_name TEXT,
+		actual_value REAL,
+		threshold_value REAL,
+		operator TEXT,
+		severity TEXT,
+		message TEXT,
+		triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		acknowledged INTEGER DEFAULT 0,
+		acknowledged_by TEXT,
+		acknowledged_at TIMESTAMP
+	)`)
+	if err != nil {
+		return fmt.Errorf("failed to ensure alarm_logs table: %w", err)
+	}
 	return nil
 }
 
@@ -457,74 +579,6 @@ func UpdateUser(user *models.User) error {
 // DeleteUser 删除用户
 func DeleteUser(id int64) error {
 	_, err := ParamDB.Exec("DELETE FROM users WHERE id = ?", id)
-	return err
-}
-
-// ==================== 资源操作 (param.db - 直接写) ====================
-
-// CreateResource 创建资源
-func CreateResource(resource *models.Resource) (int64, error) {
-	result, err := ParamDB.Exec(
-		`INSERT INTO resources (name, type, port, address, enabled) 
-		VALUES (?, ?, ?, ?, ?)`,
-		resource.Name, resource.Type, resource.Port, resource.Address, resource.Enabled,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
-}
-
-// GetResourceByID 根据ID获取资源
-func GetResourceByID(id int64) (*models.Resource, error) {
-	resource := &models.Resource{}
-	err := ParamDB.QueryRow(
-		`SELECT id, name, type, port, address, enabled, created_at, updated_at 
-		FROM resources WHERE id = ?`,
-		id,
-	).Scan(&resource.ID, &resource.Name, &resource.Type, &resource.Port, &resource.Address,
-		&resource.Enabled, &resource.CreatedAt, &resource.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return resource, nil
-}
-
-// GetAllResources 获取所有资源
-func GetAllResources() ([]*models.Resource, error) {
-	rows, err := ParamDB.Query(
-		`SELECT id, name, type, port, address, enabled, created_at, updated_at 
-		FROM resources ORDER BY id`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var resources []*models.Resource
-	for rows.Next() {
-		resource := &models.Resource{}
-		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Type, &resource.Port, &resource.Address,
-			&resource.Enabled, &resource.CreatedAt, &resource.UpdatedAt); err != nil {
-			return nil, err
-		}
-		resources = append(resources, resource)
-	}
-	return resources, nil
-}
-
-// UpdateResource 更新资源
-func UpdateResource(resource *models.Resource) error {
-	_, err := ParamDB.Exec(
-		`UPDATE resources SET name = ?, type = ?, port = ?, address = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		resource.Name, resource.Type, resource.Port, resource.Address, resource.Enabled, resource.ID,
-	)
-	return err
-}
-
-// DeleteResource 删除资源
-func DeleteResource(id int64) error {
-	_, err := ParamDB.Exec("DELETE FROM resources WHERE id = ?", id)
 	return err
 }
 
@@ -872,22 +926,22 @@ func AcknowledgeAlarmLog(id int64, acknowledgedBy string) error {
 
 // ==================== 存储配置操作 (param.db - 直接写) ====================
 
-// StorageConfig 存储配置模型
+// StorageConfig 存储配置模型（沿用存量表名 storage_policies）
 type StorageConfig struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	ProductKey  string    `json:"product_key"`
-	DeviceKey   string    `json:"device_key"`
-	StorageDays int       `json:"storage_days"`
-	Enabled     int       `json:"enabled"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int64     `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	ProductKey  string    `json:"product_key" db:"product_key"`
+	DeviceKey   string    `json:"device_key" db:"device_key"`
+	StorageDays int       `json:"storage_days" db:"storage_days"`
+	Enabled     int       `json:"enabled" db:"enabled"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // CreateStorageConfig 创建存储配置
 func CreateStorageConfig(config *StorageConfig) (int64, error) {
 	result, err := ParamDB.Exec(
-		"INSERT INTO storage_config (name, product_key, device_key, storage_days, enabled) VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO storage_policies (name, product_key, device_key, storage_days, enabled) VALUES (?, ?, ?, ?, ?)",
 		config.Name, config.ProductKey, config.DeviceKey, config.StorageDays, config.Enabled,
 	)
 	if err != nil {
@@ -899,7 +953,7 @@ func CreateStorageConfig(config *StorageConfig) (int64, error) {
 // GetAllStorageConfigs 获取所有存储配置
 func GetAllStorageConfigs() ([]*StorageConfig, error) {
 	rows, err := ParamDB.Query(
-		"SELECT id, name, product_key, device_key, storage_days, enabled, created_at, updated_at FROM storage_config ORDER BY id",
+		"SELECT id, name, product_key, device_key, storage_days, enabled, created_at, updated_at FROM storage_policies ORDER BY id",
 	)
 	if err != nil {
 		return nil, err
@@ -922,7 +976,7 @@ func GetAllStorageConfigs() ([]*StorageConfig, error) {
 func GetStorageConfigByID(id int64) (*StorageConfig, error) {
 	config := &StorageConfig{}
 	err := ParamDB.QueryRow(
-		"SELECT id, name, product_key, device_key, storage_days, enabled, created_at, updated_at FROM storage_config WHERE id = ?",
+		"SELECT id, name, product_key, device_key, storage_days, enabled, created_at, updated_at FROM storage_policies WHERE id = ?",
 		id,
 	).Scan(&config.ID, &config.Name, &config.ProductKey, &config.DeviceKey, &config.StorageDays, &config.Enabled,
 		&config.CreatedAt, &config.UpdatedAt)
@@ -935,7 +989,7 @@ func GetStorageConfigByID(id int64) (*StorageConfig, error) {
 // UpdateStorageConfig 更新存储配置
 func UpdateStorageConfig(config *StorageConfig) error {
 	_, err := ParamDB.Exec(
-		"UPDATE storage_config SET name = ?, product_key = ?, device_key = ?, storage_days = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		"UPDATE storage_policies SET name = ?, product_key = ?, device_key = ?, storage_days = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 		config.Name, config.ProductKey, config.DeviceKey, config.StorageDays, config.Enabled, config.ID,
 	)
 	return err
@@ -943,7 +997,7 @@ func UpdateStorageConfig(config *StorageConfig) error {
 
 // DeleteStorageConfig 删除存储配置
 func DeleteStorageConfig(id int64) error {
-	_, err := ParamDB.Exec("DELETE FROM storage_config WHERE id = ?", id)
+	_, err := ParamDB.Exec("DELETE FROM storage_policies WHERE id = ?", id)
 	return err
 }
 
@@ -1184,7 +1238,7 @@ func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
 
 // CleanupOldData 清理过期数据（从内存和磁盘）
 func CleanupOldData() (int64, error) {
-	// 清理内存中的数据
+	// 清理内存中的数据，默认 30 天，实际以策略为准
 	result, err := DataDB.Exec(
 		`DELETE FROM data_points WHERE collected_at < datetime('now', '-30 days')`,
 	)
@@ -1194,6 +1248,29 @@ func CleanupOldData() (int64, error) {
 	return result.RowsAffected()
 }
 
+// InsertCollectData 将采集数据写入缓存与历史库
+func InsertCollectData(data *models.CollectData) error {
+	if data == nil {
+		return fmt.Errorf("collect data is nil")
+	}
+
+	entries := make([]DataPointEntry, 0, len(data.Fields))
+	for field, value := range data.Fields {
+		if err := SaveDataCache(data.DeviceID, data.DeviceName, field, value, "string"); err != nil {
+			log.Printf("SaveDataCache error: %v", err)
+		}
+		entries = append(entries, DataPointEntry{
+			DeviceID:    data.DeviceID,
+			DeviceName:  data.DeviceName,
+			FieldName:   field,
+			Value:       value,
+			ValueType:   "string",
+			CollectedAt: data.Timestamp,
+		})
+	}
+	return BatchSaveDataPoints(entries)
+}
+
 // CleanupOldDataByConfig 根据存储配置清理过期数据
 func CleanupOldDataByConfig() (int64, error) {
 	configs, err := GetAllStorageConfigs()
@@ -1201,21 +1278,109 @@ func CleanupOldDataByConfig() (int64, error) {
 		return 0, err
 	}
 
-	var totalDeleted int64
+	var (
+		totalDeleted int64
+		globalDays   = retentionDaysDefault
+		protectedIDs = make(map[int64]struct{}) // 具备专属策略的设备，避免全局策略覆盖
+	)
+
 	for _, config := range configs {
-		if config.Enabled == 1 {
-			result, err := DataDB.Exec(
-				fmt.Sprintf(`DELETE FROM data_points WHERE collected_at < datetime('now', '-%d days') AND device_id IN (SELECT id FROM devices WHERE name = ?)`,
-					config.StorageDays), config.Name,
-			)
+		if config.Enabled != 1 {
+			continue
+		}
+
+		// 设备专属策略：按 product_key/device_key 过滤
+		if config.ProductKey != "" || config.DeviceKey != "" {
+			ids, err := findDeviceIDs(config.ProductKey, config.DeviceKey)
+			if err != nil {
+				return totalDeleted, err
+			}
+			if len(ids) == 0 {
+				continue
+			}
+			for _, id := range ids {
+				protectedIDs[id] = struct{}{}
+			}
+			days := config.StorageDays
+			if days <= 0 {
+				days = DefaultRetentionDays
+			}
+			placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+			args := make([]interface{}, 0, len(ids)+1)
+			args = append(args, fmt.Sprintf("-%d days", days))
+			for _, id := range ids {
+				args = append(args, id)
+			}
+			query := fmt.Sprintf(`DELETE FROM data_points WHERE collected_at < datetime('now', ?) AND device_id IN (%s)`, placeholders)
+			result, err := DataDB.Exec(query, args...)
 			if err != nil {
 				return totalDeleted, err
 			}
 			deleted, _ := result.RowsAffected()
 			totalDeleted += deleted
+			continue
+		}
+
+		// 全局策略
+		if config.StorageDays > 0 {
+			globalDays = config.StorageDays
 		}
 	}
+
+	// 全局策略（或默认值），排除已受专属策略保护的设备
+	idsToExclude := make([]int64, 0, len(protectedIDs))
+	for id := range protectedIDs {
+		idsToExclude = append(idsToExclude, id)
+	}
+
+	args := []interface{}{fmt.Sprintf("-%d days", globalDays)}
+	query := `DELETE FROM data_points WHERE collected_at < datetime('now', ?)`
+	if len(idsToExclude) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(idsToExclude)), ",")
+		query += fmt.Sprintf(" AND device_id NOT IN (%s)", placeholders)
+		for _, id := range idsToExclude {
+			args = append(args, id)
+		}
+	}
+
+	result, err := DataDB.Exec(query, args...)
+	if err != nil {
+		return totalDeleted, err
+	}
+	deleted, _ := result.RowsAffected()
+	totalDeleted += deleted
+
 	return totalDeleted, nil
+}
+
+// findDeviceIDs 按 product_key/device_key 查找设备ID
+func findDeviceIDs(productKey, deviceKey string) ([]int64, error) {
+	query := "SELECT id FROM devices WHERE 1=1"
+	args := []interface{}{}
+	if productKey != "" {
+		query += " AND product_key = ?"
+		args = append(args, productKey)
+	}
+	if deviceKey != "" {
+		query += " AND device_key = ?"
+		args = append(args, deviceKey)
+	}
+
+	rows, err := ParamDB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // CleanupData 清理过期数据（根据时间戳）

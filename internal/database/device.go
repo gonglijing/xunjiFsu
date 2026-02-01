@@ -15,6 +15,8 @@ func InitDeviceTable() error {
 		name  string
 		ctype string
 	}{
+		{"product_key", "TEXT"},
+		{"device_key", "TEXT"},
 		{"driver_type", "TEXT DEFAULT 'modbus_rtu'"},
 		{"serial_port", "TEXT"},
 		{"baud_rate", "INTEGER DEFAULT 9600"},
@@ -27,6 +29,7 @@ func InitDeviceTable() error {
 		{"collect_interval", "INTEGER DEFAULT 5000"},
 		{"timeout", "INTEGER DEFAULT 1000"},
 		{"driver_id", "INTEGER"},
+		{"resource_id", "INTEGER"},
 	}
 
 	for _, col := range columns {
@@ -39,12 +42,12 @@ func InitDeviceTable() error {
 // CreateDevice 创建设备
 func CreateDevice(device *models.Device) (int64, error) {
 	result, err := ParamDB.Exec(
-		`INSERT INTO devices (name, description, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
-			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		device.Name, device.Description, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
+		`INSERT INTO devices (name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
+			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled, resource_id) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		device.Name, device.Description, device.ProductKey, device.DeviceKey, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
 		device.StopBits, device.Parity, device.IPAddress, device.PortNum, device.DeviceAddress,
-		device.CollectInterval, device.Timeout, device.DriverID, device.Enabled,
+		device.CollectInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID,
 	)
 	if err != nil {
 		return 0, err
@@ -56,13 +59,13 @@ func CreateDevice(device *models.Device) (int64, error) {
 func GetDeviceByID(id int64) (*models.Device, error) {
 	device := &models.Device{}
 	err := ParamDB.QueryRow(
-		`SELECT id, name, description, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
-			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled, created_at, updated_at 
+		`SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
+			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at 
 		FROM devices WHERE id = ?`,
 		id,
-	).Scan(&device.ID, &device.Name, &device.Description, &device.DriverType, &device.SerialPort, &device.BaudRate,
+	).Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort, &device.BaudRate,
 		&device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
-		&device.DeviceAddress, &device.CollectInterval, &device.Timeout, &device.DriverID, &device.Enabled,
+		&device.DeviceAddress, &device.CollectInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
 		&device.CreatedAt, &device.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -73,8 +76,8 @@ func GetDeviceByID(id int64) (*models.Device, error) {
 // GetAllDevices 获取所有设备
 func GetAllDevices() ([]*models.Device, error) {
 	rows, err := ParamDB.Query(
-		`SELECT id, name, description, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
-			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled, created_at, updated_at 
+		`SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
+			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at 
 		FROM devices ORDER BY id`,
 	)
 	if err != nil {
@@ -85,9 +88,9 @@ func GetAllDevices() ([]*models.Device, error) {
 	var devices []*models.Device
 	for rows.Next() {
 		device := &models.Device{}
-		if err := rows.Scan(&device.ID, &device.Name, &device.Description, &device.DriverType, &device.SerialPort,
+		if err := rows.Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort,
 			&device.BaudRate, &device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
-			&device.DeviceAddress, &device.CollectInterval, &device.Timeout, &device.DriverID, &device.Enabled,
+			&device.DeviceAddress, &device.CollectInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
 			&device.CreatedAt, &device.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -99,13 +102,13 @@ func GetAllDevices() ([]*models.Device, error) {
 // UpdateDevice 更新设备
 func UpdateDevice(device *models.Device) error {
 	_, err := ParamDB.Exec(
-		`UPDATE devices SET name = ?, description = ?, driver_type = ?, serial_port = ?, baud_rate = ?, 
+		`UPDATE devices SET name = ?, description = ?, product_key = ?, device_key = ?, driver_type = ?, serial_port = ?, baud_rate = ?, 
 			data_bits = ?, stop_bits = ?, parity = ?, ip_address = ?, port_num = ?, 
-			device_address = ?, collect_interval = ?, timeout = ?, driver_id = ?, enabled = ?, 
+			device_address = ?, collect_interval = ?, timeout = ?, driver_id = ?, enabled = ?, resource_id = ?, 
 			updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		device.Name, device.Description, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
+		device.Name, device.Description, device.ProductKey, device.DeviceKey, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
 		device.StopBits, device.Parity, device.IPAddress, device.PortNum, device.DeviceAddress,
-		device.CollectInterval, device.Timeout, device.DriverID, device.Enabled, device.ID,
+		device.CollectInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID, device.ID,
 	)
 	return err
 }

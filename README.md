@@ -34,7 +34,7 @@
 ## 技术栈
 
 - **后端**: Go 1.21+
-- **数据库**: SQLite (纯Go实现，modernc.org/sqlite，无cgo依赖)
+- **数据库**: SQLite (纯Go实现，github.com/glebarez/go-sqlite，无cgo依赖)
 - **Web框架**: Gorilla Mux
 - **前端**: HTMX + Go html/template + CSS3
 - **驱动**: Extism + TinyGo
@@ -583,5 +583,5 @@ MIT License
 
 - [Gorilla Mux](https://github.com/gorilla/mux) - Web路由
 - [HTMX](https://htmx.org/) - 动态HTML交换
-- [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) - 纯Go SQLite
+- [github.com/glebarez/go-sqlite](https://github.com/glebarez/go-sqlite) - 纯Go SQLite
 - [Extism](https://extism.org/) - WASM插件框架 (go-sdk)

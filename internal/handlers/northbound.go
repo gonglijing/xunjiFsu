@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -15,15 +16,6 @@ func (h *Handler) GetNorthboundConfigs(w http.ResponseWriter, r *http.Request) {
 	configs, err := database.GetAllNorthboundConfigs()
 	if err != nil {
 		WriteServerError(w, err.Error())
-		return
-	}
-
-	// HTMX 请求，返回 HTML 片段
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("Content-Type", "text/html")
-		if err := tmpl.ExecuteTemplate(w, "northbound.html", map[string]interface{}{"Configs": configs}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
 		return
 	}
 
@@ -50,6 +42,9 @@ func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	if config.Enabled == 1 {
 		h.registerNorthboundAdapter(&config)
 	}
+
+	h.northboundMgr.SetInterval(config.Name, time.Duration(config.UploadInterval)*time.Millisecond)
+	h.northboundMgr.SetEnabled(config.Name, config.Enabled == 1)
 
 	WriteCreated(w, config)
 }
@@ -81,6 +76,9 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	} else {
 		h.northboundMgr.UnregisterAdapter(config.Name)
 	}
+
+	h.northboundMgr.SetInterval(config.Name, time.Duration(config.UploadInterval)*time.Millisecond)
+	h.northboundMgr.SetEnabled(config.Name, config.Enabled == 1)
 
 	WriteSuccess(w, config)
 }
@@ -157,12 +155,13 @@ func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request)
 	// 更新适配器
 	if newState == 1 {
 		h.registerNorthboundAdapter(config)
+		h.northboundMgr.SetEnabled(config.Name, true)
 	} else {
 		h.northboundMgr.RemoveAdapter(config.Name)
+		h.northboundMgr.SetEnabled(config.Name, false)
 	}
 
 	WriteSuccess(w, map[string]interface{}{
 		"enabled": newState,
-		"message": "Northbound enabled"[:9] + "disabled"[(newState*9):],
 	})
 }

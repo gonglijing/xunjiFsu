@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -22,11 +21,11 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 获取驱动列表并创建映射
-	drivers := h.getAvailableDrivers()
-	driverMap := make(map[int64]string)
-	for _, d := range drivers {
-		driverMap[0] = d.Name // 使用名称作为标识
+	// 资源映射（用于展示 resource 名称/路径）
+	resources, _ := database.ListResources()
+	resourceMap := make(map[int64]*models.Resource)
+	for _, res := range resources {
+		resourceMap[res.ID] = res
 	}
 
 	// 为每个设备填充驱动名称
@@ -35,15 +34,13 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 			// 从文件名获取驱动名称
 			device.DriverName = h.getDriverNameByID(*device.DriverID)
 		}
-	}
-
-	// HTMX 请求，返回 HTML 片段
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("Content-Type", "text/html")
-		if err := tmpl.ExecuteTemplate(w, "devices.html", map[string]interface{}{"Devices": devices, "Drivers": drivers}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if device.ResourceID != nil {
+			if res, ok := resourceMap[*device.ResourceID]; ok {
+				device.ResourceName = res.Name
+				device.ResourceType = res.Type
+				device.ResourcePath = res.Path
+			}
 		}
-		return
 	}
 
 	WriteSuccess(w, devices)
@@ -64,29 +61,6 @@ func (h *Handler) getDriverNameByID(driverID int64) string {
 	return drv.Name
 }
 
-// getAvailableDrivers 获取可用的驱动列表
-func (h *Handler) getAvailableDrivers() []*models.Driver {
-	drivers := []*models.Driver{}
-
-	// 从 drivers 目录扫描 .wasm 文件
-	driversDir := "drivers"
-	entries, err := os.ReadDir(driversDir)
-	if err != nil {
-		return drivers
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".wasm") {
-			driver := &models.Driver{
-				Name:     strings.TrimSuffix(entry.Name(), ".wasm"),
-				FilePath: filepath.Join(driversDir, entry.Name()),
-			}
-			drivers = append(drivers, driver)
-		}
-	}
-	return drivers
-}
-
 // CreateDevice 创建设备
 func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 	var device models.Device
@@ -102,18 +76,6 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	device.ID = id
-
-	// 注意：设备状态由采集器定时管理，不再直接调用采集
-
-	// HTMX 请求，返回 HTML 片段
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("Content-Type", "text/html")
-		drivers := h.getAvailableDrivers()
-		if err := tmpl.ExecuteTemplate(w, "devices.html", map[string]interface{}{"Devices": []*models.Device{&device}, "Drivers": drivers}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
 
 	WriteCreated(w, device)
 }
@@ -189,62 +151,12 @@ func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
 
 	// 注意：设备状态由采集器定时管理，不再直接调用采集
 
-	// HTMX 请求，返回 HTML 片段
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("Content-Type", "text/html")
-		device.Enabled = newState
-		renderDeviceRow(w, device)
-		return
-	}
-
 	WriteSuccess(w, map[string]interface{}{
 		"enabled": newState,
 	})
 }
 
-// renderDeviceRow 渲染设备行 HTML
-func renderDeviceRow(w http.ResponseWriter, device *models.Device) {
-	statusText := "停止采集"
-	statusClass := "btn btn-success"
-	badgeClass := "badge badge-stopped"
-	
-	if device.Enabled == 1 {
-		statusText = "采集中"
-		statusClass = "btn btn-danger"
-		badgeClass = "badge badge-running"
-	}
-
-	driverName := device.DriverName
-	if driverName == "" && device.DriverID != nil {
-		driverName = fmt.Sprintf("驱动 #%d", *device.DriverID)
-	}
-
-	fmt.Fprintf(w, `<tr id="device-row-%d">
-		<td>%d</td>
-		<td>%s</td>
-		<td>%s</td>
-		<td>%s</td>
-		<td>%dms</td>
-		<td>%s</td>
-		<td><span class="%s">%s</span></td>
-		<td>
-			<button hx-post="/api/devices/%d/toggle" hx-target="#device-row-%d" hx-swap="outerHTML" class="%s" style="padding: 4px 8px;">%s</button>
-			<button hx-delete="/api/devices/%d" hx-target="#device-row-%d" hx-swap="outerHTML" hx-confirm="确定删除?" class="btn btn-danger" style="padding: 4px 8px;">删除</button>
-		</td>
-	</tr>`,
-		device.ID,
-		device.ID,
-		device.Name,
-		device.DriverType,
-		device.DeviceAddress,
-		driverName,
-		device.CollectInterval,
-		statusText,
-		badgeClass, statusText,
-		device.ID, device.ID, statusClass, statusText,
-		device.ID, device.ID,
-	)
-}
+// legacy HTMX renderer removed
 
 // ExecuteDriverFunction 执行驱动的任意函数
 //
