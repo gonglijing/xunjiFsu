@@ -4,43 +4,56 @@
         <thead>
             <tr>
                 <th>ID</th>
-                <th>名称</th>
-                <th>地址</th>
+                <th>设备名称</th>
+                <th>描述</th>
+                <th>接口类型</th>
+                <th>连接参数</th>
+                <th>设备地址</th>
                 <th>驱动</th>
-                <th>采集周期</th>
+                <th>周期</th>
                 <th>状态</th>
                 <th>操作</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="device-list">
             {{ range .Devices }}
-            <tr>
+            <tr id="device-row-{{ .ID }}">
                 <td>{{ .ID }}</td>
                 <td>{{ .Name }}</td>
-                <td>{{ .Address }}</td>
-                <td>{{ .Driver }}</td>
+                <td>{{ .Description }}</td>
+                <td>{{ if eq .InterfaceType "serial" }}串口{{ else }}网络{{ end }}</td>
+                <td>
+                    {{ if eq .InterfaceType "serial" }}
+                    {{ .SerialPort }} {{ .BaudRate }}
+                    {{ else }}
+                    {{ .IPAddress }}:{{ .PortNum }}
+                    {{ end }}
+                </td>
+                <td>{{ .DeviceAddress }}</td>
+                <td>{{ .DriverName }}</td>
                 <td>{{ .CollectInterval }}ms</td>
                 <td>
                     {{ if eq .Enabled 1 }}
-                    <span class="badge badge-running">启用</span>
+                    <span class="badge badge-running">采集中</span>
                     {{ else }}
-                    <span class="badge badge-stopped">禁用</span>
+                    <span class="badge badge-stopped">停止采集</span>
                     {{ end }}
                 </td>
                 <td>
-                    <button hx-post="/api/devices/{{ .ID }}/toggle" hx-target="closest tr" class="btn btn-primary" style="padding: 4px 8px;">
-                        {{ if eq .Enabled 1 }}禁用{{ else }}启用{{ end }}
-                    </button>
-                    <button hx-delete="/api/devices/{{ .ID }}" hx-target="closest tr" hx-confirm="确定删除?" class="btn btn-danger" style="padding: 4px 8px;">删除</button>
+                    {{ if eq .Enabled 1 }}
+                    <button hx-post="/api/devices/{{ .ID }}/toggle" hx-target="#device-row-{{ .ID }}" hx-swap="outerHTML" class="btn btn-danger" style="padding: 4px 8px;">停止</button>
+                    {{ else }}
+                    <button hx-post="/api/devices/{{ .ID }}/toggle" hx-target="#device-row-{{ .ID }}" hx-swap="outerHTML" class="btn btn-success" style="padding: 4px 8px;">采集</button>
+                    {{ end }}
+                    <button hx-delete="/api/devices/{{ .ID }}" hx-target="#device-row-{{ .ID }}" hx-swap="outerHTML" hx-confirm="确定删除?" class="btn btn-danger" style="padding: 4px 8px;">删除</button>
                 </td>
             </tr>
             {{ else }}
             <tr>
-                <td colspan="7" style="text-align: center; color: #6b7280; padding: 32px;">暂无设备</td>
+                <td colspan="10" style="text-align: center; color: #6b7280; padding: 32px;">暂无设备</td>
             </tr>
             {{ end }}
         </tbody>
     </table>
 </div>
-
 {{ end }}

@@ -80,8 +80,98 @@ func (c *Collector) Start() error {
 	c.stopChan = make(chan struct{})
 	c.mu.Unlock()
 
+	// 开机时加载所有 enable 的设备
+	if err := c.loadEnabledDevices(); err != nil {
+		log.Printf("Failed to load enabled devices: %v", err)
+	}
+
 	log.Println("Collector started")
 	return nil
+}
+
+// loadEnabledDevices 加载所有 enable 的设备到采集任务
+func (c *Collector) loadEnabledDevices() error {
+	devices, err := database.GetAllDevices()
+	if err != nil {
+		return fmt.Errorf("failed to get devices: %v", err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	loadedCount := 0
+	for _, device := range devices {
+		if device.Enabled == 1 {
+			interval := time.Duration(device.CollectInterval) * time.Millisecond
+			task := &collectTask{
+				device:   device,
+				interval: interval,
+				nextRun:  time.Now().Add(interval),
+				lastRun:  time.Time{},
+			}
+			c.tasks[device.ID] = task
+			heap.Push(c.taskHeap, task)
+			loadedCount++
+		}
+	}
+
+	log.Printf("Loaded %d enabled devices for collection", loadedCount)
+	return nil
+}
+
+// SyncDeviceStatus 同步设备状态（定时调用）
+// 1. 检查数据库中设备状态变化
+// 2. enable -> disable: 释放设备采集
+// 3. disable -> enable: 加入管理，启动采集
+// 4. 新的 enable 设备加入管理
+func (c *Collector) SyncDeviceStatus() {
+	devices, err := database.GetAllDevices()
+	if err != nil {
+		log.Printf("Failed to sync device status: %v", err)
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 获取当前正在采集的设备 ID
+	activeDeviceIDs := make(map[int64]bool)
+	for id := range c.tasks {
+		activeDeviceIDs[id] = true
+	}
+
+	for _, device := range devices {
+		task, exists := c.tasks[device.ID]
+
+		if device.Enabled == 1 {
+			// 设备启用
+			if !exists {
+				// 新启用的设备，加入采集
+				interval := time.Duration(device.CollectInterval) * time.Millisecond
+				newTask := &collectTask{
+					device:   device,
+					interval: interval,
+					nextRun:  time.Now().Add(interval),
+					lastRun:  time.Time{},
+				}
+				c.tasks[device.ID] = newTask
+				heap.Push(c.taskHeap, newTask)
+				log.Printf("Device %s (ID:%d) enabled, added to collection", device.Name, device.ID)
+			} else {
+				// 已存在的设备，更新配置
+				task.device = device
+				task.interval = time.Duration(device.CollectInterval) * time.Millisecond
+				log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
+			}
+		} else {
+			// 设备禁用
+			if exists {
+				// 从采集任务中移除
+				delete(c.tasks, device.ID)
+				log.Printf("Device %s (ID:%d) disabled, removed from collection", device.Name, device.ID)
+			}
+		}
+	}
 }
 
 // Stop 停止采集器
@@ -159,7 +249,14 @@ func (c *Collector) Run() {
 	c.wg.Add(1)
 	defer c.wg.Done()
 
+	// 启动状态同步定时器（每 10 秒检查一次）
+	statusSyncTicker := time.NewTicker(10 * time.Second)
+	defer statusSyncTicker.Stop()
+
 	for {
+		// 先同步一次设备状态
+		c.SyncDeviceStatus()
+
 		c.mu.RLock()
 		taskCount := len(c.tasks)
 		c.mu.RUnlock()
@@ -168,6 +265,8 @@ func (c *Collector) Run() {
 			select {
 			case <-c.stopChan:
 				return
+			case <-statusSyncTicker.C:
+				continue
 			case <-time.After(time.Second):
 				continue
 			}
@@ -180,6 +279,8 @@ func (c *Collector) Run() {
 			select {
 			case <-c.stopChan:
 				return
+			case <-statusSyncTicker.C:
+				continue
 			case <-time.After(time.Second):
 				continue
 			}
@@ -196,6 +297,10 @@ func (c *Collector) Run() {
 			select {
 			case <-c.stopChan:
 				return
+			case <-statusSyncTicker.C:
+				// 同步状态，但不执行采集
+				c.SyncDeviceStatus()
+				continue
 			case <-time.After(waitTime):
 				// 时间到，执行采集
 			}
@@ -255,11 +360,12 @@ func (c *Collector) collectDevice(task *collectTask) {
 		log.Printf("Failed to check thresholds: %v", err)
 	}
 
-	// 检查是否需要上传到北向
-	if now.Sub(task.lastUpload) >= time.Duration(device.UploadInterval)*time.Millisecond {
-		c.uploadToNorthbound(data)
-		task.lastUpload = now
-	}
+	// TODO: 北向上传功能待实现
+	// // 检查是否需要上传到北向
+	// if now.Sub(task.lastUpload) >= time.Duration(device.UploadInterval)*time.Millisecond {
+	// 	c.uploadToNorthbound(data)
+	// 	task.lastUpload = now
+	// }
 
 	// 重新加入队列
 	c.mu.Lock()

@@ -10,7 +10,6 @@ import (
 
 	extism "github.com/extism/go-sdk"
 	"github.com/gonglijing/xunjiFsu/internal/models"
-	"github.com/gonglijing/xunjiFsu/internal/resource"
 )
 
 // ErrDriverNotFound 驱动未找到
@@ -350,7 +349,6 @@ func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
 // DriverExecutor 驱动执行器
 type DriverExecutor struct {
 	manager     *DriverManager
-	resourceMgr *resource.ResourceManagerImpl
 	serialPorts map[int64]SerialPort // 资源ID到串口的映射
 	mu          sync.RWMutex
 	executing   map[int64]bool
@@ -370,11 +368,6 @@ func NewDriverExecutor(manager *DriverManager) *DriverExecutor {
 	}
 
 	return executor
-}
-
-// SetResourceManager 设置资源管理器（用于资源访问锁）
-func (e *DriverExecutor) SetResourceManager(rm *resource.ResourceManagerImpl) {
-	e.resourceMgr = rm
 }
 
 // RegisterSerialPort 注册串口
@@ -411,40 +404,33 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 		e.mu.Unlock()
 	}()
 
-	// 确定资源ID
-	resourceID := device.ResourceID
-	if resourceID == nil || *resourceID == 0 {
-		// 尝试从已加载的驱动获取
-		driverResourceID, err := e.manager.GetDriverResourceID(*device.DriverID)
-		if err == nil {
-			tmp := driverResourceID
-			resourceID = &tmp
-		}
+	// 构建设备配置
+	var resourceID int64 = 0
+	var resourceType string = device.DriverType
+	if resourceType == "" {
+		resourceType = "modbus_rtu"
+	}
+
+	// 构建 DeviceConfig 从接口字段
+	deviceConfig := make(map[string]string)
+	if device.DriverType == "modbus_rtu" {
+		deviceConfig["serial_port"] = device.SerialPort
+		deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
+		deviceConfig["data_bits"] = fmt.Sprintf("%d", device.DataBits)
+		deviceConfig["stop_bits"] = fmt.Sprintf("%d", device.StopBits)
+		deviceConfig["parity"] = device.Parity
+	} else {
+		deviceConfig["ip_address"] = device.IPAddress
+		deviceConfig["port_num"] = fmt.Sprintf("%d", device.PortNum)
 	}
 
 	ctx := &DriverContext{
 		DeviceID:     device.ID,
 		DeviceName:   device.Name,
-		ResourceID:   0,
-		ResourceType: "serial",
-		Config:       make(map[string]string),
-		DeviceConfig: device.DeviceConfig,
-	}
-
-	if resourceID != nil && *resourceID > 0 {
-		ctx.ResourceID = *resourceID
-
-		// 如果配置了资源管理器，使用资源访问锁确保串行访问
-		if e.resourceMgr != nil {
-			locker := e.resourceMgr.GetLocker()
-			if locker != nil {
-				// 尝试获取资源锁，设置超时避免永久阻塞
-				if err := locker.LockWithTimeout(*resourceID, 10*time.Second); err != nil {
-					return nil, fmt.Errorf("failed to lock resource %d: %w", *resourceID, err)
-				}
-				defer locker.Unlock(*resourceID)
-			}
-		}
+		ResourceID:   resourceID,
+		ResourceType: resourceType,
+		Config:       deviceConfig,
+		DeviceConfig: "", // 设备特定配置为空
 	}
 
 	return e.manager.ExecuteDriver(*device.DriverID, "collect", ctx)

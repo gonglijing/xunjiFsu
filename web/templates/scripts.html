@@ -9,14 +9,67 @@
         console.error('HTMX Error:', evt.detail.xhr.status);
     });
     
+    // 模态框点击关闭处理
+    document.addEventListener('DOMContentLoaded', function() {
+        var modal = document.getElementById('modal-container');
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                var content = modal.querySelector('.modal-content');
+                var backdrop = modal.querySelector('.modal-backdrop');
+                
+                // 只在点击 backdrop 时关闭（不点击内容区域）
+                if (e.target === backdrop) {
+                    closeAllModals();
+                }
+            });
+        }
+    });
+    
     // 关闭模态框
-    function closeModal() {
+    function closeModal(modalId) {
+        if (modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+        document.getElementById('modal-container').classList.remove('active');
+    }
+    
+    // 关闭所有模态框
+    function closeAllModals() {
+        document.querySelectorAll('.modal-content > div').forEach(function(el) {
+            el.classList.add('hidden');
+        });
         document.getElementById('modal-container').classList.remove('active');
     }
     
     // 打开模态框
     function openModal(modalId) {
-        document.getElementById(modalId).classList.add('active');
+        // 先关闭所有模态框
+        closeAllModals();
+        // 打开指定模态框
+        document.getElementById(modalId).classList.remove('hidden');
+        document.getElementById('modal-container').classList.add('active');
+        
+        // 如果是设备模态框，获取驱动列表
+        if (modalId === 'device-modal') {
+            var driverSelect = document.querySelector('#device-modal select[name="driver_id"]');
+            if (driverSelect && driverSelect.options.length <= 1) {
+                fetch('/api/drivers')
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        if (data.data && Array.isArray(data.data)) {
+                            // 清空现有选项
+                            driverSelect.innerHTML = '<option value="">选择驱动...</option>';
+                            data.data.forEach(function(driver, idx) {
+                                var option = document.createElement('option');
+                                option.value = driver.id || (idx + 1);
+                                option.textContent = driver.name;
+                                driverSelect.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(function() {});
+            }
+        }
     }
     
     // 切换标签页
@@ -32,6 +85,47 @@
         // 激活当前
         document.getElementById('tab-' + tabName).classList.add('active');
         document.getElementById('tab-btn-' + tabName).classList.add('active');
+    }
+    
+    // 上传驱动文件
+    function uploadDriver(input) {
+        if (input.files && input.files[0]) {
+            var formData = new FormData();
+            formData.append('file', input.files[0]);
+            
+            fetch('/api/drivers/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                // 刷新驱动列表
+                htmx.ajax('GET', '/api/drivers', {target: '#tab-drivers', swap: 'innerHTML'});
+                showToast(data.success ? 'success' : 'error', data.success ? '上传成功' : '上传失败', data.error || ('文件已上传: ' + (data.data && data.data.filename)));
+            })
+            .catch(function(err) {
+                showToast('error', '上传失败', err.message);
+            });
+        }
+        // 清空输入，允许再次上传同一文件
+        input.value = '';
+    }
+    
+    // 切换驱动类型字段显示
+    function toggleDriverFields() {
+        var driverType = document.getElementById('device-driver-type');
+        var rtuFields = document.getElementById('modbus-rtu-fields');
+        var tcpFields = document.getElementById('modbus-tcp-fields');
+        
+        if (driverType && rtuFields && tcpFields) {
+            if (driverType.value === 'modbus_rtu') {
+                rtuFields.classList.remove('hidden');
+                tcpFields.classList.add('hidden');
+            } else {
+                rtuFields.classList.add('hidden');
+                tcpFields.classList.remove('hidden');
+            }
+        }
     }
 </script>
 {{ end }}

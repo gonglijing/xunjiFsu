@@ -50,7 +50,6 @@ type StatusData struct {
 	Devices          DeviceStats     `json:"devices"`
 	Northbound       NorthboundStats `json:"northbound"`
 	Alarms           AlarmStats      `json:"alarms"`
-	Resources        ResourceStats   `json:"resources"`
 	Drivers          DriverStats     `json:"drivers"`
 	Timestamp        time.Time       `json:"timestamp"`
 }
@@ -72,11 +71,6 @@ type AlarmStats struct {
 	Total      int `json:"total"`
 	Unacked    int `json:"unacked"`
 	Today      int `json:"today"`
-}
-
-// ResourceStats 资源统计
-type ResourceStats struct {
-	Total int `json:"total"`
 }
 
 // DriverStats 驱动统计
@@ -121,9 +115,6 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 资源统计
-	resourceCount := h.resourceMgr.GetResourceCount()
-
 	// 驱动统计
 	drivers := h.driverManager.ListDrivers()
 	driverTotal := len(drivers)
@@ -142,9 +133,6 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 			Total:   alarmTotal,
 			Unacked: alarmUnacked,
 			Today:   alarmToday,
-		},
-		Resources: ResourceStats{
-			Total: resourceCount,
 		},
 		Drivers: DriverStats{
 			Total: driverTotal,
@@ -195,8 +183,8 @@ func renderTemplate(w http.ResponseWriter, page string, name string, data interf
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// 将渲染后的内容添加到数据中
-		dataMap["Content"] = contentBuf.String()
+		// 将渲染后的内容添加到数据中（使用 template.HTML 避免转义）
+		dataMap["Content"] = template.HTML(contentBuf.String())
 		// 渲染 base 模板
 		if err := tmpl.ExecuteTemplate(w, "base", dataMap); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

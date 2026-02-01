@@ -28,10 +28,7 @@
         <!-- 标签页 -->
         <div class="card">
     <div class="tabs mb-6">
-        <button onclick="switchTab('resources')" id="tab-btn-resources" class="tab-btn active">
-            ◎ 资源管理
-        </button>
-        <button onclick="switchTab('devices')" id="tab-btn-devices" class="tab-btn">
+        <button onclick="switchTab('devices')" id="tab-btn-devices" class="tab-btn active">
             ◎ 设备管理
         </button>
         <button onclick="switchTab('drivers')" id="tab-btn-drivers" class="tab-btn">
@@ -49,24 +46,8 @@
             </div>
             
     <div>
-                <!-- 资源管理 -->
-                <div id="tab-resources" class="tab-content active">
-                    <div class="card-header">
-                <h3 class="card-title">资源列表</h3>
-                <button onclick="openModal('resource-modal')" class="btn btn-primary">
-                    + 添加资源
-                </button>
-                    </div>
-                    <div class="table-container" hx-get="/api/resources" hx-trigger="load" hx-target="this">
-                <div class="text-center" style="padding: 48px; color: var(--text-muted);">
-                    <div class="loading-spinner" style="margin: 0 auto 16px;"></div>
-                    <div>加载中...</div>
-                </div>
-            </div>
-                </div>
-                
                 <!-- 设备管理 -->
-                <div id="tab-devices" class="tab-content">
+                <div id="tab-devices" class="tab-content active">
                     <div class="card-header">
                 <h3 class="card-title">设备列表</h3>
                 <button onclick="openModal('device-modal')" class="btn btn-primary">
@@ -84,15 +65,12 @@
                 <!-- 驱动管理 -->
                 <div id="tab-drivers" class="tab-content">
                     <div class="card-header">
-                <h3 class="card-title">驱动列表</h3>
+                <h3 class="modal-title">驱动列表</h3>
                 <div class="flex gap-3">
                     <button onclick="document.getElementById('driver-upload').click()" class="btn btn-primary">
                         ↑ 上传驱动
                     </button>
-                            <input type="file" id="driver-upload" accept=".wasm" hx-post="/api/drivers/upload" hx-target="this" style="display:none">
-                    <button onclick="openModal('driver-modal')" class="btn btn-primary">
-                        + 添加驱动
-                    </button>
+                            <input type="file" id="driver-upload" name="file" accept=".wasm" onchange="uploadDriver(this)" style="display:none">
                         </div>
                     </div>
                     <div class="table-container" hx-get="/api/drivers" hx-trigger="load" hx-target="this">
@@ -139,11 +117,11 @@
                 <div id="tab-alarms" class="tab-content">
                     <div class="card-header">
                 <h3 class="card-title">报警日志</h3>
-                <button hx-get="/api/alarms" hx-trigger="click" class="btn btn-primary">
+                <button onclick="htmx.trigger(htmx.find('#alarm-list'), 'load')" class="btn btn-primary">
                     ↻ 刷新
                 </button>
                     </div>
-                    <div class="table-container" hx-get="/api/alarms" hx-trigger="load" hx-target="this">
+                    <div id="alarm-list" class="table-container" hx-get="/api/alarms" hx-trigger="load" hx-target="this">
                 <div class="text-center" style="padding: 48px; color: var(--text-muted);">
                     <div class="loading-spinner" style="margin: 0 auto 16px;"></div>
                     <div>加载中...</div>
@@ -155,43 +133,8 @@
     
     <!-- 模态框容器 -->
     <div id="modal-container" class="modal">
-    <div class="modal-backdrop" onclick="closeAllModals()"></div>
+    <div class="modal-backdrop"></div>
         <div class="modal-content">
-            <!-- 添加资源表单 -->
-        <div id="resource-modal" class="hidden">
-            <div class="modal-header">
-                <h3 class="modal-title">添加资源</h3>
-                <button class="modal-close" onclick="closeModal('resource-modal')">&times;</button>
-            </div>
-            <form hx-post="/api/resources" hx-target="#resource-modal-result" hx-swap="innerHTML">
-                <div id="resource-modal-result"></div>
-                    <div class="form-group">
-                        <label class="form-label">资源名称</label>
-                    <input type="text" name="name" class="form-input" required placeholder="输入资源名称">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">资源类型</label>
-                    <select name="type" class="form-select">
-                            <option value="serial">串口 (Serial)</option>
-                            <option value="tcp">TCP连接</option>
-                            <option value="udp">UDP连接</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">连接配置</label>
-                        <input type="text" name="config" class="form-input" placeholder="串口: /dev/ttyUSB0,9600..." required>
-                    </div>
-                <div class="flex gap-3" style="margin-top: 24px;">
-                    <button type="button" onclick="closeModal('resource-modal')" class="btn" style="flex:1; background:rgba(107,114,128,0.2); border-color:rgba(107,114,128,0.4); color:var(--text-secondary);">
-                        取消
-                    </button>
-                    <button type="submit" class="btn btn-primary" style="flex:1;">
-                        确认添加
-                    </button>
-                    </div>
-                </form>
-            </div>
-            
             <!-- 添加设备表单 -->
         <div id="device-modal" class="hidden">
             <div class="modal-header">
@@ -223,6 +166,197 @@
                 </form>
             </div>
         </div>
+    </div>
+
+    <!-- 添加设备表单 -->
+    <div id="device-modal" class="hidden">
+        <div class="modal-header">
+            <h3 class="modal-title">添加设备</h3>
+            <button class="modal-close" onclick="closeModal('device-modal')">&times;</button>
+        </div>
+        <form hx-post="/api/devices" hx-target="#device-modal-result" hx-swap="innerHTML">
+            <div id="device-modal-result"></div>
+            
+            <!-- 基本信息 -->
+            <div class="form-group">
+                <label class="form-label">设备名称</label>
+                <input type="text" name="name" class="form-input" required placeholder="输入设备名称">
+            </div>
+            <div class="form-group">
+                <label class="form-label">驱动类型</label>
+                <select name="driver_type" class="form-select" id="device-driver-type" onchange="toggleDriverFields()">
+                    <option value="modbus_rtu">ModbusRTU (串口)</option>
+                    <option value="modbus_tcp">ModbusTCP (网络)</option>
+                </select>
+            </div>
+            
+            <!-- ModbusRTU 配置 -->
+            <div id="modbus-rtu-fields" class="driver-fields">
+                <div class="form-group">
+                    <label class="form-label">串口名称</label>
+                    <input type="text" name="serial_port" class="form-input" placeholder="如: /dev/ttyUSB0 或 COM1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">波特率</label>
+                    <select name="baud_rate" class="form-select">
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">数据位</label>
+                    <select name="data_bits" class="form-select">
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8" selected>8</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">停止位</label>
+                    <select name="stop_bits" class="form-select">
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">校验</label>
+                    <select name="parity" class="form-select">
+                        <option value="N" selected>无 (None)</option>
+                        <option value="O">奇 (Odd)</option>
+                        <option value="E">偶 (Even)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- ModbusTCP 配置 -->
+            <div id="modbus-tcp-fields" class="driver-fields hidden">
+                <div class="form-group">
+                    <label class="form-label">IP地址</label>
+                    <input type="text" name="ip_address" class="form-input" placeholder="如: 192.168.1.100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">端口</label>
+                    <input type="number" name="port_num" class="form-input" value="502" placeholder="如: 502">
+                </div>
+            </div>
+            
+            <!-- 设备地址 -->
+            <div class="form-group">
+                <label class="form-label">设备地址 (从站号)</label>
+                <input type="text" name="device_address" class="form-input" placeholder="如: 1" required>
+            </div>
+            
+            <!-- 通用设置 -->
+            <div class="form-group">
+                <label class="form-label">采集周期 (ms)</label>
+                <input type="number" name="collect_interval" class="form-input" value="5000" placeholder="如: 5000">
+            </div>
+            <div class="form-group">
+                <label class="form-label">响应超时 (ms)</label>
+                <input type="number" name="timeout" class="form-input" value="1000" placeholder="如: 1000">
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" name="enabled" value="1" style="margin-right: 8px;">
+                    立即开始采集
+                </label>
+            </div>
+            
+            <div class="flex gap-3" style="margin-top: 24px;">
+                <button type="button" onclick="closeModal('device-modal')" class="btn" style="flex:1; background:rgba(107,114,128,0.2); border-color:rgba(107,114,128,0.4); color:var(--text-secondary);">取消</button>
+                <button type="submit" class="btn btn-primary" style="flex:1;">确认添加</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 北向配置表单 -->
+    <div id="northbound-modal" class="hidden">
+        <div class="modal-header">
+            <h3 class="modal-title">添加北向配置</h3>
+            <button class="modal-close" onclick="closeModal('northbound-modal')">&times;</button>
+        </div>
+        <form hx-post="/api/northbound" hx-target="#northbound-modal-result" hx-swap="innerHTML">
+            <div id="northbound-modal-result"></div>
+            <div class="form-group">
+                <label class="form-label">配置名称</label>
+                <input type="text" name="name" class="form-input" required placeholder="输入配置名称">
+            </div>
+            <div class="form-group">
+                <label class="form-label">类型</label>
+                <select name="type" class="form-select">
+                    <option value="http">HTTP</option>
+                    <option value="mqtt">MQTT</option>
+                    <option value="xunji">循迹云</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">服务器地址</label>
+                <input type="text" name="config" class="form-input" placeholder="http://example.com/api" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">上传间隔 (ms)</label>
+                <input type="number" name="upload_interval" class="form-input" value="10000" min="1000">
+            </div>
+            <div class="flex gap-3" style="margin-top: 24px;">
+                <button type="button" onclick="closeModal('northbound-modal')" class="btn" style="flex:1; background:rgba(107,114,128,0.2); border-color:rgba(107,114,128,0.4); color:var(--text-secondary);">取消</button>
+                <button type="submit" class="btn btn-primary" style="flex:1;">确认添加</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 阈值配置表单 -->
+    <div id="threshold-modal" class="hidden">
+        <div class="modal-header">
+            <h3 class="modal-title">添加阈值配置</h3>
+            <button class="modal-close" onclick="closeModal('threshold-modal')">&times;</button>
+        </div>
+        <form hx-post="/api/thresholds" hx-target="#threshold-modal-result" hx-swap="innerHTML">
+            <div id="threshold-modal-result"></div>
+            <div class="form-group">
+                <label class="form-label">设备</label>
+                <select name="device_id" class="form-select" required>
+                    <option value="">-- 选择设备 --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">变量名</label>
+                <input type="text" name="field_name" class="form-input" placeholder="如: temperature" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">条件</label>
+                <select name="operator" class="form-select">
+                    <option value="&gt;">大于 &gt;</option>
+                    <option value="&gt;=">大于等于 &gt;=</option>
+                    <option value="&lt;">小于 &lt;</option>
+                    <option value="&lt;=">小于等于 &lt;=</option>
+                    <option value="==">等于 ==</option>
+                    <option value="!=">不等于 !=</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">阈值</label>
+                <input type="text" name="value" class="form-input" placeholder="阈值数值" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">严重程度</label>
+                <select name="severity" class="form-select">
+                    <option value="warning">警告</option>
+                    <option value="critical">严重</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">报警消息</label>
+                <input type="text" name="message" class="form-input" placeholder="触发时的报警消息">
+            </div>
+            <div class="flex gap-3" style="margin-top: 24px;">
+                <button type="button" onclick="closeModal('threshold-modal')" class="btn" style="flex:1; background:rgba(107,114,128,0.2); border-color:rgba(107,114,128,0.4); color:var(--text-secondary);">取消</button>
+                <button type="submit" class="btn btn-primary" style="flex:1;">确认添加</button>
+            </div>
+        </form>
     </div>
 
     <script>
@@ -271,36 +405,6 @@ document.addEventListener('htmx:afterRequest', function(evt) {
 document.addEventListener('htmx:responseError', function(evt) {
     showToast('error', '请求失败', '请稍后重试');
 });
-
-function closeModal(modalId) {
-    document.getElementById(modalId).classList.add('hidden');
-}
-
-function closeAllModals() {
-    document.querySelectorAll('.modal-content > div').forEach(el => {
-        el.classList.add('hidden');
-    });
-    document.getElementById('modal-container').classList.remove('active');
-        }
-        
-        function openModal(modalId) {
-    document.querySelectorAll('.modal-content > div').forEach(el => {
-        el.classList.add('hidden');
-    });
-    document.getElementById(modalId).classList.remove('hidden');
-            document.getElementById('modal-container').classList.add('active');
-        }
-        
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(function(el) {
-                el.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-btn').forEach(function(el) {
-                el.classList.remove('active');
-            });
-            document.getElementById('tab-' + tabName).classList.add('active');
-            document.getElementById('tab-btn-' + tabName).classList.add('active');
-        }
 
 // Mobile menu toggle
 document.addEventListener('DOMContentLoaded', function() {

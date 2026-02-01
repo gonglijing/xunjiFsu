@@ -3,6 +3,9 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
@@ -19,10 +22,25 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 获取驱动列表并创建映射
+	drivers := h.getAvailableDrivers()
+	driverMap := make(map[int64]string)
+	for _, d := range drivers {
+		driverMap[0] = d.Name // 使用名称作为标识
+	}
+
+	// 为每个设备填充驱动名称
+	for _, device := range devices {
+		if device.DriverID != nil {
+			// 从文件名获取驱动名称
+			device.DriverName = h.getDriverNameByID(*device.DriverID)
+		}
+	}
+
 	// HTMX 请求，返回 HTML 片段
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		if err := tmpl.ExecuteTemplate(w, "devices.html", map[string]interface{}{"Devices": devices}); err != nil {
+		if err := tmpl.ExecuteTemplate(w, "devices.html", map[string]interface{}{"Devices": devices, "Drivers": drivers}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
@@ -31,11 +49,49 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, devices)
 }
 
+// getDriverNameByID 根据ID获取驱动名称（从文件名）
+func (h *Handler) getDriverNameByID(driverID int64) string {
+	// 从数据库获取驱动信息
+	drv, err := database.GetDriverByID(driverID)
+	if err != nil {
+		return fmt.Sprintf("驱动 #%d", driverID)
+	}
+	// 从 file_path 提取文件名作为驱动名称
+	if drv.FilePath != "" {
+		name := filepath.Base(drv.FilePath)
+		return strings.TrimSuffix(name, ".wasm")
+	}
+	return drv.Name
+}
+
+// getAvailableDrivers 获取可用的驱动列表
+func (h *Handler) getAvailableDrivers() []*models.Driver {
+	drivers := []*models.Driver{}
+
+	// 从 drivers 目录扫描 .wasm 文件
+	driversDir := "drivers"
+	entries, err := os.ReadDir(driversDir)
+	if err != nil {
+		return drivers
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".wasm") {
+			driver := &models.Driver{
+				Name:     strings.TrimSuffix(entry.Name(), ".wasm"),
+				FilePath: filepath.Join(driversDir, entry.Name()),
+			}
+			drivers = append(drivers, driver)
+		}
+	}
+	return drivers
+}
+
 // CreateDevice 创建设备
 func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 	var device models.Device
 	if err := ParseRequest(r, &device); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+		WriteBadRequest(w, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -47,12 +103,16 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 
 	device.ID = id
 
-	// 如果启用了采集，自动添加到采集器
-	if device.Enabled == 1 {
-		if err := h.collector.AddDevice(&device); err != nil {
-			WriteServerError(w, err.Error())
-			return
+	// 注意：设备状态由采集器定时管理，不再直接调用采集
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		drivers := h.getAvailableDrivers()
+		if err := tmpl.ExecuteTemplate(w, "devices.html", map[string]interface{}{"Devices": []*models.Device{&device}, "Drivers": drivers}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
 	}
 
 	WriteCreated(w, device)
@@ -78,12 +138,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 处理使能状态变化
-	if device.Enabled == 1 {
-		h.collector.AddDevice(&device)
-	} else {
-		h.collector.RemoveDevice(device.ID)
-	}
+	// 注意：设备状态由采集器定时管理，不再直接调用采集
 
 	WriteSuccess(w, device)
 }
@@ -96,18 +151,15 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 先获取设备信息，删除时从采集器移除
-	device, err := database.GetDeviceByID(id)
-	if err == nil {
-		h.collector.RemoveDevice(device.ID)
-	}
+	// 注意：设备状态由采集器定时管理，删除时不需要手动移除
 
 	if err := database.DeleteDevice(id); err != nil {
 		WriteServerError(w, err.Error())
 		return
 	}
 
-	WriteSuccess(w, nil)
+	// 返回空响应，HTMX 会移除该行
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ToggleDeviceEnable 切换设备使能状态
@@ -135,17 +187,63 @@ func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 更新采集器
-	if newState == 1 {
-		h.collector.AddDevice(device)
-	} else {
-		h.collector.RemoveDevice(device.ID)
+	// 注意：设备状态由采集器定时管理，不再直接调用采集
+
+	// HTMX 请求，返回 HTML 片段
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		device.Enabled = newState
+		renderDeviceRow(w, device)
+		return
 	}
 
 	WriteSuccess(w, map[string]interface{}{
 		"enabled": newState,
-		"message": "Device enabled"[:7] + "disabled"[(newState*7):],
 	})
+}
+
+// renderDeviceRow 渲染设备行 HTML
+func renderDeviceRow(w http.ResponseWriter, device *models.Device) {
+	statusText := "停止采集"
+	statusClass := "btn btn-success"
+	badgeClass := "badge badge-stopped"
+	
+	if device.Enabled == 1 {
+		statusText = "采集中"
+		statusClass = "btn btn-danger"
+		badgeClass = "badge badge-running"
+	}
+
+	driverName := device.DriverName
+	if driverName == "" && device.DriverID != nil {
+		driverName = fmt.Sprintf("驱动 #%d", *device.DriverID)
+	}
+
+	fmt.Fprintf(w, `<tr id="device-row-%d">
+		<td>%d</td>
+		<td>%s</td>
+		<td>%s</td>
+		<td>%s</td>
+		<td>%dms</td>
+		<td>%s</td>
+		<td><span class="%s">%s</span></td>
+		<td>
+			<button hx-post="/api/devices/%d/toggle" hx-target="#device-row-%d" hx-swap="outerHTML" class="%s" style="padding: 4px 8px;">%s</button>
+			<button hx-delete="/api/devices/%d" hx-target="#device-row-%d" hx-swap="outerHTML" hx-confirm="确定删除?" class="btn btn-danger" style="padding: 4px 8px;">删除</button>
+		</td>
+	</tr>`,
+		device.ID,
+		device.ID,
+		device.Name,
+		device.DriverType,
+		device.DeviceAddress,
+		driverName,
+		device.CollectInterval,
+		statusText,
+		badgeClass, statusText,
+		device.ID, device.ID, statusClass, statusText,
+		device.ID, device.ID,
+	)
 }
 
 // ExecuteDriverFunction 执行驱动的任意函数
@@ -214,9 +312,9 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 		DeviceID:     device.ID,
 		DeviceName:   device.Name,
 		ResourceID:   0,
-		ResourceType: "serial",
+		ResourceType: device.DriverType,
 		Config:       config,
-		DeviceConfig: device.DeviceConfig,
+		DeviceConfig: "",
 	}
 
 	// 调用驱动的指定函数

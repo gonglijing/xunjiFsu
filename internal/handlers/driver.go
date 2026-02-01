@@ -11,16 +11,40 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gorilla/mux"
 )
 
 // ==================== 驱动管理 ====================
 
-// GetDrivers 获取所有驱动
+// GetDrivers 获取所有驱动（从目录扫描）
 func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
-	drivers, err := database.GetAllDrivers()
+	drivers := []*models.Driver{}
+
+	// 从 drivers 目录扫描 .wasm 文件
+	driversDir := "drivers"
+	entries, err := os.ReadDir(driversDir)
 	if err != nil {
-		WriteServerError(w, err.Error())
-		return
+		// 目录不存在或无法读取
+		if os.IsNotExist(err) {
+			// 返回空列表
+		} else {
+			WriteServerError(w, "Failed to read drivers directory: "+err.Error())
+			return
+		}
+	} else {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".wasm") {
+				info, _ := entry.Info()
+				driver := &models.Driver{
+					Name:      strings.TrimSuffix(entry.Name(), ".wasm"),
+					FilePath:  filepath.Join(driversDir, entry.Name()),
+					Filename:  entry.Name(),
+					Size:      info.Size(),
+					CreatedAt: info.ModTime(),
+				}
+				drivers = append(drivers, driver)
+			}
+		}
 	}
 
 	// HTMX 请求，返回 HTML 片段
@@ -113,20 +137,32 @@ func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, driver)
 }
 
-// DeleteDriver 删除驱动
+// DeleteDriver 删除驱动（按文件名）
 func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	// 获取文件名
+	vars := mux.Vars(r)
+	filename := vars["id"]
+
+	if filename == "" {
+		WriteBadRequest(w, "Invalid filename")
 		return
 	}
 
-	if err := database.DeleteDriver(id); err != nil {
-		WriteServerError(w, err.Error())
+	// 构建完整路径
+	filePath := filepath.Join("drivers", filename)
+
+	// 删除文件
+	if err := os.Remove(filePath); err != nil {
+		if os.IsNotExist(err) {
+			WriteNotFound(w, "File not found")
+			return
+		}
+		WriteServerError(w, "Failed to delete file: "+err.Error())
 		return
 	}
 
-	WriteSuccess(w, nil)
+	// 返回空响应，HTMX 会移除该行
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // UploadDriverFile 上传驱动文件

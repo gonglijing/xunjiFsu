@@ -21,7 +21,6 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
-	"github.com/gonglijing/xunjiFsu/internal/resource"
 
 	gorillaHandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -166,6 +165,12 @@ func main() {
 		logger.Fatal("Failed to initialize param schema", err)
 	}
 
+	// 初始化设备表
+	logger.Info("Initializing device table...")
+	if err := database.InitDeviceTable(); err != nil {
+		logger.Fatal("Failed to initialize device table", err)
+	}
+
 	logger.Info("Initializing data database schema...")
 	if err := database.InitDataSchema(); err != nil {
 		logger.Fatal("Failed to initialize data schema", err)
@@ -190,13 +195,9 @@ func main() {
 	// 初始化组件
 	logger.Info("Initializing components...")
 
-	// 资源管理器
-	resourceMgr := resource.NewResourceManagerImpl()
-
 	// 驱动管理器
 	driverManager := driver.NewDriverManager()
 	driverExecutor := driver.NewDriverExecutor(driverManager)
-	driverExecutor.SetResourceManager(resourceMgr)
 
 	// 北向管理器
 	northboundMgr := northbound.NewNorthboundManager()
@@ -226,7 +227,6 @@ func main() {
 		sessionManager,
 		collect,
 		driverManager,
-		resourceMgr,
 		northboundMgr,
 	)
 
@@ -269,14 +269,6 @@ func main() {
 	// API路由 - 采集控制
 	r.HandleFunc("/api/collector/start", h.StartCollector).Methods("POST")
 	r.HandleFunc("/api/collector/stop", h.StopCollector).Methods("POST")
-
-	// API路由 - 资源
-	r.HandleFunc("/api/resources", h.GetResources).Methods("GET")
-	r.HandleFunc("/api/resources", h.CreateResource).Methods("POST")
-	r.HandleFunc("/api/resources/{id}", h.UpdateResource).Methods("PUT")
-	r.HandleFunc("/api/resources/{id}", h.DeleteResource).Methods("DELETE")
-	r.HandleFunc("/api/resources/{id}/open", h.OpenResource).Methods("POST")
-	r.HandleFunc("/api/resources/{id}/close", h.CloseResource).Methods("POST")
 
 	// API路由 - 驱动
 	r.HandleFunc("/api/drivers", h.GetDrivers).Methods("GET")

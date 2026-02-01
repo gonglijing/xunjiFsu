@@ -17,8 +17,10 @@ type Resource struct {
 	ID        int64     `json:"id" db:"id"`
 	Name      string    `json:"name" db:"name"`
 	Type      string    `json:"type" db:"type"` // serial, di, do
-	Port      string    `json:"port" db:"port"` // 串口路径
+	Port      string    `json:"port,omitempty" db:"port"` // 串口路径
+	Config    string    `json:"config,omitempty" db:"port"` // 表单提交的连接配置
 	Address   int       `json:"address" db:"address"` // DI/DO 地址
+	Status    string    `json:"status,omitempty"` // connected, disconnected (运行时状态)
 	Enabled   int       `json:"enabled" db:"enabled"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
@@ -32,6 +34,8 @@ type Driver struct {
 	Description  string    `json:"description" db:"description"`
 	Version      string    `json:"version" db:"version"`
 	ConfigSchema string    `json:"config_schema" db:"config_schema"`
+	Filename     string    `json:"filename,omitempty"`  // 文件名（不存数据库）
+	Size         int64     `json:"size,omitempty"`      // 文件大小（不存数据库）
 	Enabled      int       `json:"enabled" db:"enabled"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
@@ -42,23 +46,28 @@ type Device struct {
 	ID              int64     `json:"id" db:"id"`
 	Name            string    `json:"name" db:"name"`
 	Description     string    `json:"description" db:"description"`
-	ResourceID      *int64    `json:"resource_id" db:"resource_id"`
-	DriverID        *int64    `json:"driver_id" db:"driver_id"`
-	DeviceConfig    string    `json:"device_config" db:"device_config"`
-	CollectInterval int       `json:"collect_interval" db:"collect_interval"` // 采集周期(ms)
-	UploadInterval  int       `json:"upload_interval" db:"upload_interval"`   // 上传周期(ms)
+	// 驱动类型: modbus_rtu, modbus_tcp
+	DriverType      string    `json:"driver_type" db:"driver_type"`
 	// 串口参数
-	BaudRate  int    `json:"baud_rate" db:"baud_rate"`
-	DataBits  int    `json:"data_bits" db:"data_bits"`
-	StopBits  int    `json:"stop_bits" db:"stop_bits"`
-	Parity    string `json:"parity" db:"parity"` // N, O, E
+	SerialPort      string    `json:"serial_port" db:"serial_port"`
+	BaudRate        int       `json:"baud_rate" db:"baud_rate"`
+	DataBits        int       `json:"data_bits" db:"data_bits"`
+	StopBits        int       `json:"stop_bits" db:"stop_bits"`
+	Parity          string    `json:"parity" db:"parity"` // N, O, E
 	// 网口参数
-	IPAddress string `json:"ip_address" db:"ip_address"`
-	PortNum   int    `json:"port_num" db:"port_num"`
-	Protocol  string `json:"protocol" db:"protocol"` // tcp, udp
-	Enabled   int    `json:"enabled" db:"enabled"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	IPAddress       string    `json:"ip_address" db:"ip_address"`
+	PortNum         int       `json:"port_num" db:"port_num"`
+	// 设备地址和周期
+	DeviceAddress   string    `json:"device_address" db:"device_address"`
+	CollectInterval int       `json:"collect_interval" db:"collect_interval"` // 采集周期(ms)
+	Timeout         int       `json:"timeout" db:"timeout"` // 响应超时(ms)
+	// 驱动（保留用于未来扩展）
+	DriverID        *int64    `json:"driver_id" db:"driver_id"`
+	DriverName      string    `json:"driver_name,omitempty"`
+	// 状态
+	Enabled         int       `json:"enabled" db:"enabled"` // 1=采集, 0=停止
+	CreatedAt       time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // DeviceDriverMapping 设备驱动映射
