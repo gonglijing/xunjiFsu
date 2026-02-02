@@ -14,6 +14,12 @@ import (
 type Config struct {
 	// 服务器配置
 	ListenAddr string `json:"listen_addr"`
+	// TLS/证书配置
+	TLSCertFile string `json:"tls_cert_file"`
+	TLSKeyFile  string `json:"tls_key_file"`
+	TLSAuto     bool   `json:"tls_auto"`      // 是否启用自动申请（Let's Encrypt）
+	TLSDomain   string `json:"tls_domain"`    // 自动证书域名
+	TLSCacheDir string `json:"tls_cache_dir"` // 自动证书缓存目录
 
 	// HTTP超时配置
 	HTTPReadTimeout  time.Duration `json:"http_read_timeout"`
@@ -53,6 +59,11 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		ListenAddr:            ":8080",
+		TLSCertFile:           "",
+		TLSKeyFile:            "",
+		TLSAuto:               false,
+		TLSDomain:             "",
+		TLSCacheDir:           "cert-cache",
 		HTTPReadTimeout:       30 * time.Second,
 		HTTPWriteTimeout:      30 * time.Second,
 		HTTPIdleTimeout:       60 * time.Second,
@@ -193,6 +204,23 @@ func loadFromEnv(cfg *Config) {
 	}
 	if v := os.Getenv("DATA_DB_PATH"); v != "" {
 		cfg.DataDBPath = v
+	}
+
+	// TLS
+	if v := os.Getenv("TLS_CERT_FILE"); v != "" {
+		cfg.TLSCertFile = v
+	}
+	if v := os.Getenv("TLS_KEY_FILE"); v != "" {
+		cfg.TLSKeyFile = v
+	}
+	if v := os.Getenv("TLS_AUTO"); strings.ToLower(v) == "true" || v == "1" {
+		cfg.TLSAuto = true
+	}
+	if v := os.Getenv("TLS_DOMAIN"); v != "" {
+		cfg.TLSDomain = v
+	}
+	if v := os.Getenv("TLS_CACHE_DIR"); v != "" {
+		cfg.TLSCacheDir = v
 	}
 
 	// 会话配置

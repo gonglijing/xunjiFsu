@@ -1,28 +1,41 @@
-import { StatusCards } from '../components/StatusCards';
+import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import { getJSON } from '../api';
+import StatusCards, { SectionTabs } from '../components/cards';
 import { RealtimeMini } from '../sections/RealtimeMini';
 import { LatestAlarms } from '../sections/LatestAlarms';
 import { QuickActions } from '../sections/QuickActions';
-import { useEffect, useState } from 'preact/hooks';
-import { getJSON } from '../api';
 
-export function Dashboard() {
-  const [status, setStatus] = useState(null);
-  const loadStatus = () => getJSON('/api/status').then((res)=>setStatus(res.data || res)).catch(()=>{});
+function Dashboard() {
+  const [status, setStatus] = createSignal(null);
+  const [loading, setLoading] = createSignal(true);
 
-  useEffect(() => { loadStatus(); }, []);
+  const loadStatus = () => {
+    getJSON('/api/status')
+      .then((res) => setStatus(res.data || res))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  createEffect(() => {
+    loadStatus();
+    const timer = setInterval(loadStatus, 5000);
+    onCleanup(() => clearInterval(timer));
+  });
 
   return (
     <div>
-      <StatusCards />
-      <div class="grid" style={{ gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-        <div class="grid" style={{ gridTemplateColumns: '1fr', gap: '24px' }}>
+      <StatusCards data={status()} loading={loading()} />
+      <div class="grid" style="grid-template-columns: 2fr 1fr; gap:24px;">
+        <div class="grid" style="grid-template-columns: 1fr; gap:24px;">
           <RealtimeMini />
           <LatestAlarms />
         </div>
-        <div class="grid" style={{ gridTemplateColumns: '1fr', gap: '24px' }}>
-          <QuickActions collectorRunning={status?.collector_running} onRefresh={loadStatus} />
+        <div class="grid" style="grid-template-columns: 1fr; gap:24px;">
+          <QuickActions collectorRunning={status()?.collector_running} onRefresh={loadStatus} />
         </div>
       </div>
     </div>
   );
 }
+
+export default Dashboard;

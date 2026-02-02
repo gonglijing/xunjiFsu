@@ -1,2 +1,5 @@
 import { Devices } from '../sections/Devices';
-export const DevicesPage = () => <Devices />;
+
+export function DevicesPage() {
+  return <Devices />;
+}

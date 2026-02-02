@@ -1,28 +1,47 @@
 # HuShu智能网关 - Makefile
 # 支持多平台交叉编译
 
-.PHONY: all clean build help deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-windows
+.PHONY: all clean build test fmt vet ui ui-install ui-dev run help \
+        deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows
 
-# 默认目标
-all: help
+# 默认目标: 编译前端 + 本地运行
+all: ui run
+	@echo ""
+	@echo "========================================"
+	@echo "  ✅ 前端构建完成，后端已启动!"
+	@echo "========================================"
+	@echo ""
+	@echo "访问 http://localhost:8080 查看应用"
+	@echo "按 Ctrl+C 停止服务器"
 
 # 帮助信息
 help:
 	@echo "HuShu智能网关 - 编译部署工具"
 	@echo ""
 	@echo "可用目标:"
-	@echo "  build          - 编译当前平台版本"
-	@echo "  clean          - 清理构建产物"
-	@echo "  deploy         - 部署到所有平台"
-	@echo "  deploy-arm32   - 部署Linux ARM32版本"
-	@echo "  deploy-arm64   - 部署Linux ARM64版本"
-	@echo "  deploy-darwin  - 部署macOS版本"
+	@echo "  (无参数)      - 编译前端 + 启动后端 (默认)"
+	@echo "  all           - 同默认目标"
+	@echo "  build         - 编译当前平台后端 (CGO=0)"
+	@echo "  test          - go test ./..."
+	@echo "  fmt           - gofmt + goimports"
+	@echo "  vet           - go vet"
+	@echo "  ui-install    - 安装前端依赖 (SolidJS)"
+	@echo "  ui            - 构建前端 (SolidJS)"
+	@echo "  ui-dev        - 前端开发服务器 (热重载)"
+	@echo "  run           - 仅启动后端服务"
+	@echo "  clean         - 清理构建产物"
+	@echo "  deploy        - 部署到所有平台"
+	@echo "  deploy-arm32  - 部署Linux ARM32版本"
+	@echo "  deploy-arm64  - 部署Linux ARM64版本"
+	@echo "  deploy-darwin - 部署macOS版本"
+	@echo "  deploy-darwin-arm64 - 部署macOS ARM64版本"
 	@echo "  deploy-windows - 部署Windows版本"
 	@echo ""
 	@echo "用法:"
-	@echo "  make build              # 本地编译"
-	@echo "  make deploy             # 编译所有平台"
-	@echo "  make deploy-arm32       # 仅编译ARM32"
+	@echo "  make              # 前端构建 + 启动后端"
+	@echo "  make all          # 同 make"
+	@echo "  make ui-dev       # 前端开发服务器 (热重载)"
+	@echo "  make deploy       # 编译所有平台"
 
 # 项目名称和版本
 PROJECT_NAME := gogw
@@ -45,11 +64,60 @@ build:
 	CGO_ENABLED=0 go build -ldflags "-s -w" -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
 
+test:
+	go test ./...
+
+fmt:
+	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+	@if command -v goimports >/dev/null 2>&1; then goimports -w $$(find . -name '*.go' -not -path './vendor/*'); else echo "goimports 未安装，跳过"; fi
+
+vet:
+	go vet ./...
+
+# 前端依赖安装 (SolidJS)
+ui-install:
+	@echo "=== 安装前端依赖 (SolidJS) ==="
+	@if [ -d "web/frontend/node_modules" ]; then \
+		echo "依赖已存在，使用 npm install 更新..."; \
+		npm --prefix web/frontend install; \
+	else \
+		npm --prefix web/frontend install; \
+	fi
+	@echo "✅ 前端依赖安装完成"
+
+# 前端构建 (SolidJS)
+ui:
+	@echo "=== 构建前端 (SolidJS) ==="
+	@if [ ! -d "web/frontend/node_modules" ]; then \
+		echo "依赖未安装，先执行: make ui-install"; \
+		exit 1; \
+	fi
+	npm --prefix web/frontend run build
+	@echo "✅ 前端构建完成: web/static/dist/main.js"
+
+# 前端开发服务器 (热重载)
+ui-dev:
+	@echo "=== 启动前端开发服务器 (SolidJS) ==="
+	@echo "访问 http://localhost:5173 查看前端"
+	@echo "按 Ctrl+C 停止服务器"
+	@echo ""
+	npm --prefix web/frontend run dev --host
+
+# 启动后端服务
+run:
+	@echo "=== 启动服务 (go run ./cmd/main.go) ==="
+	@echo "访问 http://localhost:8080"
+	@echo "按 Ctrl+C 停止服务"
+	@echo ""
+	go run ./cmd/main.go
+
 # 清理构建产物
 clean:
 	@echo "=== 清理构建产物 ==="
 	rm -f $(PROJECT_NAME)
 	rm -rf $(DEPLOY_DIR)
+	rm -rf web/frontend/node_modules
+	rm -rf web/frontend/dist
 	@echo "✅ 清理完成"
 
 # 创建部署目录结构
@@ -62,7 +130,7 @@ prepare-deploy:
 	@echo "✅ 目录准备完成"
 
 # Linux ARM32 编译
-deploy-arm32: prepare-deploy
+deploy-arm32: prepare-deploy ui
 	@echo "=== 编译 Linux ARM32 版本 ==="
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
 	@echo "复制配置文件..."
@@ -72,7 +140,7 @@ deploy-arm32: prepare-deploy
 	@echo "✅ ARM32 部署包已生成: $(DEPLOY_DIR)/arm32/"
 
 # Linux ARM64 编译
-deploy-arm64: prepare-deploy
+deploy-arm64: prepare-deploy ui
 	@echo "=== 编译 Linux ARM64 版本 ==="
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm64/$(PROJECT_NAME) $(MAIN_SRC)
 	@echo "复制配置文件..."
@@ -82,7 +150,7 @@ deploy-arm64: prepare-deploy
 	@echo "✅ ARM64 部署包已生成: $(DEPLOY_DIR)/arm64/"
 
 # macOS (Intel/AMD64) 编译
-deploy-darwin: prepare-deploy
+deploy-darwin: prepare-deploy ui
 	@echo "=== 编译 macOS 版本 ==="
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/darwin/$(PROJECT_NAME) $(MAIN_SRC)
 	@echo "复制配置文件..."
@@ -92,7 +160,7 @@ deploy-darwin: prepare-deploy
 	@echo "✅ macOS 部署包已生成: $(DEPLOY_DIR)/darwin/"
 
 # macOS ARM64 (Apple Silicon) 编译
-deploy-darwin-arm64: prepare-deploy
+deploy-darwin-arm64: prepare-deploy ui
 	@echo "=== 编译 macOS ARM64 版本 ==="
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/darwin/$(PROJECT_NAME)-arm64 $(MAIN_SRC)
 	@echo "复制配置文件..."
@@ -102,7 +170,7 @@ deploy-darwin-arm64: prepare-deploy
 	@echo "✅ macOS ARM64 部署包已生成: $(DEPLOY_DIR)/darwin/"
 
 # Windows AMD64 编译
-deploy-windows: prepare-deploy
+deploy-windows: prepare-deploy ui
 	@echo "=== 编译 Windows 版本 ==="
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/windows/$(PROJECT_NAME).exe $(MAIN_SRC)
 	@echo "复制配置文件..."
@@ -112,7 +180,7 @@ deploy-windows: prepare-deploy
 	@echo "✅ Windows 部署包已生成: $(DEPLOY_DIR)/windows/"
 
 # 部署到所有平台
-deploy: prepare-deploy
+deploy: prepare-deploy ui
 	@echo "========================================"
 	@echo "  HuShu智能网关 - 多平台编译部署"
 	@echo "========================================"

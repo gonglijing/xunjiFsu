@@ -247,8 +247,7 @@ func (m *DriverManager) UnloadDriver(id int64) error {
 
 	// 关闭插件
 	if driver.plugin != nil {
-		ctx := context.Background()
-		driver.plugin.Close(ctx)
+		driver.plugin.Close()
 	}
 
 	delete(m.drivers, id)

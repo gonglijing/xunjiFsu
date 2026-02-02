@@ -1,49 +1,74 @@
-import { useEffect, useState } from 'preact/hooks';
+import { createSignal, createEffect } from 'solid-js';
 import { getJSON } from '../api';
-import { Card } from '../components/cards';
+import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 
-export function History() {
+function History() {
   const toast = useToast();
-  const [devices, setDevices] = useState([]);
-  const [selected, setSelected] = useState('');
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [deviceID, setDeviceID] = createSignal('');
+  const [data, setData] = createSignal([]);
+  const [loading, setLoading] = createSignal(false);
+  const [devices, setDevices] = createSignal([]);
 
-  useEffect(() => {
-    getJSON('/api/devices').then((res)=>{
-      const list = res.data || res; setDevices(list); if (list.length) setSelected(String(list[0].id));
-    }).catch(()=>toast('error','加载设备失败'));
-  }, []);
+  createEffect(() => {
+    getJSON('/api/devices').then((res) => setDevices(res.data || res)).catch(() => {});
+  });
 
   const load = () => {
-    if (!selected) return;
     setLoading(true);
-    getJSON(`/api/data/history?device_id=${selected}`).then((res)=>{
-      setRows(res.data || res);
-    }).catch(()=>toast('error','加载历史数据失败')).finally(()=>setLoading(false));
+    const url = deviceID() ? `/api/data/history?device_id=${deviceID()}` : '/api/data/history';
+    getJSON(url)
+      .then((res) => setData(res.data || res))
+      .catch(() => toast.show('error', '加载历史数据失败'))
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [selected]);
+  createEffect(() => {
+    load();
+  });
 
   return (
-    <Card title="历史数据" extra={<select class="form-select" value={selected} onChange={(e)=>setSelected(e.target.value)}>
-      {devices.map((d)=>(<option key={d.id} value={d.id}>{d.name || d.id}</option>))}
-    </select>}>
-      {loading ? <div style="padding:24px;">加载中...</div> : (
+    <Card
+      title="历史数据"
+      extra={
+        <div class="flex gap-3">
+          <select class="form-select" value={deviceID()} onChange={(e) => setDeviceID(e.target.value)}>
+            <option value="">全部设备</option>
+            {devices().map((d) => (
+              <option key={d.id} value={d.id}>{d.name || d.id}</option>
+            ))}
+          </select>
+          <button class="btn" onClick={load}>刷新</button>
+        </div>
+      }
+    >
+      {loading() ? (
+        <div style="padding:24px;">加载中...</div>
+      ) : (
         <div class="table-container" style="max-height:520px; overflow:auto;">
           <table class="table">
-            <thead><tr><th>时间</th><th>设备</th><th>字段</th><th>值</th></tr></thead>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>设备</th>
+                <th>字段</th>
+                <th>值</th>
+              </tr>
+            </thead>
             <tbody>
-              {rows.map((p)=>(
-                <tr key={`${p.device_id}-${p.field_name}-${p.collected_at}`}>
-                  <td>{p.collected_at || p.CollectedAt || ''}</td>
-                  <td>{p.device_name || ''}</td>
-                  <td>{p.field_name || ''}</td>
-                  <td>{p.value}</td>
+              {data().map((p) => (
+                <tr key={p.id}>
+                  <td>{p.collected_at?.slice(0, 19) || p.CollectedAt}</td>
+                  <td>{p.device_name || p.DeviceName}</td>
+                  <td>{p.field_name || p.FieldName}</td>
+                  <td>{p.value || p.Value}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={4} style="text-align:center; padding:24px; color:var(--text-muted);">暂无数据</td></tr>}
+              {data().length === 0 && (
+                <tr>
+                  <td colSpan={4} style="text-align:center; padding:24px; color:var(--text-muted);">暂无历史数据</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -51,3 +76,5 @@ export function History() {
     </Card>
   );
 }
+
+export default History;

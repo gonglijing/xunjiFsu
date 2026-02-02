@@ -1,2 +1,5 @@
 import { Northbound } from '../sections/Northbound';
-export const NorthboundPage = () => <Northbound />;
+
+export function NorthboundPage() {
+  return <Northbound />;
+}

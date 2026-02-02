@@ -9,23 +9,23 @@ import (
 
 // Handler Web处理器
 type Handler struct {
-	sessionManager *auth.SessionManager
-	collector      *collector.Collector
-	driverManager  *driver.DriverManager
-	northboundMgr  *northbound.NorthboundManager
+	authManager   *auth.JWTManager
+	collector     *collector.Collector
+	driverManager *driver.DriverManager
+	northboundMgr *northbound.NorthboundManager
 }
 
 // NewHandler 创建处理器
 func NewHandler(
-	sessionManager *auth.SessionManager,
+	authManager *auth.JWTManager,
 	collector *collector.Collector,
 	driverManager *driver.DriverManager,
 	northboundMgr *northbound.NorthboundManager,
 ) *Handler {
 	return &Handler{
-		sessionManager: sessionManager,
-		collector:      collector,
-		driverManager:  driverManager,
-		northboundMgr:  northboundMgr,
+		authManager:   authManager,
+		collector:     collector,
+		driverManager: driverManager,
+		northboundMgr: northboundMgr,
 	}
 }

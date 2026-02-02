@@ -11,51 +11,40 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
-	"github.com/gorilla/mux"
 )
 
 // ==================== 驱动管理 ====================
 
-// GetDrivers 获取所有驱动（从目录扫描）
+// GetDrivers 从数据库列出驱动信息，附带文件大小（若存在）
 func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
-	drivers := []*models.Driver{}
-
-	// 从 drivers 目录扫描 .wasm 文件
-	driversDir := "drivers"
-	entries, err := os.ReadDir(driversDir)
+	drivers, err := database.GetAllDrivers()
 	if err != nil {
-		// 目录不存在或无法读取
-		if os.IsNotExist(err) {
-			// 返回空列表
-		} else {
-			WriteServerError(w, "Failed to read drivers directory: "+err.Error())
-			return
+		WriteServerError(w, err.Error())
+		return
+	}
+	for _, d := range drivers {
+		path := d.FilePath
+		if path == "" {
+			path = filepath.Join("drivers", d.Name+".wasm")
 		}
-	} else {
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".wasm") {
-				info, _ := entry.Info()
-				driver := &models.Driver{
-					Name:      strings.TrimSuffix(entry.Name(), ".wasm"),
-					FilePath:  filepath.Join(driversDir, entry.Name()),
-					Filename:  entry.Name(),
-					Size:      info.Size(),
-					CreatedAt: info.ModTime(),
-				}
-				drivers = append(drivers, driver)
-			}
+		if info, err := os.Stat(path); err == nil {
+			d.Size = info.Size()
+			d.Filename = filepath.Base(path)
 		}
 	}
-
 	WriteSuccess(w, drivers)
 }
 
-// CreateDriver 创建驱动
+// CreateDriver 创建驱动（手动录入元数据 + 已有文件）
 func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	var driver models.Driver
 	if err := ParseRequest(r, &driver); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return
+	}
+
+	if driver.FilePath == "" {
+		driver.FilePath = filepath.Join("drivers", driver.Name+".wasm")
 	}
 
 	id, err := database.CreateDriver(&driver)
@@ -66,27 +55,18 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 	driver.ID = id
 
-	// 加载驱动
-	wasmData, err := readDriverFile(driver.FilePath, driver.Name)
-	if err != nil {
-		WriteServerError(w, "Failed to read driver file: "+err.Error())
-		return
-	}
-
-	// 从 ConfigSchema 中解析 resource_id
-	var cfg struct {
-		ResourceID int64 `json:"resource_id"`
-	}
-	resourceID := int64(0)
-	if driver.ConfigSchema != "" {
-		if err := json.Unmarshal([]byte(driver.ConfigSchema), &cfg); err == nil {
-			resourceID = cfg.ResourceID
+	// 尝试加载驱动到内存
+	if wasmData, err := os.ReadFile(driver.FilePath); err == nil {
+		var cfg struct {
+			ResourceID int64 `json:"resource_id"`
 		}
-	}
-
-	if err := h.driverManager.LoadDriver(&driver, wasmData, resourceID); err != nil {
-		WriteServerError(w, err.Error())
-		return
+		resourceID := int64(0)
+		if driver.ConfigSchema != "" {
+			if err := json.Unmarshal([]byte(driver.ConfigSchema), &cfg); err == nil {
+				resourceID = cfg.ResourceID
+			}
+		}
+		_ = h.driverManager.LoadDriver(&driver, wasmData, resourceID)
 	}
 
 	WriteCreated(w, driver)
@@ -128,31 +108,27 @@ func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, driver)
 }
 
-// DeleteDriver 删除驱动（按文件名）
+// DeleteDriver 删除驱动（按ID，同时删除文件）
 func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
-	// 获取文件名
-	vars := mux.Vars(r)
-	filename := vars["id"]
-
-	if filename == "" {
-		WriteBadRequest(w, "Invalid filename")
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
 		return
 	}
-
-	// 构建完整路径
-	filePath := filepath.Join("drivers", filename)
-
-	// 删除文件
-	if err := os.Remove(filePath); err != nil {
-		if os.IsNotExist(err) {
-			WriteNotFound(w, "File not found")
-			return
-		}
-		WriteServerError(w, "Failed to delete file: "+err.Error())
+	drv, err := database.GetDriverByID(id)
+	if err != nil {
+		WriteNotFound(w, "Driver not found")
 		return
 	}
+	_ = database.DeleteDriver(id)
 
-	// 返回空响应，HTMX 会移除该行
+	// 删除文件（忽略错误）
+	path := drv.FilePath
+	if path == "" {
+		path = filepath.Join("drivers", drv.Name+".wasm")
+	}
+	_ = os.Remove(path)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -199,6 +175,9 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 写入/忽略驱动元数据
+	_ = database.UpsertDriverFile(strings.TrimSuffix(header.Filename, ".wasm"), destPath)
+
 	// 返回成功信息
 	WriteSuccess(w, map[string]interface{}{
 		"filename": header.Filename,
@@ -214,15 +193,11 @@ func (h *Handler) DownloadDriver(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, "Invalid ID")
 		return
 	}
-
-	// 获取驱动信息
 	driver, err := database.GetDriverByID(id)
 	if err != nil {
 		WriteNotFound(w, "Driver not found")
 		return
 	}
-
-	// 检查文件路径
 	filePath := driver.FilePath
 	if filePath == "" {
 		filePath = filepath.Join("drivers", driver.Name+".wasm")

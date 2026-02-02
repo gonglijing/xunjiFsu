@@ -647,6 +647,28 @@ func DeleteDriver(id int64) error {
 	return err
 }
 
+// GetDriverByName 根据名称获取驱动
+func GetDriverByName(name string) (*models.Driver, error) {
+	driver := &models.Driver{}
+	err := ParamDB.QueryRow(
+		"SELECT id, name, file_path, description, version, config_schema, enabled, created_at, updated_at FROM drivers WHERE name = ?",
+		name,
+	).Scan(&driver.ID, &driver.Name, &driver.FilePath, &driver.Description, &driver.Version, &driver.ConfigSchema,
+		&driver.Enabled, &driver.CreatedAt, &driver.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return driver, nil
+}
+
+// UpsertDriverFile 保存或忽略重复的驱动记录
+func UpsertDriverFile(name, path string) error {
+	_, err := ParamDB.Exec(
+		`INSERT OR IGNORE INTO drivers (name, file_path, description, version, config_schema, enabled) 
+		 VALUES (?, ?, '', '', '', 1)`, name, path)
+	return err
+}
+
 // ==================== 北向配置操作 (param.db - 直接写) ====================
 
 // CreateNorthboundConfig 创建北向配置

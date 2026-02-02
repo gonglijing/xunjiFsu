@@ -1,18 +1,22 @@
-import { useState } from 'preact/hooks';
-import { postJSON } from '../api';
+import { createSignal, onMount } from 'solid-js';
+import { postJSON, storeToken } from '../api';
 
-export function Login({ onSuccess }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('123456');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+function Login(props) {
+  const [username, setUsername] = createSignal('admin');
+  const [password, setPassword] = createSignal('123456');
+  const [error, setError] = createSignal('');
+  const [loading, setLoading] = createSignal(false);
 
   const submit = (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    postJSON('/login', { username, password })
-      .then(() => onSuccess())
+    postJSON('/login', { username: username(), password: password() })
+      .then((res) => {
+        storeToken(res.token);
+        // 全刷新，确保服务端鉴权和 cookie 生效
+        window.location.replace('/');
+      })
       .catch(() => setError('用户名或密码错误'))
       .finally(() => setLoading(false));
   };
@@ -24,18 +28,36 @@ export function Login({ onSuccess }) {
         <form class="form" onSubmit={submit}>
           <div class="form-group">
             <label class="form-label">用户名</label>
-            <input class="form-input" value={username} onInput={(e)=>setUsername(e.target.value)} required />
+            <input 
+              class="form-input" 
+              value={username()} 
+              onInput={(e) => setUsername(e.target.value)} 
+              required 
+            />
           </div>
           <div class="form-group">
             <label class="form-label">密码</label>
-            <input class="form-input" type="password" value={password} onInput={(e)=>setPassword(e.target.value)} required />
+            <input 
+              class="form-input" 
+              type="password" 
+              value={password()} 
+              onInput={(e) => setPassword(e.target.value)} 
+              required 
+            />
           </div>
-          {error && <div style="color:var(--accent-red); padding:8px 0;">{error}</div>}
-          <button class="btn btn-primary" type="submit" disabled={loading} style="width:100%; margin-top:8px;">
-            {loading ? '登录中...' : '登录'}
+          {error() && <div style="color:var(--accent-red); padding:8px 0;">{error()}</div>}
+          <button 
+            class="btn btn-primary" 
+            type="submit" 
+            disabled={loading()} 
+            style="width:100%; margin-top:8px;"
+          >
+            {loading() ? '登录中...' : '登录'}
           </button>
         </form>
       </div>
     </div>
   );
 }
+
+export default Login;

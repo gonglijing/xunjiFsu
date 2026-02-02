@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/handlers"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // Run boots the application and blocks until shutdown completes.
@@ -52,10 +54,10 @@ func Run(cfg *config.Config) error {
 	northboundMgr.Start()
 
 	collect := collector.NewCollector(driverExecutor, northboundMgr)
-	sessionManager := auth.NewSessionManager(secretKey)
-	h := handlers.NewHandler(sessionManager, collect, driverManager, northboundMgr)
+	authManager := auth.NewJWTManager(secretKey)
+	h := handlers.NewHandler(authManager, collect, driverManager, northboundMgr)
 
-	router := buildRouter(h, sessionManager)
+	router := buildRouter(h, authManager)
 	finalHandler := buildHandlerChain(cfg, router)
 
 	if err := collect.Start(); err != nil {
@@ -66,7 +68,6 @@ func Run(cfg *config.Config) error {
 	registerShutdown(gracefulMgr, collect, northboundMgr, cfg)
 	gracefulMgr.Start()
 
-	logger.Info("Starting server", "addr", cfg.ListenAddr)
 	server := &http.Server{
 		Addr:         cfg.ListenAddr,
 		Handler:      finalHandler,
@@ -77,8 +78,35 @@ func Run(cfg *config.Config) error {
 
 	gracefulMgr.SetHTTPServer(server)
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("server error: %w", err)
+	// TLS 优先级：1) 自动证书 2) 指定证书 3) HTTP
+	switch {
+	case cfg.TLSAuto && cfg.TLSDomain != "":
+		m := &autocert.Manager{
+			Cache:      autocert.DirCache(cfg.TLSCacheDir),
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(cfg.TLSDomain),
+		}
+		server.TLSConfig = &tls.Config{
+			GetCertificate: m.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+		}
+		go func() {
+			_ = http.ListenAndServe(":80", m.HTTPHandler(nil))
+		}()
+		logger.Info("Starting HTTPS (auto-cert)", "addr", cfg.ListenAddr, "domain", cfg.TLSDomain)
+		if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("server error: %w", err)
+		}
+	case cfg.TLSCertFile != "" && cfg.TLSKeyFile != "":
+		logger.Info("Starting HTTPS", "addr", cfg.ListenAddr, "cert", cfg.TLSCertFile)
+		if err := server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("server error: %w", err)
+		}
+	default:
+		logger.Info("Starting HTTP", "addr", cfg.ListenAddr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("server error: %w", err)
+		}
 	}
 
 	gracefulMgr.Wait()

@@ -1,2 +1,5 @@
 import { Storage } from '../sections/Storage';
-export const StoragePage = () => <Storage />;
+
+export function StoragePage() {
+  return <Storage />;
+}

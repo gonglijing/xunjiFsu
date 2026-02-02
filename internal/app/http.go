@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
 	"github.com/gonglijing/xunjiFsu/internal/config"
@@ -14,13 +15,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func buildRouter(h *handlers.Handler, sessionManager *auth.SessionManager) *mux.Router {
+func buildRouter(h *handlers.Handler, authManager *auth.JWTManager) *mux.Router {
 	r := mux.NewRouter()
 
 	staticDir := resolveStaticDir()
 	registerStaticRoutes(r, staticDir)
-	registerPageRoutes(r, h, sessionManager)
-	registerAPIRoutes(r, h)
+	registerAPIRoutes(r, h, authManager)
+	registerPageRoutes(r, h, authManager)
 	registerHealthRoutes(r)
 
 	return r
@@ -60,12 +61,24 @@ func registerStaticRoutes(r *mux.Router, staticDir http.Dir) {
 	r.PathPrefix("/web/static/").Handler(http.StripPrefix("/web/static/", http.FileServer(staticDir)))
 }
 
-func registerPageRoutes(r *mux.Router, h *handlers.Handler, sessionManager *auth.SessionManager) {
+func registerPageRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWTManager) {
 	r.HandleFunc("/login", h.Login).Methods("GET")
 	r.HandleFunc("/login", h.LoginPost).Methods("POST")
 	r.HandleFunc("/logout", h.Logout).Methods("GET")
 	// SPA 入口，所有非 API/静态 GET 请求交给前端路由
-	r.PathPrefix("/").Handler(sessionManager.RequireAuth(http.HandlerFunc(h.SPA))).Methods("GET")
+	r.PathPrefix("/").
+		Handler(authManager.RequireAuth(http.HandlerFunc(h.SPA))).
+		Methods("GET").
+		MatcherFunc(func(req *http.Request, _ *mux.RouteMatch) bool {
+			path := req.URL.Path
+			// 排除 API 和静态资源
+			if strings.HasPrefix(path, "/api") ||
+				strings.HasPrefix(path, "/static/") ||
+				strings.HasPrefix(path, "/web/static/") {
+				return false
+			}
+			return true
+		})
 }
 
 func registerHealthRoutes(r *mux.Router) {
@@ -75,64 +88,68 @@ func registerHealthRoutes(r *mux.Router) {
 	r.HandleFunc("/metrics", handlers.Metrics).Methods("GET")
 }
 
-func registerAPIRoutes(r *mux.Router, h *handlers.Handler) {
-	r.HandleFunc("/api/status", h.GetStatus).Methods("GET")
+func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWTManager) {
+	// 所有 /api 路径统一做鉴权
+	api := r.PathPrefix("/api").Subrouter()
+	api.Use(authManager.RequireAuth)
 
-	r.HandleFunc("/api/collector/start", h.StartCollector).Methods("POST")
-	r.HandleFunc("/api/collector/stop", h.StopCollector).Methods("POST")
+	api.HandleFunc("/status", h.GetStatus).Methods("GET")
 
-	r.HandleFunc("/api/drivers", h.GetDrivers).Methods("GET")
-	r.HandleFunc("/api/drivers", h.CreateDriver).Methods("POST")
-	r.HandleFunc("/api/drivers/{id}", h.UpdateDriver).Methods("PUT")
-	r.HandleFunc("/api/drivers/{id}", h.DeleteDriver).Methods("DELETE")
-	r.HandleFunc("/api/drivers/{id}/download", h.DownloadDriver).Methods("GET")
-	r.HandleFunc("/api/drivers/upload", h.UploadDriverFile).Methods("POST")
-	r.HandleFunc("/api/drivers/files", h.ListDriverFiles).Methods("GET")
+	api.HandleFunc("/collector/start", h.StartCollector).Methods("POST")
+	api.HandleFunc("/collector/stop", h.StopCollector).Methods("POST")
 
-	r.HandleFunc("/api/devices", h.GetDevices).Methods("GET")
-	r.HandleFunc("/api/devices", h.CreateDevice).Methods("POST")
-	r.HandleFunc("/api/devices/{id}", h.UpdateDevice).Methods("PUT")
-	r.HandleFunc("/api/devices/{id}", h.DeleteDevice).Methods("DELETE")
-	r.HandleFunc("/api/devices/{id}/toggle", h.ToggleDeviceEnable).Methods("POST")
-	r.HandleFunc("/api/devices/{id}/execute", h.ExecuteDriverFunction).Methods("POST")
+	api.HandleFunc("/drivers", h.GetDrivers).Methods("GET")
+	api.HandleFunc("/drivers/files", h.ListDriverFiles).Methods("GET")
+	api.HandleFunc("/drivers", h.CreateDriver).Methods("POST")
+	api.HandleFunc("/drivers/{id}", h.UpdateDriver).Methods("PUT")
+	api.HandleFunc("/drivers/{id}", h.DeleteDriver).Methods("DELETE")
+	api.HandleFunc("/drivers/{id}/download", h.DownloadDriver).Methods("GET")
+	api.HandleFunc("/drivers/upload", h.UploadDriverFile).Methods("POST")
 
-	r.HandleFunc("/api/northbound", h.GetNorthboundConfigs).Methods("GET")
-	r.HandleFunc("/api/northbound", h.CreateNorthboundConfig).Methods("POST")
-	r.HandleFunc("/api/northbound/{id}", h.UpdateNorthboundConfig).Methods("PUT")
-	r.HandleFunc("/api/northbound/{id}", h.DeleteNorthboundConfig).Methods("DELETE")
-	r.HandleFunc("/api/northbound/{id}/toggle", h.ToggleNorthboundEnable).Methods("POST")
+	api.HandleFunc("/devices", h.GetDevices).Methods("GET")
+	api.HandleFunc("/devices", h.CreateDevice).Methods("POST")
+	api.HandleFunc("/devices/{id}", h.UpdateDevice).Methods("PUT")
+	api.HandleFunc("/devices/{id}", h.DeleteDevice).Methods("DELETE")
+	api.HandleFunc("/devices/{id}/toggle", h.ToggleDeviceEnable).Methods("POST")
+	api.HandleFunc("/devices/{id}/execute", h.ExecuteDriverFunction).Methods("POST")
 
-	r.HandleFunc("/api/thresholds", h.GetThresholds).Methods("GET")
-	r.HandleFunc("/api/thresholds", h.CreateThreshold).Methods("POST")
-	r.HandleFunc("/api/thresholds/{id}", h.UpdateThreshold).Methods("PUT")
-	r.HandleFunc("/api/thresholds/{id}", h.DeleteThreshold).Methods("DELETE")
+	api.HandleFunc("/northbound", h.GetNorthboundConfigs).Methods("GET")
+	api.HandleFunc("/northbound", h.CreateNorthboundConfig).Methods("POST")
+	api.HandleFunc("/northbound/{id}", h.UpdateNorthboundConfig).Methods("PUT")
+	api.HandleFunc("/northbound/{id}", h.DeleteNorthboundConfig).Methods("DELETE")
+	api.HandleFunc("/northbound/{id}/toggle", h.ToggleNorthboundEnable).Methods("POST")
 
-	r.HandleFunc("/api/alarms", h.GetAlarmLogs).Methods("GET")
-	r.HandleFunc("/api/alarms/{id}/acknowledge", h.AcknowledgeAlarm).Methods("POST")
+	api.HandleFunc("/thresholds", h.GetThresholds).Methods("GET")
+	api.HandleFunc("/thresholds", h.CreateThreshold).Methods("POST")
+	api.HandleFunc("/thresholds/{id}", h.UpdateThreshold).Methods("PUT")
+	api.HandleFunc("/thresholds/{id}", h.DeleteThreshold).Methods("DELETE")
 
-	r.HandleFunc("/api/data", h.GetDataCache).Methods("GET")
-	r.HandleFunc("/api/data/cache/{id}", h.GetDataCacheByDeviceID).Methods("GET")
+	api.HandleFunc("/alarms", h.GetAlarmLogs).Methods("GET")
+	api.HandleFunc("/alarms/{id}/acknowledge", h.AcknowledgeAlarm).Methods("POST")
 
-	r.HandleFunc("/api/data/points/{id}", h.GetDataPoints).Methods("GET")
-	r.HandleFunc("/api/data/points", h.GetLatestDataPoints).Methods("GET")
-	r.HandleFunc("/api/data/history", h.GetHistoryData).Methods("GET")
+	api.HandleFunc("/data", h.GetDataCache).Methods("GET")
+	api.HandleFunc("/data/cache/{id}", h.GetDataCacheByDeviceID).Methods("GET")
 
-	r.HandleFunc("/api/storage", h.GetStorageConfigs).Methods("GET")
-	r.HandleFunc("/api/storage", h.CreateStorageConfig).Methods("POST")
-	r.HandleFunc("/api/storage/{id}", h.UpdateStorageConfig).Methods("PUT")
-	r.HandleFunc("/api/storage/{id}", h.DeleteStorageConfig).Methods("DELETE")
-	r.HandleFunc("/api/storage/cleanup", h.CleanupData).Methods("POST")
-	r.HandleFunc("/api/storage/run", h.CleanupDataByPolicy).Methods("POST")
+	api.HandleFunc("/data/points/{id}", h.GetDataPoints).Methods("GET")
+	api.HandleFunc("/data/points", h.GetLatestDataPoints).Methods("GET")
+	api.HandleFunc("/data/history", h.GetHistoryData).Methods("GET")
 
-	r.HandleFunc("/api/users", h.GetUsers).Methods("GET")
-	r.HandleFunc("/api/users", h.CreateUser).Methods("POST")
-	r.HandleFunc("/api/users/{id}", h.UpdateUser).Methods("PUT")
-	r.HandleFunc("/api/users/{id}", h.DeleteUser).Methods("DELETE")
-	r.HandleFunc("/api/users/password", h.ChangePassword).Methods("PUT")
+	api.HandleFunc("/storage", h.GetStorageConfigs).Methods("GET")
+	api.HandleFunc("/storage", h.CreateStorageConfig).Methods("POST")
+	api.HandleFunc("/storage/{id}", h.UpdateStorageConfig).Methods("PUT")
+	api.HandleFunc("/storage/{id}", h.DeleteStorageConfig).Methods("DELETE")
+	api.HandleFunc("/storage/cleanup", h.CleanupData).Methods("POST")
+	api.HandleFunc("/storage/run", h.CleanupDataByPolicy).Methods("POST")
 
-	r.HandleFunc("/api/resources", h.GetResources).Methods("GET")
-	r.HandleFunc("/api/resources", h.CreateResource).Methods("POST")
-	r.HandleFunc("/api/resources/{id}", h.UpdateResource).Methods("PUT")
-	r.HandleFunc("/api/resources/{id}", h.DeleteResource).Methods("DELETE")
-	r.HandleFunc("/api/resources/{id}/toggle", h.ToggleResource).Methods("POST")
+	api.HandleFunc("/users", h.GetUsers).Methods("GET")
+	api.HandleFunc("/users", h.CreateUser).Methods("POST")
+	api.HandleFunc("/users/{id}", h.UpdateUser).Methods("PUT")
+	api.HandleFunc("/users/{id}", h.DeleteUser).Methods("DELETE")
+	api.HandleFunc("/users/password", h.ChangePassword).Methods("PUT")
+
+	api.HandleFunc("/resources", h.GetResources).Methods("GET")
+	api.HandleFunc("/resources", h.CreateResource).Methods("POST")
+	api.HandleFunc("/resources/{id}", h.UpdateResource).Methods("PUT")
+	api.HandleFunc("/resources/{id}", h.DeleteResource).Methods("DELETE")
+	api.HandleFunc("/resources/{id}/toggle", h.ToggleResource).Methods("POST")
 }
