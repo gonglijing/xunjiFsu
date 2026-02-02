@@ -112,6 +112,7 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	api.HandleFunc("/devices/{id}", h.DeleteDevice).Methods("DELETE")
 	api.HandleFunc("/devices/{id}/toggle", h.ToggleDeviceEnable).Methods("POST")
 	api.HandleFunc("/devices/{id}/execute", h.ExecuteDriverFunction).Methods("POST")
+	api.HandleFunc("/devices/{id}/writables", h.GetDeviceWritables).Methods("GET")
 
 	api.HandleFunc("/northbound", h.GetNorthboundConfigs).Methods("GET")
 	api.HandleFunc("/northbound", h.CreateNorthboundConfig).Methods("POST")

@@ -34,6 +34,12 @@ export function Devices() {
   const [editing, setEditing] = createSignal(null);
   const [showModal, setShowModal] = createSignal(false);
   const [submitting, setSubmitting] = createSignal(false);
+  const [showWriteModal, setShowWriteModal] = createSignal(false);
+  const [writeMeta, setWriteMeta] = createSignal([]);
+  const [writeForm, setWriteForm] = createSignal({ field: '', value: '' });
+  const [writeError, setWriteError] = createSignal('');
+  const [writeTarget, setWriteTarget] = createSignal(null);
+  let modalRoot;
 
   const load = () => {
     setLoading(true);
@@ -49,6 +55,14 @@ export function Devices() {
 
   createEffect(() => {
     load();
+  });
+
+  // ESC 关闭弹窗
+  createEffect(() => {
+    if (!showModal()) return;
+    const handler = (e) => { if (e.key === 'Escape') setShowModal(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   });
 
   const filtered = () => {
@@ -84,12 +98,48 @@ export function Devices() {
 
   const remove = (id) => {
     if (!confirm('确定删除该设备？')) return;
+    if (!confirm('删除后将无法恢复，继续吗？')) return;
     del(`/api/devices/${id}`)
       .then(() => {
         toast.show('success', '已删除');
         load();
       })
       .catch(() => toast.show('error', '删除失败'));
+  };
+
+  const openWrite = (device) => {
+    setWriteError('');
+    setWriteMeta([]);
+    setWriteForm({ field: '', value: '' });
+    setWriteTarget(device.id);
+    setShowWriteModal(true);
+    getJSON(`/api/devices/${device.id}/writables`)
+      .then((meta) => {
+        const list = meta?.data || meta || [];
+        setWriteMeta(list);
+        if (list.length) setWriteForm({ field: list[0].field || '', value: '' });
+      })
+      .catch(() => setWriteError('加载可写寄存器失败'));
+  };
+
+  const submitWrite = (e) => {
+    e.preventDefault();
+    setWriteError('');
+    const field = writeForm().field;
+    const value = writeForm().value;
+    if (!field) {
+      setWriteError('请选择字段');
+      return;
+    }
+    postJSON(`/api/devices/${writeTarget()}/execute`, {
+      function: 'handle',
+      params: { func_name: 'write', field, value },
+    })
+      .then(() => {
+        toast.show('success', '写入成功');
+        setShowWriteModal(false);
+      })
+      .catch((err) => setWriteError(err.message || '写入失败'));
   };
 
   const openCreate = () => {
@@ -200,6 +250,7 @@ export function Devices() {
                       </td>
                       <td class="flex" style="gap:8px;">
                         <button class="btn" onClick={() => edit(d)}>编辑</button>
+                        <button class="btn" onClick={() => openWrite(d)}>写</button>
                         <button 
                           class={`btn ${d.enabled === 1 ? 'btn-danger' : 'btn-success'}`} 
                           onClick={() => toggle(d.id)}
@@ -223,7 +274,12 @@ export function Devices() {
       </Card>
 
       <Show when={showModal()}>
-        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;">
+        <div
+          ref={modalRoot}
+          class="modal-backdrop"
+          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+        >
           <div class="card" style="width:640px; max-width:100%;">
             <div class="card-header">
               <h3 class="card-title">{editing() ? '编辑设备' : '新增设备'}</h3>
@@ -417,6 +473,56 @@ export function Devices() {
                 <button type="submit" class="btn btn-primary" disabled={submitting()}>
                   {submitting() ? '保存中...' : (editing() ? '保存' : '创建')}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={showWriteModal()}>
+        <div
+          class="modal-backdrop"
+          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowWriteModal(false); }}
+        >
+          <div class="card" style="width:420px; max-width:90vw;">
+            <div class="card-header">
+              <h3 class="card-title">写寄存器</h3>
+              <button class="btn btn-ghost" onClick={() => setShowWriteModal(false)} style="padding:4px 8px;">✕</button>
+            </div>
+            <form class="form" onSubmit={submitWrite} style="padding:12px 16px 16px;">
+              <div class="form-group">
+                <label class="form-label">字段</label>
+                <select
+                  class="form-select"
+                  value={writeForm().field}
+                  onChange={(e) => setWriteForm({ ...writeForm(), field: e.target.value })}
+                  required
+                >
+                  <option value="">选择字段</option>
+                  <For each={writeMeta()}>
+                    {(w) => <option value={w.field || w.name}>{w.label || w.field || w.name}</option>}
+                  </For>
+                </select>
+                <Show when={writeMeta().length === 0}>
+                  <div style="color:var(--text-muted); font-size:12px; margin-top:4px;">驱动未提供可写元数据</div>
+                </Show>
+              </div>
+              <div class="form-group">
+                <label class="form-label">值</label>
+                <input
+                  class="form-input"
+                  value={writeForm().value}
+                  onInput={(e) => setWriteForm({ ...writeForm(), value: e.target.value })}
+                  required
+                />
+              </div>
+              <Show when={writeError()}>
+                <div style="color:var(--accent-red); padding:4px 0;">{writeError()}</div>
+              </Show>
+              <div class="flex" style="gap:8px; justify-content:flex-end; margin-top:8px;">
+                <button type="button" class="btn" onClick={() => setShowWriteModal(false)}>取消</button>
+                <button type="submit" class="btn btn-primary">写入</button>
               </div>
             </form>
           </div>

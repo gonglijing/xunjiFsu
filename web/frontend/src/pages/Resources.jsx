@@ -24,6 +24,14 @@ function Resources() {
     load();
   });
 
+  // ESC 关闭弹窗
+  createEffect(() => {
+    if (!showModal()) return;
+    const handler = (e) => { if (e.key === 'Escape') setShowModal(false); };
+    window.addEventListener('keydown', handler);
+    onCleanup(() => window.removeEventListener('keydown', handler));
+  });
+
   const submit = (e) => {
     e.preventDefault();
     setSaving(true);
@@ -43,6 +51,7 @@ function Resources() {
 
   const remove = (id) => {
     if (!confirm('删除该资源？')) return;
+    if (!confirm('删除后关联设备可能需要重新绑定资源，确认继续？')) return;
     del(`/api/resources/${id}`)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
@@ -113,7 +122,11 @@ function Resources() {
       </Card>
 
       <Show when={showModal()}>
-        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000;">
+        <div
+          class="modal-backdrop"
+          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000;"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+        >
           <div class="card" style="width:420px; max-width:90vw;">
             <div class="card-header">
               <h3 class="card-title">{editing() ? '编辑资源' : '新增资源'}</h3>
@@ -136,7 +149,6 @@ function Resources() {
                   onChange={(e) => setForm({ ...form(), type: e.target.value })}
                 >
                   <option value="serial">串口</option>
-                  <option value="net">网口</option>
                   <option value="di">DI</option>
                   <option value="do">DO</option>
                 </select>

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -156,19 +157,6 @@ func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// legacy HTMX renderer removed
-
-// ExecuteDriverFunction 执行驱动的任意函数
-//
-// 请求体:
-//
-//	{
-//	    "function": "change_address",  // 函数名
-//	    "params": {                    // 参数，将作为 config 传递给驱动
-//	        "old_addr": 1,
-//	        "new_addr": 2
-//	    }
-//	}
 func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) {
 	id, err := ParseID(r)
 	if err != nil {
@@ -218,23 +206,77 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 			config[k] = fmt.Sprintf("%v", v)
 		}
 	}
+	// 补充设备信息
+	config["device_address"] = device.DeviceAddress
+	if req.Function == "" || req.Function == "collect" {
+		config["func_name"] = "read"
+	} else {
+		config["func_name"] = req.Function
+	}
 
 	// 创建驱动上下文
+	resourceID := int64(0)
+	if device.ResourceID != nil {
+		resourceID = *device.ResourceID
+	}
+	resourceType := device.ResourceType
+	if resourceType == "" {
+		resourceType = device.DriverType
+	}
 	ctx := &driver.DriverContext{
 		DeviceID:     device.ID,
 		DeviceName:   device.Name,
-		ResourceID:   0,
-		ResourceType: device.DriverType,
+		ResourceID:   resourceID,
+		ResourceType: resourceType,
 		Config:       config,
 		DeviceConfig: "",
 	}
 
-	// 调用驱动的指定函数
-	result, err := h.driverManager.ExecuteDriver(*device.DriverID, req.Function, ctx)
+	// 调用驱动的指定函数（collect -> handle）
+	funcName := req.Function
+	if funcName == "collect" || funcName == "" {
+		funcName = "handle"
+	}
+
+	result, err := h.driverManager.ExecuteDriver(*device.DriverID, funcName, ctx)
 	if err != nil {
 		WriteServerError(w, fmt.Sprintf("Failed to execute %s: %v", req.Function, err))
 		return
 	}
 
 	WriteSuccess(w, result)
+}
+
+// GetDeviceWritables 返回设备驱动声明的可写寄存器元数据（来自 Driver.ConfigSchema.writable）
+func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
+		return
+	}
+
+	device, err := database.GetDeviceByID(id)
+	if err != nil {
+		WriteNotFound(w, "Device not found")
+		return
+	}
+	if device.DriverID == nil {
+		WriteSuccess(w, []interface{}{})
+		return
+	}
+
+	driverModel, err := database.GetDriverByID(*device.DriverID)
+	if err != nil {
+		WriteServerError(w, "driver not found")
+		return
+	}
+
+	var cfg struct {
+		Writable []interface{} `json:"writable"`
+	}
+	if driverModel.ConfigSchema != "" {
+		_ = json.Unmarshal([]byte(driverModel.ConfigSchema), &cfg)
+	}
+
+	WriteSuccess(w, cfg.Writable)
 }

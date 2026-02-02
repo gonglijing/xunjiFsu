@@ -31,6 +31,13 @@ export function Thresholds() {
     loadDevices();
   });
 
+  createEffect(() => {
+    if (!showModal()) return;
+    const handler = (e) => { if (e.key === 'Escape') setShowModal(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   const submit = (e) => {
     e.preventDefault();
     setSaving(true);
@@ -115,7 +122,11 @@ export function Thresholds() {
       </Card>
 
       <Show when={showModal()}>
-        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000;">
+        <div
+          class="modal-backdrop"
+          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000;"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+        >
           <div class="card" style="width:440px; max-width:92vw;">
             <div class="card-header">
               <h3 class="card-title">新增阈值</h3>
@@ -177,7 +188,9 @@ export function Thresholds() {
                   value={form().severity} 
                   onChange={(e) => setForm({ ...form(), severity: e.target.value })}
                 >
+                  <option value="info">info</option>
                   <option value="warning">warning</option>
+                  <option value="error">error</option>
                   <option value="critical">critical</option>
                 </select>
               </div>
