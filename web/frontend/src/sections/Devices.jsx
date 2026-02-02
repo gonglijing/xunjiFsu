@@ -8,7 +8,7 @@ const defaultForm = {
   description: '',
   product_key: '',
   device_key: '',
-  driver_type: 'modbus_rtu',
+  driver_type: 'modbus_rtu_wasm',
   serial_port: '/dev/ttyS0',
   baud_rate: 9600,
   data_bits: 8,
@@ -323,17 +323,19 @@ export function Devices() {
                   />
                 </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">驱动类型</label>
-                <select 
-                  class="form-select" 
-                  value={form().driver_type} 
-                  onChange={(e) => setForm({ ...form(), driver_type: e.target.value, resource_id: null })}
-                >
-                  <option value="modbus_rtu">Modbus RTU (串口)</option>
-                  <option value="modbus_tcp">Modbus TCP</option>
-                </select>
-              </div>
+                <div class="form-group">
+                  <label class="form-label">驱动类型</label>
+                  <select 
+                    class="form-select" 
+                    value={form().driver_type} 
+                    onChange={(e) => setForm({ ...form(), driver_type: e.target.value, resource_id: null })}
+                  >
+                    <option value="modbus_rtu_wasm">ModbusRtu / Wasm</option>
+                    <option value="modbus_tcp_wasm">ModbusTcp / Wasm</option>
+                    <option value="modbus_rtu_excel">ModbusRtu / Excel</option>
+                    <option value="modbus_tcp_excel">ModbusTcp / Excel</option>
+                  </select>
+                </div>
 
               <Show when={form().driver_type === 'modbus_rtu'}>
                 <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap:12px;">

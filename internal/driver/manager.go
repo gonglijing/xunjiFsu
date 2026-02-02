@@ -242,68 +242,53 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 		[]extism.ValueType{},
 	)
 
-	// tcp_read: 低层 TCP 读取（基于已注册的 resourceID 连接）
-	tcpRead := extism.NewHostFunctionWithStack(
-		"tcp_read",
+	// tcp_transceive: 写后读（与 serial_transceive 对齐）
+	tcpTransceive := extism.NewHostFunctionWithStack(
+		"tcp_transceive",
 		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			bufPtr := uint32(stack[0])
-			bufCap := int(stack[1])
-			timeoutMs := int(stack[2])
+			wPtr := uint32(stack[0])
+			wSize := int(stack[1])
+			rPtr := uint32(stack[2])
+			rCap := int(stack[3])
+			timeoutMs := int(stack[4])
 
 			conn := executor.GetTCPConn(resourceID)
-			if conn == nil || bufCap <= 0 {
+			if conn == nil || wSize <= 0 || rCap <= 0 {
 				stack[0] = 0
 				return
 			}
+
+			req, _ := p.Memory().Read(wPtr, uint32(wSize))
+			if _, err := conn.Write(req); err != nil {
+				stack[0] = 0
+				return
+			}
+
 			tout := time.Duration(timeoutMs)
 			if tout <= 0 {
 				tout = 500 * time.Millisecond
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(tout))
-			buf := make([]byte, bufCap)
+			buf := make([]byte, rCap)
 			n, err := conn.Read(buf)
 			if err != nil || n <= 0 {
 				stack[0] = 0
 				return
 			}
-			p.Memory().Write(bufPtr, buf[:n])
+			p.Memory().Write(rPtr, buf[:n])
 			stack[0] = uint64(n)
 		},
 		[]extism.ValueType{
-			extism.ValueTypeI32, // buf ptr
-			extism.ValueTypeI32, // buf cap
-			extism.ValueTypeI32, // timeout ms
+			extism.ValueTypeI32, // wPtr
+			extism.ValueTypeI32, // wSize
+			extism.ValueTypeI32, // rPtr
+			extism.ValueTypeI32, // rCap
+			extism.ValueTypeI32, // timeout
 		},
 		[]extism.ValueType{extism.ValueTypeI32},
 	)
 
-	// tcp_write: 低层 TCP 写
-	tcpWrite := extism.NewHostFunctionWithStack(
-		"tcp_write",
-		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			ptr := uint32(stack[0])
-			size := int(stack[1])
-			conn := executor.GetTCPConn(resourceID)
-			if conn == nil || size <= 0 {
-				stack[0] = 0
-				return
-			}
-			data, _ := p.Memory().Read(ptr, uint32(size))
-			n, err := conn.Write(data)
-			if err != nil {
-				stack[0] = 0
-				return
-			}
-			stack[0] = uint64(n)
-		},
-		[]extism.ValueType{
-			extism.ValueTypeI32, // ptr
-			extism.ValueTypeI32, // size
-		},
-		[]extism.ValueType{extism.ValueTypeI32},
-	)
-
-	return []extism.HostFunction{serialRead, serialWrite, serialTransceive, sleepMs, outputLog, tcpRead, tcpWrite}
+	return []extism.HostFunction{serialRead, serialWrite, serialTransceive, sleepMs, outputLog, tcpTransceive}
 }
 
 // LoadDriver 加载驱动
