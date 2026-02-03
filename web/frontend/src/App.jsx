@@ -4,6 +4,7 @@ import { getJSON } from './api';
 import TopNav from './components/TopNav';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import GatewayPage from './pages/GatewayPage';
 import Resources from './pages/Resources';
 import { DevicesPage } from './pages/DevicesPage';
 import { DriversPage } from './pages/DriversPage';
@@ -41,6 +42,8 @@ function App() {
         return <Login onSuccess={() => setNavigate('/')} />;
       case currentPath === '/':
         return <Dashboard />;
+      case currentPath.startsWith('/gateway'):
+        return <GatewayPage />;
       case currentPath.startsWith('/resources'):
         return <Resources />;
       case currentPath.startsWith('/devices'):

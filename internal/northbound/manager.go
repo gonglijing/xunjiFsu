@@ -322,8 +322,8 @@ func (a *XunJiAdapter) buildMessage(data *models.CollectData) string {
 			"subDevices": []interface{}{
 				map[string]interface{}{
 					"identity": map[string]string{
-						"productKey": a.config.ProductKey,
-						"deviceKey":  a.config.DeviceKey,
+						"productKey": data.ProductKey,
+						"deviceKey":  data.DeviceKey,
 					},
 					"properties": properties,
 				},
@@ -366,8 +366,8 @@ func (a *XunJiAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
 			"subDevices": []interface{}{
 				map[string]interface{}{
 					"identity": map[string]string{
-						"productKey": a.config.ProductKey,
-						"deviceKey":  a.config.DeviceKey,
+						"productKey": alarm.ProductKey,
+						"deviceKey":  alarm.DeviceKey,
 					},
 					"properties": map[string]interface{}{},
 					"events":     events,

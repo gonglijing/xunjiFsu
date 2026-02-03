@@ -34,6 +34,11 @@ func initSchemasAndDefaultData() error {
 	}
 	database.EnsureDeviceResourceColumn()
 
+	logger.Info("Initializing gateway config table...")
+	if err := database.InitGatewayConfigTable(); err != nil {
+		return fmt.Errorf("failed to initialize gateway config table: %w", err)
+	}
+
 	logger.Info("Initializing storage policy table...")
 	if err := database.InitStoragePolicyTable(); err != nil {
 		return fmt.Errorf("failed to initialize storage policy table: %w", err)

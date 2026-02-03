@@ -414,6 +414,8 @@ func (c *Collector) handleAlarm(device *models.Device, threshold *models.Thresho
 	payload := &models.AlarmPayload{
 		DeviceID:    device.ID,
 		DeviceName:  device.Name,
+		ProductKey:  device.ProductKey,
+		DeviceKey:   device.DeviceKey,
 		FieldName:   threshold.FieldName,
 		ActualValue: actualValue,
 		Threshold:   threshold.Value,
@@ -448,6 +450,8 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	return &models.CollectData{
 		DeviceID:   device.ID,
 		DeviceName: device.Name,
+		ProductKey: device.ProductKey,
+		DeviceKey:  device.DeviceKey,
 		Timestamp:  ts,
 		Fields:     fields,
 	}

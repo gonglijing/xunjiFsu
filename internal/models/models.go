@@ -23,6 +23,14 @@ type Resource struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
+// GatewayConfig 网关配置模型
+type GatewayConfig struct {
+	ID          int64  `json:"id" db:"id"`
+	ProductKey  string `json:"product_key" db:"product_key"`
+	DeviceKey   string `json:"device_key" db:"device_key"`
+	GatewayName string `json:"gateway_name" db:"gateway_name"`
+}
+
 // Driver 驱动模型
 type Driver struct {
 	ID           int64     `json:"id" db:"id"`
@@ -140,6 +148,8 @@ type DataCache struct {
 type CollectData struct {
 	DeviceID   int64             `json:"device_id"`
 	DeviceName string            `json:"device_name"`
+	ProductKey string            `json:"product_key"`
+	DeviceKey  string            `json:"device_key"`
 	Timestamp  time.Time         `json:"timestamp"`
 	Fields     map[string]string `json:"fields"`
 }
@@ -148,6 +158,8 @@ type CollectData struct {
 type AlarmPayload struct {
 	DeviceID    int64   `json:"device_id"`
 	DeviceName  string  `json:"device_name"`
+	ProductKey  string  `json:"product_key"`
+	DeviceKey   string  `json:"device_key"`
 	FieldName   string  `json:"field_name"`
 	ActualValue float64 `json:"actual_value"`
 	Threshold   float64 `json:"threshold"`

@@ -9,6 +9,7 @@ const mainLinks = [
 ];
 
 const settingsLinks = [
+  { to: '/gateway', label: '网关设置', icon: '⚙' },
   { to: '/resources', label: '资源', icon: '◐' },
   { to: '/devices', label: '设备', icon: '◑' },
   { to: '/drivers', label: '驱动', icon: '▣' },

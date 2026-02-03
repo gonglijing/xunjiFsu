@@ -463,22 +463,24 @@ func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
 
 // DriverExecutor 驱动执行器
 type DriverExecutor struct {
-	manager     *DriverManager
-	serialPorts map[int64]SerialPort // 资源ID到串口的映射
-	tcpConns    map[int64]net.Conn   // 资源ID到TCP连接
-	mu          sync.RWMutex
-	executing   map[int64]bool
-	resourceMux map[int64]*sync.Mutex // 同一资源串口的互斥锁，避免并发读写
+	manager       *DriverManager
+	serialPorts   map[int64]SerialPort // 资源ID到串口的映射
+	tcpConns      map[int64]net.Conn   // 资源ID到TCP连接
+	resourcePaths map[int64]string     // 资源ID到路径的映射 (用于TCP懒连接)
+	mu            sync.RWMutex
+	executing     map[int64]bool
+	resourceMux   map[int64]*sync.Mutex // 同一资源串口的互斥锁，避免并发读写
 }
 
 // NewDriverExecutor 创建驱动执行器
 func NewDriverExecutor(manager *DriverManager) *DriverExecutor {
 	executor := &DriverExecutor{
-		manager:     manager,
-		serialPorts: make(map[int64]SerialPort),
-		tcpConns:    make(map[int64]net.Conn),
-		executing:   make(map[int64]bool),
-		resourceMux: make(map[int64]*sync.Mutex),
+		manager:       manager,
+		serialPorts:   make(map[int64]SerialPort),
+		tcpConns:      make(map[int64]net.Conn),
+		resourcePaths: make(map[int64]string),
+		executing:     make(map[int64]bool),
+		resourceMux:   make(map[int64]*sync.Mutex),
 	}
 
 	// 双向绑定
@@ -527,11 +529,78 @@ func (e *DriverExecutor) GetSerialPort(resourceID int64) SerialPort {
 	return e.serialPorts[resourceID]
 }
 
-// GetTCPConn 获取 TCP 连接
+// GetTCPConn 获取 TCP 连接 (懒加载)
 func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
+	// 先尝试获取现有连接
+	e.mu.RLock()
+	conn, exists := e.tcpConns[resourceID]
+	e.mu.RUnlock()
+
+	if exists && conn != nil {
+		// 检查连接是否仍然有效
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			if err := tcpConn.SetReadDeadline(time.Now()); err == nil {
+				// 测试连接是否存活
+				one := []byte{0}
+				_, err := tcpConn.Write(one)
+				if err == nil {
+					return conn
+				}
+			}
+		}
+		// 连接无效，关闭并删除
+		e.mu.Lock()
+		delete(e.tcpConns, resourceID)
+		e.mu.Unlock()
+	}
+
+	// 获取路径信息
+	e.mu.RLock()
+	path, hasPath := e.resourcePaths[resourceID]
+	e.mu.RUnlock()
+
+	if !hasPath || path == "" {
+		return nil
+	}
+
+	// 建立新连接
+	e.mu.Lock()
+	// 双重检查
+	if existingConn, ok := e.tcpConns[resourceID]; ok && existingConn != nil {
+		e.mu.Unlock()
+		return existingConn
+	}
+
+	conn, err := net.DialTimeout("tcp", path, 5*time.Second)
+	if err != nil {
+		e.mu.Unlock()
+		return nil
+	}
+
+	// 设置连接参数
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+	}
+
+	e.tcpConns[resourceID] = conn
+	e.mu.Unlock()
+
+	return conn
+}
+
+// SetResourcePath 设置资源路径 (用于TCP懒连接)
+func (e *DriverExecutor) SetResourcePath(resourceID int64, path string) {
+	e.mu.Lock()
+	e.resourcePaths[resourceID] = path
+	e.mu.Unlock()
+}
+
+// GetResourcePath 获取资源路径
+func (e *DriverExecutor) GetResourcePath(resourceID int64) string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.tcpConns[resourceID]
+	return e.resourcePaths[resourceID]
 }
 
 // getResourceLock 返回资源级互斥锁（懒创建）
@@ -576,6 +645,15 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 		resourceType = device.DriverType
 		if resourceType == "" {
 			resourceType = "modbus_rtu"
+		}
+	}
+
+	// 对于网络类型设备，设置资源路径（用于TCP懒连接）
+	if resourceType == "net" && resourceID > 0 {
+		// 如果还没有缓存路径，尝试从设备配置或资源获取
+		if e.GetResourcePath(resourceID) == "" && device.IPAddress != "" {
+			path := fmt.Sprintf("%s:%d", device.IPAddress, device.PortNum)
+			e.SetResourcePath(resourceID, path)
 		}
 	}
 

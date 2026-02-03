@@ -8,8 +8,9 @@ const defaultForm = {
   description: '',
   product_key: '',
   device_key: '',
+  driver_id: null,
   driver_type: 'modbus_rtu_wasm',
-  serial_port: '/dev/ttyS0',
+  serial_port: '',
   baud_rate: 9600,
   data_bits: 8,
   stop_bits: 1,
@@ -27,6 +28,7 @@ export function Devices() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const [resources, setResources] = createSignal([]);
+  const [drivers, setDrivers] = createSignal([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
   const [search, setSearch] = createSignal('');
@@ -43,13 +45,14 @@ export function Devices() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([getJSON('/api/devices'), getJSON('/api/resources')])
-      .then(([devRes, resRes]) => {
+    Promise.all([getJSON('/api/devices'), getJSON('/api/resources'), getJSON('/api/drivers')])
+      .then(([devRes, resRes, drvRes]) => {
         setItems(devRes.data || devRes);
         setResources(resRes.data || resRes);
+        setDrivers((drvRes.data || drvRes).filter(d => d.enabled === 1));
         setError('');
       })
-      .catch(() => setError('加载设备或资源失败'))
+      .catch(() => setError('加载设备、资源或驱动失败'))
       .finally(() => setLoading(false));
   };
 
@@ -98,43 +101,32 @@ export function Devices() {
 
   const remove = (id) => {
     if (!confirm('确定删除该设备？')) return;
-    if (!confirm('删除后将无法恢复，继续吗？')) return;
     del(`/api/devices/${id}`)
-      .then(() => {
-        toast.show('success', '已删除');
-        load();
-      })
+      .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };
 
   const openWrite = (device) => {
-    setWriteError('');
-    setWriteMeta([]);
-    setWriteForm({ field: '', value: '' });
-    setWriteTarget(device.id);
-    setShowWriteModal(true);
-    getJSON(`/api/devices/${device.id}/writables`)
-      .then((meta) => {
-        const list = meta?.data || meta || [];
-        setWriteMeta(list);
-        if (list.length) setWriteForm({ field: list[0].field || '', value: '' });
+    setWriteTarget(device);
+    getJSON(`/api/drivers/${device.driver_id}/describe`)
+      .then((res) => {
+        const ws = (res.data && res.data.writable) || [];
+        setWriteMeta(ws);
+        if (ws.length) {
+          setWriteForm({ field: ws[0].field, value: '' });
+        }
       })
-      .catch(() => setWriteError('加载可写寄存器失败'));
+      .catch(() => {
+        setWriteMeta([]);
+        setWriteForm({ field: '', value: '' });
+      });
+    setShowWriteModal(true);
   };
 
   const submitWrite = (e) => {
     e.preventDefault();
     setWriteError('');
-    const field = writeForm().field;
-    const value = writeForm().value;
-    if (!field) {
-      setWriteError('请选择字段');
-      return;
-    }
-    postJSON(`/api/devices/${writeTarget()}/execute`, {
-      function: 'handle',
-      params: { func_name: 'write', field, value },
-    })
+    postJSON(`/api/devices/${writeTarget().id}/write`, writeForm())
       .then(() => {
         toast.show('success', '写入成功');
         setShowWriteModal(false);
@@ -155,8 +147,9 @@ export function Devices() {
       description: item.description || '',
       product_key: item.product_key || '',
       device_key: item.device_key || '',
-      driver_type: item.driver_type,
-      serial_port: item.serial_port || '/dev/ttyS0',
+      driver_id: item.driver_id,
+      driver_type: item.driver_type || 'modbus_rtu_wasm',
+      serial_port: item.serial_port || '',
       baud_rate: item.baud_rate || 9600,
       data_bits: item.data_bits || 8,
       stop_bits: item.stop_bits || 1,
@@ -174,8 +167,8 @@ export function Devices() {
 
   const filteredResources = () => {
     if (!resources().length) return [];
-    if (form().driver_type === 'modbus_rtu') return resources().filter((r) => r.type === 'serial');
-    if (form().driver_type === 'modbus_tcp') return resources().filter((r) => r.type === 'net');
+    if (form().driver_type?.startsWith('modbus_rtu')) return resources().filter((r) => r.type === 'serial');
+    if (form().driver_type?.startsWith('modbus_tcp')) return resources().filter((r) => r.type === 'net');
     return resources();
   };
 
@@ -211,7 +204,6 @@ export function Devices() {
                 <tr>
                   <th>ID</th>
                   <th>名称</th>
-                  <th>产品/设备Key</th>
                   <th>驱动类型</th>
                   <th>驱动</th>
                   <th>资源</th>
@@ -226,10 +218,6 @@ export function Devices() {
                     <tr>
                       <td>{d.id}</td>
                       <td>{d.name}</td>
-                      <td style="min-width:140px;">
-                        <div class="text-sm">{d.product_key || '-'}</div>
-                        <div class="text-muted text-xs">{d.device_key || ''}</div>
-                      </td>
                       <td>{d.driver_type}</td>
                       <td>{d.driver_name || (d.driver_id ? `驱动 #${d.driver_id}` : '-')}</td>
                       <td>
@@ -239,34 +227,38 @@ export function Devices() {
                             <div class="text-muted text-xs">{d.resource_path}</div>
                           </div>
                         ) : (
-                          <span class="text-muted">未绑定</span>
+                          <span style="color:var(--text-muted);">-</span>
                         )}
                       </td>
                       <td>{d.collect_interval}</td>
                       <td>
                         <span class={`badge ${d.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
-                          {d.enabled === 1 ? '采集中' : '停止'}
+                          {d.enabled === 1 ? '启用' : '禁用'}
                         </span>
                       </td>
-                      <td class="flex" style="gap:8px;">
+                      <td class="flex" style="gap:4px;">
                         <button class="btn" onClick={() => edit(d)}>编辑</button>
-                        <button class="btn" onClick={() => openWrite(d)}>写</button>
-                        <button 
-                          class={`btn ${d.enabled === 1 ? 'btn-danger' : 'btn-success'}`} 
-                          onClick={() => toggle(d.id)}
-                        >
-                          {d.enabled === 1 ? '停止' : '启动'}
+                        <button class="btn" onClick={() => toggle(d.id)}>
+                          {d.enabled === 1 ? '禁用' : '启用'}
                         </button>
-                        <button class="btn btn-danger" onClick={() => remove(d.id)}>删除</button>
+                        <button 
+                          class="btn btn-danger" 
+                          style={{ 'padding-left': '8px', 'padding-right': '8px' }}
+                          onClick={() => remove(d.id)}
+                        >
+                          删
+                        </button>
                       </td>
                     </tr>
                   )}
                 </For>
-                <Show when={filtered().length === 0}>
-                  <tr>
-                    <td colSpan={9} style="text-align:center; padding:24px; color:var(--text-muted);">暂无设备</td>
-                  </tr>
-                </Show>
+                <For each={filtered().length === 0 ? [1] : []}>
+                  {() => (
+                    <tr>
+                      <td colSpan={8} style="text-align:center; padding:24px; color:var(--text-muted);">暂无设备</td>
+                    </tr>
+                  )}
+                </For>
               </tbody>
             </table>
           </div>
@@ -274,19 +266,14 @@ export function Devices() {
       </Card>
 
       <Show when={showModal()}>
-        <div
-          ref={modalRoot}
-          class="modal-backdrop"
-          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
-        >
-          <div class="card" style="width:640px; max-width:100%;">
+        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;">
+          <div class="card" style="width:720px; max-width:100%;">
             <div class="card-header">
               <h3 class="card-title">{editing() ? '编辑设备' : '新增设备'}</h3>
               <button class="btn btn-ghost" onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }} style="padding:4px 8px;">✕</button>
             </div>
             <form class="form" onSubmit={submit} style="padding:0 4px;">
-              <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
+              <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap:12px;">
                 <div class="form-group">
                   <label class="form-label">名称</label>
                   <input 
@@ -304,14 +291,13 @@ export function Devices() {
                     onInput={(e) => setForm({ ...form(), description: e.target.value })} 
                   />
                 </div>
-              </div>
-              <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap:12px;">
                 <div class="form-group">
                   <label class="form-label">ProductKey</label>
                   <input 
                     class="form-input" 
                     value={form().product_key} 
                     onInput={(e) => setForm({ ...form(), product_key: e.target.value })} 
+                    placeholder="子设备 productKey"
                   />
                 </div>
                 <div class="form-group">
@@ -320,7 +306,43 @@ export function Devices() {
                     class="form-input" 
                     value={form().device_key} 
                     onInput={(e) => setForm({ ...form(), device_key: e.target.value })} 
+                    placeholder="子设备 deviceKey"
                   />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">选择驱动 <span style="color:var(--accent-red);">*</span></label>
+                  <select
+                    class="form-select"
+                    value={form().driver_id ?? ''}
+                    onChange={(e) => setForm({ ...form(), driver_id: e.target.value ? +e.target.value : null })}
+                    required
+                  >
+                    <option value="">请选择驱动</option>
+                    <For each={drivers()}>
+                      {(d) => (
+                        <option value={d.id}>
+                          {d.name} (v{d.version || '1.0'})
+                        </option>
+                      )}
+                    </For>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">绑定资源</label>
+                  <select
+                    class="form-select"
+                    value={form().resource_id ?? ''}
+                    onChange={(e) => setForm({ ...form(), resource_id: e.target.value ? +e.target.value : null })}
+                  >
+                    <option value="">请选择资源</option>
+                    <For each={filteredResources()}>
+                      {(r) => (
+                        <option value={r.id}>
+                          {r.name} ({r.type}) {r.path ? `- ${r.path}` : ''}
+                        </option>
+                      )}
+                    </For>
+                  </select>
                 </div>
               </div>
                 <div class="form-group">
@@ -337,17 +359,8 @@ export function Devices() {
                   </select>
                 </div>
 
-              <Show when={form().driver_type === 'modbus_rtu'}>
+              <Show when={form().driver_type?.startsWith('modbus_rtu')}>
                 <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap:12px;">
-                  <div class="form-group">
-                    <label class="form-label">串口</label>
-                    <input 
-                      class="form-input" 
-                      value={form().serial_port} 
-                      onInput={(e) => setForm({ ...form(), serial_port: e.target.value })} 
-                      required 
-                    />
-                  </div>
                   <div class="form-group">
                     <label class="form-label">波特率</label>
                     <input 
@@ -390,27 +403,26 @@ export function Devices() {
                       required 
                     />
                   </div>
-                </div>
-              </Show>
-
-              <Show when={form().driver_type === 'modbus_tcp'}>
-                <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
                   <div class="form-group">
-                    <label class="form-label">IP 地址</label>
+                    <label class="form-label">设备地址</label>
                     <input 
                       class="form-input" 
-                      value={form().ip_address} 
-                      onInput={(e) => setForm({ ...form(), ip_address: e.target.value })} 
+                      value={form().device_address} 
+                      onInput={(e) => setForm({ ...form(), device_address: e.target.value })} 
                       required 
                     />
                   </div>
+                </div>
+              </Show>
+
+              <Show when={form().driver_type?.startsWith('modbus_tcp')}>
+                <div class="grid" style="grid-template-columns: repeat(1, 1fr); gap:12px;">
                   <div class="form-group">
-                    <label class="form-label">端口</label>
+                    <label class="form-label">设备地址</label>
                     <input 
                       class="form-input" 
-                      type="number" 
-                      value={form().port_num} 
-                      onInput={(e) => setForm({ ...form(), port_num: +e.target.value })} 
+                      value={form().device_address} 
+                      onInput={(e) => setForm({ ...form(), device_address: e.target.value })} 
                       required 
                     />
                   </div>
@@ -419,16 +431,7 @@ export function Devices() {
 
               <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap:12px;">
                 <div class="form-group">
-                  <label class="form-label">设备地址</label>
-                  <input 
-                    class="form-input" 
-                    value={form().device_address} 
-                    onInput={(e) => setForm({ ...form(), device_address: e.target.value })} 
-                    required 
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">采集周期 (ms)</label>
+                  <label class="form-label">采集周期(ms)</label>
                   <input 
                     class="form-input" 
                     type="number" 
@@ -438,36 +441,33 @@ export function Devices() {
                   />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">超时 (ms)</label>
+                  <label class="form-label">超时(ms)</label>
                   <input 
                     class="form-input" 
                     type="number" 
                     value={form().timeout} 
                     onInput={(e) => setForm({ ...form(), timeout: +e.target.value })} 
+                    required 
                   />
                 </div>
+                <div class="form-group">
+                  <label class="form-label">状态</label>
+                  <select 
+                    class="form-select" 
+                    value={form().enabled} 
+                    onChange={(e) => setForm({ ...form(), enabled: +e.target.value })}
+                  >
+                    <option value={1}>启用</option>
+                    <option value={0}>禁用</option>
+                  </select>
+                </div>
               </div>
-
-              <div class="form-group">
-                <label class="form-label">绑定资源</label>
-                <select 
-                  class="form-select" 
-                  value={form().resource_id ?? ''} 
-                  onChange={(e) => setForm({ ...form(), resource_id: e.target.value ? Number(e.target.value) : null })}
-                >
-                  <option value="">不绑定</option>
-                  {filteredResources().map((r) => (
-                    <option key={r.id} value={r.id}>{`${r.name} (${r.path})`}</option>
-                  ))}
-                </select>
-                <div class="text-muted text-xs" style="margin-top:4px;">同一资源串行访问，建议按驱动类型匹配。</div>
-              </div>
-
+              
               <div class="flex" style={{ gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                <button 
-                  type="button" 
-                  class="btn" 
-                  onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }} 
+                <button
+                  type="button"
+                  class="btn"
+                  onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }}
                   disabled={submitting()}
                 >
                   取消
@@ -482,49 +482,41 @@ export function Devices() {
       </Show>
 
       <Show when={showWriteModal()}>
-        <div
-          class="modal-backdrop"
-          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowWriteModal(false); }}
-        >
-          <div class="card" style="width:420px; max-width:90vw;">
+        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1001;">
+          <div class="card" style="width:400px; max-width:90vw;">
             <div class="card-header">
-              <h3 class="card-title">写寄存器</h3>
+              <h3 class="card-title">写入数据 - {writeTarget()?.name}</h3>
               <button class="btn btn-ghost" onClick={() => setShowWriteModal(false)} style="padding:4px 8px;">✕</button>
             </div>
-            <form class="form" onSubmit={submitWrite} style="padding:12px 16px 16px;">
+            <form class="form" onSubmit={submitWrite} style="padding:16px;">
               <div class="form-group">
                 <label class="form-label">字段</label>
-                <select
-                  class="form-select"
-                  value={writeForm().field}
+                <select 
+                  class="form-select" 
+                  value={writeForm().field} 
                   onChange={(e) => setWriteForm({ ...writeForm(), field: e.target.value })}
-                  required
                 >
-                  <option value="">选择字段</option>
                   <For each={writeMeta()}>
-                    {(w) => <option value={w.field || w.name}>{w.label || w.field || w.name}</option>}
+                    {(w) => <option value={w.field}>{w.label || w.field}</option>}
                   </For>
                 </select>
-                <Show when={writeMeta().length === 0}>
-                  <div style="color:var(--text-muted); font-size:12px; margin-top:4px;">驱动未提供可写元数据</div>
-                </Show>
               </div>
               <div class="form-group">
                 <label class="form-label">值</label>
-                <input
-                  class="form-input"
-                  value={writeForm().value}
-                  onInput={(e) => setWriteForm({ ...writeForm(), value: e.target.value })}
-                  required
+                <input 
+                  class="form-input" 
+                  type="number" 
+                  value={writeForm().value} 
+                  onInput={(e) => setWriteForm({ ...writeForm(), value: e.target.value })} 
+                  required 
                 />
               </div>
               <Show when={writeError()}>
                 <div style="color:var(--accent-red); padding:4px 0;">{writeError()}</div>
               </Show>
-              <div class="flex" style="gap:8px; justify-content:flex-end; margin-top:8px;">
-                <button type="button" class="btn" onClick={() => setShowWriteModal(false)}>取消</button>
-                <button type="submit" class="btn btn-primary">写入</button>
+              <div class="flex" style={{ gap: '8px', marginTop: '12px' }}>
+                <button type="button" class="btn" onClick={() => setShowWriteModal(false)} style="flex:1">取消</button>
+                <button type="submit" class="btn btn-primary" style="flex:1">写入</button>
               </div>
             </form>
           </div>

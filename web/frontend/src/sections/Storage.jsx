@@ -3,7 +3,7 @@ import { del, getJSON, postJSON, putJSON } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
-const empty = { name: '', product_key: '', device_key: '', storage_days: 30, enabled: 1 };
+const empty = { name: '', storage_days: 30, enabled: 1 };
 
 export function Storage() {
   const toast = useToast();
@@ -50,8 +50,6 @@ export function Storage() {
     setEditing(item.id);
     setForm({ 
       name: item.name, 
-      product_key: item.product_key || '', 
-      device_key: item.device_key || '', 
       storage_days: item.storage_days, 
       enabled: item.enabled 
     });
@@ -78,8 +76,6 @@ export function Storage() {
                 <tr>
                   <th>ID</th>
                   <th>名称</th>
-                  <th>产品Key</th>
-                  <th>设备Key</th>
                   <th>保留天数</th>
                   <th>状态</th>
                   <th>操作</th>
@@ -91,8 +87,6 @@ export function Storage() {
                     <tr>
                       <td>{s.id}</td>
                       <td>{s.name}</td>
-                      <td>{s.product_key || '-'}</td>
-                      <td>{s.device_key || '-'}</td>
                       <td>{s.storage_days}</td>
                       <td>
                         <span class={`badge ${s.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
@@ -109,7 +103,7 @@ export function Storage() {
                 <For each={items().length === 0 ? [1] : []}>
                   {() => (
                     <tr>
-                      <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">暂无配置</td>
+                      <td colSpan={5} style="text-align:center; padding:24px; color:var(--text-muted);">暂无配置</td>
                     </tr>
                   )}
                 </For>
@@ -129,24 +123,6 @@ export function Storage() {
               onInput={(e) => setForm({ ...form(), name: e.target.value })} 
               required 
             />
-          </div>
-          <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap:12px;">
-            <div class="form-group">
-              <label class="form-label">产品Key (可选)</label>
-              <input 
-                class="form-input" 
-                value={form().product_key} 
-                onInput={(e) => setForm({ ...form(), product_key: e.target.value })} 
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label">设备Key (可选)</label>
-              <input 
-                class="form-input" 
-                value={form().device_key} 
-                onInput={(e) => setForm({ ...form(), device_key: e.target.value })} 
-              />
-            </div>
           </div>
           <div class="form-group">
             <label class="form-label">保留天数</label>

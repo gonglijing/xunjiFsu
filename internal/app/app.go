@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
@@ -45,6 +46,12 @@ func Run(cfg *config.Config) error {
 
 	driverManager := driver.NewDriverManager()
 	driverExecutor := driver.NewDriverExecutor(driverManager)
+
+	// 加载所有启用的驱动
+	if err := loadEnabledDrivers(driverManager); err != nil {
+		logger.Warn("Failed to load drivers", "error", err)
+	}
+
 	northboundMgr := northbound.NewNorthboundManager()
 
 	loadEnabledNorthboundConfigs(northboundMgr)
@@ -110,6 +117,40 @@ func Run(cfg *config.Config) error {
 	}
 
 	gracefulMgr.Wait()
+	return nil
+}
+
+// loadEnabledDrivers 从数据库加载所有启用的驱动
+func loadEnabledDrivers(manager *driver.DriverManager) error {
+	drivers, err := database.GetAllDrivers()
+	if err != nil {
+		return fmt.Errorf("failed to get drivers: %w", err)
+	}
+
+	loaded := 0
+	for _, d := range drivers {
+		if d.Enabled != 1 {
+			continue
+		}
+		// 跳过 file_path 为空的驱动
+		if d.FilePath == "" {
+			logger.Debug("Skipping driver with empty file_path", "id", d.ID, "name", d.Name)
+			continue
+		}
+		// 读取 WASM 文件
+		wasmData, err := os.ReadFile(d.FilePath)
+		if err != nil {
+			logger.Warn("Failed to read driver file", "id", d.ID, "name", d.Name, "file", d.FilePath, "error", err)
+			continue
+		}
+		if err := manager.LoadDriver(d, wasmData, 0); err != nil {
+			logger.Warn("Failed to load driver", "id", d.ID, "name", d.Name, "error", err)
+			continue
+		}
+		loaded++
+		logger.Info("Loaded driver", "id", d.ID, "name", d.Name)
+	}
+	logger.Info("Drivers loaded", "count", loaded)
 	return nil
 }
 

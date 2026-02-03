@@ -143,25 +143,36 @@ function Resources() {
               </div>
               <div class="form-group">
                 <label class="form-label">类型</label>
-                <select 
-                  class="form-select" 
-                  value={form().type} 
+                <select
+                  class="form-select"
+                  value={form().type}
                   onChange={(e) => setForm({ ...form(), type: e.target.value })}
                 >
                   <option value="serial">串口</option>
+                  <option value="net">网口 (TCP)</option>
                   <option value="di">DI</option>
                   <option value="do">DO</option>
                 </select>
               </div>
               <div class="form-group">
                 <label class="form-label">路径</label>
-                <input 
-                  class="form-input" 
-                  value={form().path} 
-                  onInput={(e) => setForm({ ...form(), path: e.target.value })} 
-                  placeholder="如 /dev/ttyUSB0 或 eth0" 
-                  required 
-                />
+                <Show when={form().type === 'net'} fallback={
+                  <input
+                    class="form-input"
+                    value={form().path}
+                    onInput={(e) => setForm({ ...form(), path: e.target.value })}
+                    placeholder="如 /dev/ttyUSB0"
+                    required
+                  />
+                }>
+                  <input
+                    class="form-input"
+                    value={form().path}
+                    onInput={(e) => setForm({ ...form(), path: e.target.value })}
+                    placeholder="如 192.168.1.100:502"
+                    required
+                  />
+                </Show>
               </div>
               <Show when={err()}>
                 <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>

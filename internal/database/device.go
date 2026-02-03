@@ -6,8 +6,6 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-// ==================== 设备操作 (param.db - 直接写) ====================
-
 // InitDeviceTable 初始化设备表
 func InitDeviceTable() error {
 	// 只添加缺失的列
@@ -22,7 +20,7 @@ func InitDeviceTable() error {
 		{"baud_rate", "INTEGER DEFAULT 9600"},
 		{"data_bits", "INTEGER DEFAULT 8"},
 		{"stop_bits", "INTEGER DEFAULT 1"},
-		{"parity", "TEXT DEFAULT 'N' CHECK(parity IN ('N', 'O', 'E'))"},
+		{"parity", "TEXT CHECK(parity IN ('N', 'O', 'E'))"},
 		{"ip_address", "TEXT"},
 		{"port_num", "INTEGER DEFAULT 502"},
 		{"device_address", "TEXT"},
@@ -107,9 +105,22 @@ func UpdateDevice(device *models.Device) error {
 			device_address = ?, collect_interval = ?, timeout = ?, driver_id = ?, enabled = ?, resource_id = ?, 
 			updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		device.Name, device.Description, device.ProductKey, device.DeviceKey, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
-		device.StopBits, device.Parity, device.IPAddress, device.PortNum, device.DeviceAddress,
-		device.CollectInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID, device.ID,
+		device.StopBits, device.Parity, device.IPAddress, device.PortNum,
+		device.DeviceAddress, device.CollectInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID,
+		device.ID,
 	)
+	return err
+}
+
+// DeleteDevice 删除设备
+func DeleteDevice(id int64) error {
+	_, err := ParamDB.Exec("DELETE FROM devices WHERE id = ?", id)
+	return err
+}
+
+// ToggleDevice 切换设备状态
+func ToggleDevice(id int64) error {
+	_, err := ParamDB.Exec("UPDATE devices SET enabled = 1 - enabled, updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
 	return err
 }
 
@@ -119,8 +130,17 @@ func UpdateDeviceEnabled(id int64, enabled int) error {
 	return err
 }
 
-// DeleteDevice 删除设备
-func DeleteDevice(id int64) error {
-	_, err := ParamDB.Exec("DELETE FROM devices WHERE id = ?", id)
+// UpdateDeviceWithID 根据ID更新设备信息（用于API）
+func UpdateDeviceWithID(id int64, device *models.Device) error {
+	_, err := ParamDB.Exec(
+		`UPDATE devices SET name = ?, description = ?, product_key = ?, device_key = ?, driver_type = ?, serial_port = ?, baud_rate = ?, 
+			data_bits = ?, stop_bits = ?, parity = ?, ip_address = ?, port_num = ?, 
+			device_address = ?, collect_interval = ?, timeout = ?, driver_id = ?, enabled = ?, resource_id = ?, 
+			updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		device.Name, device.Description, device.ProductKey, device.DeviceKey, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
+		device.StopBits, device.Parity, device.IPAddress, device.PortNum,
+		device.DeviceAddress, device.CollectInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID,
+		id,
+	)
 	return err
 }

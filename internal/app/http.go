@@ -153,4 +153,8 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	api.HandleFunc("/resources/{id}", h.UpdateResource).Methods("PUT")
 	api.HandleFunc("/resources/{id}", h.DeleteResource).Methods("DELETE")
 	api.HandleFunc("/resources/{id}/toggle", h.ToggleResource).Methods("POST")
+
+	// 网关配置
+	api.HandleFunc("/gateway/config", h.GetGatewayConfig).Methods("GET")
+	api.HandleFunc("/gateway/config", h.UpdateGatewayConfig).Methods("PUT")
 }
