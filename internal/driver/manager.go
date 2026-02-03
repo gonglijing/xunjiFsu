@@ -6,10 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"reflect"
 	"sync"
 	"time"
+	"unsafe"
 
 	extism "github.com/extism/go-sdk"
+	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -21,6 +26,35 @@ var ErrDriverNotLoaded = errors.New("driver not loaded")
 
 // ErrDriverExecutionFailed 驱动执行失败
 var ErrDriverExecutionFailed = errors.New("driver execution failed")
+
+// readWasmFile 尝试读取 wasm 文件，支持相对路径的多种基准
+func readWasmFile(path string) ([]byte, error) {
+	if path == "" {
+		return nil, fmt.Errorf("empty wasm path")
+	}
+	// 1) 绝对路径或直接相对当前工作目录
+	if data, err := os.ReadFile(path); err == nil {
+		return data, nil
+	}
+	// 2) 以当前工作目录拼接
+	if cwd, err := os.Getwd(); err == nil {
+		if data, err := os.ReadFile(filepath.Join(cwd, path)); err == nil {
+			return data, nil
+		}
+	}
+	// 3) 以可执行文件目录为基准
+	if exePath, err := os.Executable(); err == nil {
+		base := filepath.Dir(exePath)
+		if data, err := os.ReadFile(filepath.Join(base, path)); err == nil {
+			return data, nil
+		}
+		// 4) 上一级（常见于 go run 临时目录）
+		if data, err := os.ReadFile(filepath.Join(base, "..", path)); err == nil {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot read wasm file: %s", path)
+}
 
 // DriverResult 驱动执行结果
 type DriverResult struct {
@@ -142,6 +176,7 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 		[]extism.ValueType{extism.ValueTypeI32, extism.ValueTypeI32},
 		[]extism.ValueType{extism.ValueTypeI32},
 	)
+	serialRead.Namespace = "env"
 
 	// serial_write: 向串口写入数据
 	serialWrite := extism.NewHostFunctionWithStack(
@@ -170,14 +205,15 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 		[]extism.ValueType{extism.ValueTypeI32, extism.ValueTypeI32},
 		[]extism.ValueType{extism.ValueTypeI32},
 	)
+	serialWrite.Namespace = "env"
 
 	// serial_transceive: 先写再读（用于半双工协议，如自定义 RTU）
 	serialTransceive := extism.NewHostFunctionWithStack(
 		"serial_transceive",
 		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			writePtr := uint32(stack[0])
+			writePtr := uint64(stack[0])
 			writeSize := int(stack[1])
-			readPtr := uint32(stack[2])
+			readPtr := uint64(stack[2])
 			readCap := int(stack[3])
 			timeoutMs := int(stack[4])
 
@@ -187,7 +223,7 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 				return
 			}
 
-			req, _ := p.Memory().Read(writePtr, uint32(writeSize))
+			req, _ := p.Memory().Read(uint32(writePtr), uint32(writeSize))
 			if _, err := port.Write(req); err != nil {
 				stack[0] = 0
 				return
@@ -203,18 +239,19 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 				stack[0] = 0
 				return
 			}
-			p.Memory().Write(readPtr, buf[:n])
+			p.Memory().Write(uint32(readPtr), buf[:n])
 			stack[0] = uint64(n)
 		},
 		[]extism.ValueType{
-			extism.ValueTypeI32, // write ptr
+			extism.ValueTypeI64, // write ptr
 			extism.ValueTypeI32, // write size
-			extism.ValueTypeI32, // read ptr
+			extism.ValueTypeI64, // read ptr
 			extism.ValueTypeI32, // read cap
 			extism.ValueTypeI32, // timeout ms
 		},
 		[]extism.ValueType{extism.ValueTypeI32}, // bytes read
 	)
+	serialTransceive.Namespace = "env"
 
 	// sleep_ms: 毫秒延时
 	sleepMs := extism.NewHostFunctionWithStack(
@@ -226,29 +263,48 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 		[]extism.ValueType{extism.ValueTypeI32},
 		[]extism.ValueType{},
 	)
+	sleepMs.Namespace = "env"
 
-	// output: 输出日志
+	// output: 返回结果 + 日志
 	outputLog := extism.NewHostFunctionWithStack(
 		"output",
 		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			ptr := int32(stack[0])
+			ptr := uint64(stack[0])
 			size := int32(stack[1])
 
-			// 从插件内存读取数据
-			data, _ := p.Memory().Read(uint32(ptr), uint32(size))
-			fmt.Printf("[Driver] %s\n", string(data))
+			if ptr == 0 || size <= 0 {
+				fmt.Printf("[Driver] output called with ptr=%d size=%d\n", ptr, size)
+				return
+			}
+
+			// 将数据地址传给 Extism runtime 作为输出
+			if pluginVal := reflect.ValueOf(p).Elem().FieldByName("plugin"); pluginVal.IsValid() {
+				pluginPtr := (*extism.Plugin)(unsafe.Pointer(pluginVal.Pointer()))
+				if pluginPtr != nil {
+					if fn := pluginPtr.Runtime.Extism.ExportedFunction("output_set"); fn != nil {
+						_, _ = fn.Call(ctx, ptr, uint64(size))
+					} else {
+						fmt.Printf("[Driver] output_set not found\n")
+					}
+				}
+			}
+			// 同时读取并打印，便于调试
+			if data, ok := p.Memory().Read(uint32(ptr), uint32(size)); ok {
+				fmt.Printf("[Driver] %s\n", string(data))
+			}
 		},
-		[]extism.ValueType{extism.ValueTypeI32, extism.ValueTypeI32},
+		[]extism.ValueType{extism.ValueTypeI64, extism.ValueTypeI32},
 		[]extism.ValueType{},
 	)
+	outputLog.Namespace = "env"
 
 	// tcp_transceive: 写后读（与 serial_transceive 对齐）
 	tcpTransceive := extism.NewHostFunctionWithStack(
 		"tcp_transceive",
 		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			wPtr := uint32(stack[0])
+			wPtr := uint64(stack[0])
 			wSize := int(stack[1])
-			rPtr := uint32(stack[2])
+			rPtr := uint64(stack[2])
 			rCap := int(stack[3])
 			timeoutMs := int(stack[4])
 
@@ -258,7 +314,7 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 				return
 			}
 
-			req, _ := p.Memory().Read(wPtr, uint32(wSize))
+			req, _ := p.Memory().Read(uint32(wPtr), uint32(wSize))
 			if _, err := conn.Write(req); err != nil {
 				stack[0] = 0
 				return
@@ -275,18 +331,19 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 				stack[0] = 0
 				return
 			}
-			p.Memory().Write(rPtr, buf[:n])
+			p.Memory().Write(uint32(rPtr), buf[:n])
 			stack[0] = uint64(n)
 		},
 		[]extism.ValueType{
-			extism.ValueTypeI32, // wPtr
+			extism.ValueTypeI64, // wPtr
 			extism.ValueTypeI32, // wSize
-			extism.ValueTypeI32, // rPtr
+			extism.ValueTypeI64, // rPtr
 			extism.ValueTypeI32, // rCap
 			extism.ValueTypeI32, // timeout
 		},
 		[]extism.ValueType{extism.ValueTypeI32},
 	)
+	tcpTransceive.Namespace = "env"
 
 	return []extism.HostFunction{serialRead, serialWrite, serialTransceive, sleepMs, outputLog, tcpTransceive}
 }
@@ -403,6 +460,15 @@ func (m *DriverManager) ExecuteDriver(id int64, function string, driverCtx *Driv
 	_, output, err := driver.plugin.Call(function, inputJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call plugin: %w", err)
+	}
+
+	// 若直接返回为空，尝试从 runtime 读取输出寄存
+	if len(output) == 0 {
+		if alt, err2 := driver.plugin.GetOutput(); err2 == nil && len(alt) > 0 {
+			output = alt
+		} else {
+			return nil, fmt.Errorf("plugin returned empty output (function=%s)", function)
+		}
 	}
 
 	// 解析输出
@@ -694,7 +760,23 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 		defer unlock()
 	}
 
-	return e.manager.ExecuteDriver(*device.DriverID, "collect", ctx)
+	// 若驱动未加载，尝试按需加载
+	if !e.manager.IsLoaded(*device.DriverID) {
+		if drv, err := database.GetDriverByID(*device.DriverID); err == nil && drv != nil && drv.FilePath != "" {
+			if wasmData, err := readWasmFile(drv.FilePath); err == nil {
+				if err := e.manager.LoadDriver(drv, wasmData, resourceID); err != nil {
+					return nil, fmt.Errorf("load driver %d failed: %w", drv.ID, err)
+				}
+			} else {
+				return nil, fmt.Errorf("read driver wasm failed: %w", err)
+			}
+		} else {
+			return nil, ErrDriverNotFound
+		}
+	}
+
+	// 默认入口函数名（TinyGo 驱动导出为 handle）
+	return e.manager.ExecuteDriver(*device.DriverID, "handle", ctx)
 }
 
 // CollectData 采集数据

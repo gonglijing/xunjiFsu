@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -21,7 +22,10 @@ func InitResourceTable() error {
 	if err != nil {
 		return err
 	}
-	return ensureResourcePathColumn()
+	if err := ensureResourcePathColumn(); err != nil {
+		return err
+	}
+	return ensureResourceTypeConstraint()
 }
 
 func AddResource(r *models.Resource) (int64, error) {
@@ -33,7 +37,7 @@ func AddResource(r *models.Resource) (int64, error) {
 }
 
 func ListResources() ([]*models.Resource, error) {
-	rows, err := ParamDB.Query(`SELECT id, name, type, path, enabled, created_at, updated_at FROM resources ORDER BY id`)
+	rows, err := ParamDB.Query(`SELECT id, name, type, COALESCE(path, '') as path, enabled, created_at, updated_at FROM resources ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +81,7 @@ func BindDeviceResource(deviceID, resourceID int64) error {
 // GetResourceByID returns resource
 func GetResourceByID(id int64) (*models.Resource, error) {
 	r := &models.Resource{}
-	err := ParamDB.QueryRow(`SELECT id,name,type,path,enabled,created_at,updated_at FROM resources WHERE id=?`, id).
+	err := ParamDB.QueryRow(`SELECT id,name,type,COALESCE(path, ''),enabled,created_at,updated_at FROM resources WHERE id=?`, id).
 		Scan(&r.ID, &r.Name, &r.Type, &r.Path, &r.Enabled, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -100,6 +104,56 @@ func ensureResourcePathColumn() error {
 		_, _ = ParamDB.Exec(`UPDATE resources SET path = COALESCE(path, port, '')`)
 	}
 	return nil
+}
+
+// ensureResourceTypeConstraint rebuilds table if old CHECK constraint doesn't allow 'net'.
+func ensureResourceTypeConstraint() error {
+	var sqlText string
+	err := ParamDB.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='resources'`).Scan(&sqlText)
+	if err != nil || sqlText == "" {
+		return err
+	}
+	// If constraint already allows net, nothing to do.
+	if strings.Contains(sqlText, "'net'") {
+		return nil
+	}
+
+	tx, err := ParamDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`CREATE TABLE resources_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL CHECK(type IN ('serial', 'net', 'di', 'do')),
+		path TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`INSERT INTO resources_new (id, name, type, path, enabled, created_at, updated_at)
+		SELECT id, name, type, path, enabled, created_at, updated_at FROM resources`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DROP TABLE resources`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`ALTER TABLE resources_new RENAME TO resources`)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // columnExists checks if a column exists in a table.

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS resources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('serial', 'di', 'do')),
+    type TEXT NOT NULL CHECK(type IN ('serial', 'net', 'di', 'do')),
     -- 串口配置
     port TEXT,
     -- DI/DO 配置
