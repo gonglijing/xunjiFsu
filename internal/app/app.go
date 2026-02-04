@@ -47,6 +47,9 @@ func Run(cfg *config.Config) error {
 
 	driverManager := driver.NewDriverManager()
 	driverExecutor := driver.NewDriverExecutor(driverManager)
+	driverManager.SetCallTimeout(cfg.DriverCallTimeout)
+	driverExecutor.SetTimeouts(cfg.DriverSerialReadTimeout, cfg.DriverTCPDialTimeout, cfg.DriverTCPReadTimeout)
+	driverExecutor.SetRetries(cfg.DriverSerialOpenRetries, cfg.DriverTCPDialRetries, cfg.DriverSerialOpenBackoff, cfg.DriverTCPDialBackoff)
 
 	// 加载所有启用的驱动
 	if err := loadEnabledDrivers(cfg, driverManager); err != nil {
