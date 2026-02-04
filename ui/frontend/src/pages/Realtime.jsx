@@ -21,8 +21,12 @@ function Realtime() {
   createEffect(() => {
     if (!selected()) return;
     setLoading(true);
-    getJSON(`/api/data/points/${selected()}`)
-      .then((res) => setPoints(res.data || res))
+    getJSON(`/api/data/cache/${selected()}`)
+      .then((res) => {
+        const list = res.data || res || [];
+        list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
+        setPoints(list);
+      })
       .catch(() => toast.show('error', '加载实时数据失败'))
       .finally(() => setLoading(false));
   });
@@ -56,14 +60,17 @@ function Realtime() {
               </tr>
             </thead>
             <tbody>
-              {points().map((p) => (
-                <tr key={p.id || `${p.device_id}-${p.collected_at}-${p.field_name}`}>
-                  <td>{p.collected_at || p.CollectedAt || ''}</td>
-                  <td>{p.device_name || ''}</td>
-                  <td>{p.field_name || ''}</td>
-                  <td>{p.value}</td>
-                </tr>
-              ))}
+              {points().map((p) => {
+                const deviceName = devices().find((d) => String(d.id) === String(p.device_id))?.name || p.device_name || '';
+                return (
+                  <tr key={p.id || `${p.device_id}-${p.field_name}`}>
+                    <td>{p.collected_at || p.CollectedAt || ''}</td>
+                    <td>{deviceName}</td>
+                    <td>{p.field_name || ''}</td>
+                    <td>{p.value}</td>
+                  </tr>
+                );
+              })}
               {points().length === 0 && (
                 <tr>
                   <td colSpan={4} style="text-align:center; padding:24px; color:var(--text-muted);">暂无数据</td>

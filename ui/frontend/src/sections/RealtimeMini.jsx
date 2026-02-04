@@ -6,14 +6,31 @@ import { useToast } from '../components/Toast';
 export function RealtimeMini() {
   const toast = useToast();
   const [points, setPoints] = createSignal([]);
+  const [deviceMap, setDeviceMap] = createSignal(new Map());
 
   const load = () => {
-    getJSON('/api/data/points')
-      .then((res) => setPoints((res.data || res).slice(0, 8)))
+    getJSON('/api/data')
+      .then((res) => {
+        const list = res.data || res || [];
+        list.sort((a, b) => {
+          const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
+          const bt = new Date(b.collected_at || b.CollectedAt || 0).getTime();
+          return bt - at;
+        });
+        setPoints(list.slice(0, 8));
+      })
       .catch(() => toast.show('error', '加载实时数据失败'));
   };
 
   createEffect(() => {
+    getJSON('/api/devices')
+      .then((res) => {
+        const list = res.data || res || [];
+        const map = new Map();
+        list.forEach((d) => map.set(String(d.id), d.name || d.id));
+        setDeviceMap(map);
+      })
+      .catch(() => {});
     load();
     const timer = setInterval(load, 4000);
     onCleanup(() => clearInterval(timer));
@@ -33,14 +50,17 @@ export function RealtimeMini() {
           </thead>
           <tbody>
             <For each={points()}>
-              {(p) => (
-                <tr key={p.id || `${p.device_id}-${p.field_name}-${p.collected_at}`}>
-                  <td>{p.collected_at?.slice(5, 19) || p.CollectedAt}</td>
-                  <td>{p.device_name || p.DeviceName}</td>
-                  <td>{p.field_name || p.FieldName}</td>
-                  <td>{p.value || p.Value}</td>
-                </tr>
-              )}
+              {(p) => {
+                const name = deviceMap().get(String(p.device_id)) || p.device_name || p.DeviceName || p.device_id;
+                return (
+                  <tr key={p.id || `${p.device_id}-${p.field_name}`}>
+                    <td>{p.collected_at?.slice(5, 19) || p.CollectedAt}</td>
+                    <td>{name}</td>
+                    <td>{p.field_name || p.FieldName}</td>
+                    <td>{p.value || p.Value}</td>
+                  </tr>
+                );
+              }}
             </For>
             <For each={points().length === 0 ? [1] : []}>
               {() => (
