@@ -52,9 +52,9 @@ type DriverResult struct {
 
 // DriverPoint 驱动测点数据
 type DriverPoint struct {
-	FieldName string  `json:"field_name"`
-	Value     float64 `json:"value"`
-	RW        string  `json:"rw"` // "R" | "W" | "RW"
+	FieldName string      `json:"field_name"`
+	Value     interface{} `json:"value"` // 支持 string 或 float64
+	RW        string      `json:"rw"`    // "R" | "W" | "RW"
 }
 
 // DriverContext 驱动上下文

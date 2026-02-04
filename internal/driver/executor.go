@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -386,7 +387,7 @@ func (e *DriverExecutor) CollectDataWithContext(ctx context.Context, device *mod
 	// 优先使用新格式 (points)
 	if len(result.Points) > 0 {
 		for _, point := range result.Points {
-			fields[point.FieldName] = fmt.Sprintf("%.6f", point.Value)
+			fields[point.FieldName] = valueToString(point.Value)
 		}
 	} else {
 		// 兼容旧格式
@@ -401,4 +402,46 @@ func (e *DriverExecutor) CollectDataWithContext(ctx context.Context, device *mod
 		Timestamp:  result.Timestamp,
 		Fields:     fields,
 	}, nil
+}
+
+// valueToString 将驱动的 value 转换为字符串
+// 支持 float64、int、string 类型
+func valueToString(v interface{}) string {
+	switch val := v.(type) {
+	case float64:
+		return fmt.Sprintf("%.6f", val)
+	case float32:
+		return fmt.Sprintf("%.6f", val)
+	case int:
+		return fmt.Sprintf("%d", val)
+	case int64:
+		return fmt.Sprintf("%d", val)
+	case string:
+		return val
+	default:
+		// 尝试转换为 float64
+		if f, ok := toFloat64(v); ok {
+			return fmt.Sprintf("%.6f", f)
+		}
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// toFloat64 尝试将任意值转换为 float64
+func toFloat64(v interface{}) (float64, bool) {
+	switch val := v.(type) {
+	case float64:
+		return val, true
+	case float32:
+		return float64(val), true
+	case int:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case string:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }
