@@ -13,6 +13,7 @@ type Handler struct {
 	collector     *collector.Collector
 	driverManager *driver.DriverManager
 	northboundMgr *northbound.NorthboundManager
+	driversDir    string
 }
 
 // NewHandler 创建处理器
@@ -21,11 +22,13 @@ func NewHandler(
 	collector *collector.Collector,
 	driverManager *driver.DriverManager,
 	northboundMgr *northbound.NorthboundManager,
+	driversDir string,
 ) *Handler {
 	return &Handler{
 		authManager:   authManager,
 		collector:     collector,
 		driverManager: driverManager,
 		northboundMgr: northboundMgr,
+		driversDir:    driversDir,
 	}
 }

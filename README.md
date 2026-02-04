@@ -357,20 +357,32 @@ make deploy-windows  # Windows
 ```go
 package main
 
-//go:export serial_transceive
-func serial_transceive(wPtr unsafe.Pointer, wSize, rPtr, rCap, timeoutMs int32) int32
+import (
+	"encoding/json"
 
-//go:export output
-func output(ptr unsafe.Pointer, size int32)
+	pdk "github.com/extism/go-pdk"
+)
 
-//go:export handle
-func handle() {
+//go:wasmimport extism:host/user serial_transceive
+func serial_transceive(wPtr uint64, wSize uint64, rPtr uint64, rCap uint64, timeoutMs uint64) uint64
+
+//go:wasmexport handle
+func handle() int32 {
     cfg := getConfig()
     points := readDevice(cfg)
     outputJSON(map[string]interface{}{
         "success": true,
         "data": map[string]interface{}{"points": points},
     })
+    return 0
+}
+
+func outputJSON(v interface{}) {
+	b, _ := json.Marshal(v)
+	if len(b) == 0 {
+		b = []byte(`{"success":false,"error":"encode failed"}`)
+	}
+	pdk.Output(b)
 }
 ```
 
@@ -378,7 +390,7 @@ func handle() {
 
 ```bash
 cd drvs
-tinygo build -o th_modbusrtu.wasm -target=wasi -stack-size=64k th_modbusrtu.go
+tinygo build -o th_modbusrtu.wasm -target=wasip1 -buildmode=c-shared th_modbusrtu.go
 ```
 
 ## 数据库架构

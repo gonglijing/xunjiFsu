@@ -196,17 +196,17 @@ func SetJSONOutput(enabled bool) {
 
 // Debug 全局调试日志
 func Debug(msg string, keysAndValues ...interface{}) {
-	global.log(DEBUG, msg, keysAndValues)
+	global.log(DEBUG, msg, keysAndValues...)
 }
 
 // Info 全局信息日志
 func Info(msg string, keysAndValues ...interface{}) {
-	global.log(INFO, msg, keysAndValues)
+	global.log(INFO, msg, keysAndValues...)
 }
 
 // Warn 全局警告日志
 func Warn(msg string, keysAndValues ...interface{}) {
-	global.log(WARN, msg, keysAndValues)
+	global.log(WARN, msg, keysAndValues...)
 }
 
 // Error 全局错误日志

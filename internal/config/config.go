@@ -46,6 +46,9 @@ type Config struct {
 	CollectorWorkers int           `json:"collector_workers"`
 	SyncInterval     time.Duration `json:"sync_interval"`
 
+	// 驱动目录
+	DriversDir string `json:"drivers_dir"`
+
 	// 阈值缓存配置
 	ThresholdCacheEnabled bool          `json:"threshold_cache_enabled"`
 	ThresholdCacheTTL     time.Duration `json:"threshold_cache_ttl"`
@@ -77,6 +80,7 @@ func DefaultConfig() *Config {
 		CollectorEnabled:      true,
 		CollectorWorkers:      10,
 		SyncInterval:          5 * time.Minute,
+		DriversDir:            "drivers",
 		ThresholdCacheEnabled: true,
 		ThresholdCacheTTL:     time.Minute,
 		MaxDataPoints:         100000,
@@ -134,6 +138,9 @@ func loadFromFile(cfg *Config) error {
 			ReadTimeout  string `yaml:"read_timeout"`
 			WriteTimeout string `yaml:"write_timeout"`
 		} `yaml:"server"`
+		Drivers struct {
+			Dir string `yaml:"dir"`
+		} `yaml:"drivers"`
 		Auth struct {
 			SessionMaxAge int `yaml:"session_max_age"`
 		} `yaml:"auth"`
@@ -165,6 +172,9 @@ func loadFromFile(cfg *Config) error {
 		if timeout, err := time.ParseDuration(yamlCfg.Server.WriteTimeout); err == nil {
 			cfg.HTTPWriteTimeout = timeout
 		}
+	}
+	if yamlCfg.Drivers.Dir != "" {
+		cfg.DriversDir = yamlCfg.Drivers.Dir
 	}
 
 	return nil
@@ -256,6 +266,11 @@ func loadFromEnv(cfg *Config) {
 		}
 	}
 
+	// 驱动目录
+	if v := os.Getenv("DRIVERS_DIR"); v != "" {
+		cfg.DriversDir = v
+	}
+
 	// 阈值缓存配置
 	if v := os.Getenv("THRESHOLD_CACHE_ENABLED"); v != "" {
 		cfg.ThresholdCacheEnabled = strings.ToLower(v) == "true"
@@ -289,6 +304,6 @@ func (c *Config) GetAllowedOrigins() []string {
 
 // String 返回配置的字符串表示
 func (c *Config) String() string {
-	return fmt.Sprintf("Config{ListenAddr=%s, DBPath=%s, LogLevel=%s, CollectorEnabled=%v, SyncInterval=%v}",
-		c.ListenAddr, c.DBPath, c.LogLevel, c.CollectorEnabled, c.SyncInterval)
+	return fmt.Sprintf("Config{ListenAddr=%s, DBPath=%s, DriversDir=%s, LogLevel=%s, CollectorEnabled=%v, SyncInterval=%v}",
+		c.ListenAddr, c.DBPath, c.DriversDir, c.LogLevel, c.CollectorEnabled, c.SyncInterval)
 }

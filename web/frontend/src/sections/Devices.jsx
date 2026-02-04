@@ -43,16 +43,30 @@ export function Devices() {
   const [writeTarget, setWriteTarget] = createSignal(null);
   let modalRoot;
 
+  const normalizeList = (res) => {
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.data)) return res.data;
+    return [];
+  };
+
   const load = () => {
     setLoading(true);
-    Promise.all([getJSON('/api/devices'), getJSON('/api/resources'), getJSON('/api/drivers')])
+    Promise.allSettled([getJSON('/api/devices'), getJSON('/api/resources'), getJSON('/api/drivers')])
       .then(([devRes, resRes, drvRes]) => {
-        setItems(devRes.data || devRes);
-        setResources(resRes.data || resRes);
-        setDrivers((drvRes.data || drvRes).filter(d => d.enabled === 1));
-        setError('');
+        if (devRes.status === 'fulfilled') {
+          setItems(normalizeList(devRes.value));
+        }
+        if (resRes.status === 'fulfilled') {
+          setResources(normalizeList(resRes.value));
+        }
+        if (drvRes.status === 'fulfilled') {
+          const list = normalizeList(drvRes.value);
+          setDrivers(list.filter((d) => Number(d.enabled ?? 1) === 1));
+        }
+
+        const hasError = [devRes, resRes, drvRes].some((r) => r.status === 'rejected');
+        setError(hasError ? '加载设备、资源或驱动失败' : '');
       })
-      .catch(() => setError('加载设备、资源或驱动失败'))
       .finally(() => setLoading(false));
   };
 
@@ -167,8 +181,6 @@ export function Devices() {
 
   const filteredResources = () => {
     if (!resources().length) return [];
-    if (form().driver_type?.startsWith('modbus_rtu')) return resources().filter((r) => r.type === 'serial');
-    if (form().driver_type?.startsWith('modbus_tcp')) return resources().filter((r) => r.type === 'net');
     return resources();
   };
 
@@ -318,6 +330,9 @@ export function Devices() {
                     required
                   >
                     <option value="">请选择驱动</option>
+                    <Show when={!drivers().length}>
+                      <option value="" disabled>暂无可用驱动</option>
+                    </Show>
                     <For each={drivers()}>
                       {(d) => (
                         <option value={d.id}>
@@ -335,6 +350,9 @@ export function Devices() {
                     onChange={(e) => setForm({ ...form(), resource_id: e.target.value ? +e.target.value : null })}
                   >
                     <option value="">请选择资源</option>
+                    <Show when={!filteredResources().length}>
+                      <option value="" disabled>暂无可用资源</option>
+                    </Show>
                     <For each={filteredResources()}>
                       {(r) => (
                         <option value={r.id}>

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
@@ -48,7 +49,7 @@ func Run(cfg *config.Config) error {
 	driverExecutor := driver.NewDriverExecutor(driverManager)
 
 	// 加载所有启用的驱动
-	if err := loadEnabledDrivers(driverManager); err != nil {
+	if err := loadEnabledDrivers(cfg, driverManager); err != nil {
 		logger.Warn("Failed to load drivers", "error", err)
 	}
 
@@ -62,7 +63,7 @@ func Run(cfg *config.Config) error {
 
 	collect := collector.NewCollector(driverExecutor, northboundMgr)
 	authManager := auth.NewJWTManager(secretKey)
-	h := handlers.NewHandler(authManager, collect, driverManager, northboundMgr)
+	h := handlers.NewHandler(authManager, collect, driverManager, northboundMgr, cfg.DriversDir)
 
 	router := buildRouter(h, authManager)
 	finalHandler := buildHandlerChain(cfg, router)
@@ -121,7 +122,7 @@ func Run(cfg *config.Config) error {
 }
 
 // loadEnabledDrivers 从数据库加载所有启用的驱动
-func loadEnabledDrivers(manager *driver.DriverManager) error {
+func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error {
 	drivers, err := database.GetAllDrivers()
 	if err != nil {
 		return fmt.Errorf("failed to get drivers: %w", err)
@@ -132,7 +133,11 @@ func loadEnabledDrivers(manager *driver.DriverManager) error {
 		if d.Enabled != 1 {
 			continue
 		}
-		// 跳过 file_path 为空的驱动
+		// 如果 file_path 为空，默认从 drivers 目录拼接
+		if d.FilePath == "" && cfg != nil {
+			d.FilePath = filepath.Join(cfg.DriversDir, d.Name+".wasm")
+		}
+		// 跳过 file_path 仍为空的驱动
 		if d.FilePath == "" {
 			logger.Debug("Skipping driver with empty file_path", "id", d.ID, "name", d.Name)
 			continue

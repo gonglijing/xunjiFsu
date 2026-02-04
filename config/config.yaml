@@ -5,6 +5,10 @@ server:
   read_timeout: 30s
   write_timeout: 30s
 
+# 驱动目录
+drivers:
+  dir: "drivers"
+
 # 认证配置
 auth:
   session_max_age: 604800  # 7天，单位秒

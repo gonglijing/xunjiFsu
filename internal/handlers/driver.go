@@ -23,10 +23,7 @@ func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, d := range drivers {
-		path := d.FilePath
-		if path == "" {
-			path = filepath.Join("drivers", d.Name+".wasm")
-		}
+		path := h.driverFilePath(d.Name, d.FilePath)
 		if info, err := os.Stat(path); err == nil {
 			d.Size = info.Size()
 			d.Filename = filepath.Base(path)
@@ -44,7 +41,7 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if driver.FilePath == "" {
-		driver.FilePath = filepath.Join("drivers", driver.Name+".wasm")
+		driver.FilePath = h.driverFilePath(driver.Name, "")
 	}
 
 	id, err := database.CreateDriver(&driver)
@@ -124,9 +121,7 @@ func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
 
 	// 删除文件（忽略错误）
 	path := drv.FilePath
-	if path == "" {
-		path = filepath.Join("drivers", drv.Name+".wasm")
-	}
+	path = h.driverFilePath(drv.Name, path)
 	_ = os.Remove(path)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -155,7 +150,10 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 创建 drivers 目录
-	driversDir := "drivers"
+	driversDir := h.driversDir
+	if driversDir == "" {
+		driversDir = "drivers"
+	}
 	if err := os.MkdirAll(driversDir, 0755); err != nil {
 		WriteServerError(w, "Failed to create drivers directory: "+err.Error())
 		return
@@ -199,9 +197,7 @@ func (h *Handler) DownloadDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filePath := driver.FilePath
-	if filePath == "" {
-		filePath = filepath.Join("drivers", driver.Name+".wasm")
-	}
+	filePath = h.driverFilePath(driver.Name, filePath)
 
 	// 打开文件
 	file, err := os.Open(filePath)
@@ -226,7 +222,10 @@ func (h *Handler) DownloadDriver(w http.ResponseWriter, r *http.Request) {
 
 // ListDriverFiles 列出驱动目录中的文件
 func (h *Handler) ListDriverFiles(w http.ResponseWriter, r *http.Request) {
-	driversDir := "drivers"
+	driversDir := h.driversDir
+	if driversDir == "" {
+		driversDir = "drivers"
+	}
 
 	entries, err := os.ReadDir(driversDir)
 	if err != nil {
@@ -251,4 +250,15 @@ func (h *Handler) ListDriverFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteSuccess(w, files)
+}
+
+func (h *Handler) driverFilePath(driverName, filePath string) string {
+	if filePath != "" {
+		return filePath
+	}
+	dir := h.driversDir
+	if dir == "" {
+		dir = "drivers"
+	}
+	return filepath.Join(dir, driverName+".wasm")
 }
