@@ -221,6 +221,54 @@ func getDiskLatestDataPoints(limit int, before time.Time) ([]*DataPoint, error) 
 	return queryList[*DataPoint](db, query, args, scanDataPoint)
 }
 
+func getDiskDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
+	db, err := openDataDiskDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at
+		FROM data_points WHERE device_id = ? AND field_name = ?`
+	args := []any{deviceID, fieldName}
+	if !startTime.IsZero() {
+		query += " AND collected_at >= ?"
+		args = append(args, startTime)
+	}
+	if !endTime.IsZero() {
+		query += " AND collected_at <= ?"
+		args = append(args, endTime)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	return queryList[*DataPoint](db, query, args, scanDataPoint)
+}
+
+func getDiskDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
+	db, err := openDataDiskDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at
+		FROM data_points WHERE device_id = ?`
+	args := []any{deviceID}
+	if !startTime.IsZero() {
+		query += " AND collected_at >= ?"
+		args = append(args, startTime)
+	}
+	if !endTime.IsZero() {
+		query += " AND collected_at <= ?"
+		args = append(args, endTime)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	return queryList[*DataPoint](db, query, args, scanDataPoint)
+}
+
 // enforceDataPointsLimit 强制执行数据点大小限制
 func enforceDataPointsLimit() {
 	var count int
@@ -237,15 +285,77 @@ func enforceDataPointsLimit() {
 	}
 }
 
-// GetDataPointsByDeviceAndTime 根据设备ID和时间范围获取历史数据（从内存）
+// GetDataPointsByDeviceAndTime 根据设备ID和时间范围获取历史数据（内存 + 磁盘）
 func GetDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Time) ([]*DataPoint, error) {
-	return queryList[*DataPoint](DataDB,
-		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
-		FROM data_points WHERE device_id = ? AND collected_at >= ? AND collected_at <= ? 
-		ORDER BY collected_at DESC`,
-		[]any{deviceID, startTime, endTime},
-		scanDataPoint,
-	)
+	return GetDataPointsByDeviceAndTimeLimit(deviceID, startTime, endTime, 2000)
+}
+
+// GetDataPointsByDeviceAndTimeLimit 根据设备ID和时间范围获取历史数据（内存 + 磁盘）
+func GetDataPointsByDeviceAndTimeLimit(deviceID int64, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
+	if limit <= 0 {
+		limit = 2000
+	}
+	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
+		FROM data_points WHERE device_id = ?`
+	args := []any{deviceID}
+	if !startTime.IsZero() {
+		query += " AND collected_at >= ?"
+		args = append(args, startTime)
+	}
+	if !endTime.IsZero() {
+		query += " AND collected_at <= ?"
+		args = append(args, endTime)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	memPoints, err := queryList[*DataPoint](DataDB, query, args, scanDataPoint)
+	if err != nil {
+		return nil, err
+	}
+
+	diskPoints, err := getDiskDataPointsByDeviceAndTime(deviceID, startTime, endTime, limit)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Failed to read data points by time from disk: %v", err)
+		}
+		return memPoints, nil
+	}
+	return mergeDataPoints(memPoints, diskPoints, limit), nil
+}
+
+// GetDataPointsByDeviceFieldAndTime 根据设备ID/字段/时间范围获取历史数据（内存 + 磁盘）
+func GetDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
+	if limit <= 0 {
+		limit = 2000
+	}
+	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
+		FROM data_points WHERE device_id = ? AND field_name = ?`
+	args := []any{deviceID, fieldName}
+	if !startTime.IsZero() {
+		query += " AND collected_at >= ?"
+		args = append(args, startTime)
+	}
+	if !endTime.IsZero() {
+		query += " AND collected_at <= ?"
+		args = append(args, endTime)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	memPoints, err := queryList[*DataPoint](DataDB, query, args, scanDataPoint)
+	if err != nil {
+		return nil, err
+	}
+
+	diskPoints, err := getDiskDataPointsByDeviceFieldAndTime(deviceID, fieldName, startTime, endTime, limit)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Failed to read data points by field from disk: %v", err)
+		}
+		return memPoints, nil
+	}
+	return mergeDataPoints(memPoints, diskPoints, limit), nil
 }
 
 // GetDataPointsByDevice 根据设备ID获取历史数据（内存 + 磁盘）

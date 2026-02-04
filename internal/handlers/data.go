@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -129,17 +131,44 @@ func (h *Handler) GetDataPoints(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
 	deviceID := r.URL.Query().Get("device_id")
+	fieldName := r.URL.Query().Get("field_name")
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
 	var (
 		points []*database.DataPoint
 		err    error
 	)
+	var startTime, endTime time.Time
+	if startStr != "" {
+		parsed, parseErr := parseTimeParam(startStr)
+		if parseErr != nil {
+			WriteBadRequest(w, "Invalid start time")
+			return
+		}
+		startTime = parsed
+	}
+	if endStr != "" {
+		parsed, parseErr := parseTimeParam(endStr)
+		if parseErr != nil {
+			WriteBadRequest(w, "Invalid end time")
+			return
+		}
+		endTime = parsed
+	}
+
 	if deviceID != "" {
 		id, parseErr := strconv.ParseInt(deviceID, 10, 64)
 		if parseErr != nil {
 			WriteBadRequest(w, "Invalid device_id")
 			return
 		}
-		points, err = database.GetDataPointsByDevice(id, 1000)
+		if fieldName != "" {
+			points, err = database.GetDataPointsByDeviceFieldAndTime(id, fieldName, startTime, endTime, 2000)
+		} else if !startTime.IsZero() || !endTime.IsZero() {
+			points, err = database.GetDataPointsByDeviceAndTimeLimit(id, startTime, endTime, 2000)
+		} else {
+			points, err = database.GetDataPointsByDevice(id, 1000)
+		}
 	} else {
 		points, err = database.GetLatestDataPoints(1000)
 	}
@@ -148,6 +177,22 @@ func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteSuccess(w, points)
+}
+
+func parseTimeParam(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if ts, err := time.Parse(time.RFC3339, value); err == nil {
+		return ts, nil
+	}
+	if ts, err := time.Parse("2006-01-02T15:04", value); err == nil {
+		return ts, nil
+	}
+	if ts, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+		return ts, nil
+	}
+	return time.Time{}, fmt.Errorf("invalid time format")
 }
 
 func (h *Handler) GetLatestDataPoints(w http.ResponseWriter, r *http.Request) {
