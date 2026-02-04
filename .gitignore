@@ -4,3 +4,6 @@ drivers/
 drvs/
 main
 ui/frontend/node_modules/
+data.db
+param.db
+ui/static/dist/main.js
