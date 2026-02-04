@@ -77,23 +77,23 @@ vet:
 # 前端依赖安装 (SolidJS)
 ui-install:
 	@echo "=== 安装前端依赖 (SolidJS) ==="
-	@if [ -d "web/frontend/node_modules" ]; then \
+	@if [ -d "ui/frontend/node_modules" ]; then \
 		echo "依赖已存在，使用 npm install 更新..."; \
-		npm --prefix web/frontend install; \
+		npm --prefix ui/frontend install; \
 	else \
-		npm --prefix web/frontend install; \
+		npm --prefix ui/frontend install; \
 	fi
 	@echo "✅ 前端依赖安装完成"
 
 # 前端构建 (SolidJS)
 ui:
 	@echo "=== 构建前端 (SolidJS) ==="
-	@if [ ! -d "web/frontend/node_modules" ]; then \
+	@if [ ! -d "ui/frontend/node_modules" ]; then \
 		echo "依赖未安装，先执行: make ui-install"; \
 		exit 1; \
 	fi
-	npm --prefix web/frontend run build
-	@echo "✅ 前端构建完成: web/static/dist/main.js"
+	npm --prefix ui/frontend run build
+	@echo "✅ 前端构建完成: ui/static/dist/main.js"
 
 # 前端开发服务器 (热重载)
 ui-dev:
@@ -101,7 +101,7 @@ ui-dev:
 	@echo "访问 http://localhost:5173 查看前端"
 	@echo "按 Ctrl+C 停止服务器"
 	@echo ""
-	npm --prefix web/frontend run dev --host
+	npm --prefix ui/frontend run dev --host
 
 # 启动后端服务
 run:
@@ -116,8 +116,8 @@ clean:
 	@echo "=== 清理构建产物 ==="
 	rm -f $(PROJECT_NAME)
 	rm -rf $(DEPLOY_DIR)
-	rm -rf web/frontend/node_modules
-	rm -rf web/frontend/dist
+	rm -rf ui/frontend/node_modules
+	rm -rf ui/frontend/dist
 	@echo "✅ 清理完成"
 
 # 创建部署目录结构

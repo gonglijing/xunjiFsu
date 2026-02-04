@@ -123,7 +123,7 @@ gogw/
 │   │   └── manager.go          # 串口/TCP 连接管理
 │   └── logger/
 │       └── logger.go           # 日志封装
-├── web/
+├── ui/
 │   ├── frontend/               # SolidJS 前端
 │   │   ├── src/
 │   │   │   ├── api.js          # HTTP 客户端 + hooks
@@ -182,7 +182,7 @@ git clone https://github.com/gonglijing/xunjiFsu.git
 cd xunjiFsu
 
 # 安装前端依赖
-cd web/frontend && npm install && cd ../..
+cd ui/frontend && npm install && cd ../..
 
 # 编译前端
 make ui

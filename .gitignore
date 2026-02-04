@@ -3,4 +3,4 @@ cookies.txt
 drivers/
 drvs/
 main
-web/frontend/node_modules/
+ui/frontend/node_modules/

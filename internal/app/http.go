@@ -51,14 +51,14 @@ func resolveStaticDir() http.Dir {
 	workDir, err := os.Getwd()
 	if err != nil {
 		logger.Warn("Failed to get working directory, using relative static path", "error", err)
-		return http.Dir(filepath.Join("web", "static"))
+		return http.Dir(filepath.Join("ui", "static"))
 	}
-	return http.Dir(filepath.Join(workDir, "web", "static"))
+	return http.Dir(filepath.Join(workDir, "ui", "static"))
 }
 
 func registerStaticRoutes(r *mux.Router, staticDir http.Dir) {
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(staticDir)))
-	r.PathPrefix("/web/static/").Handler(http.StripPrefix("/web/static/", http.FileServer(staticDir)))
+	r.PathPrefix("/ui/static/").Handler(http.StripPrefix("/ui/static/", http.FileServer(staticDir)))
 }
 
 func registerPageRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWTManager) {
@@ -74,7 +74,7 @@ func registerPageRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JW
 			// 排除 API 和静态资源
 			if strings.HasPrefix(path, "/api") ||
 				strings.HasPrefix(path, "/static/") ||
-				strings.HasPrefix(path, "/web/static/") {
+				strings.HasPrefix(path, "/ui/static/") {
 				return false
 			}
 			return true

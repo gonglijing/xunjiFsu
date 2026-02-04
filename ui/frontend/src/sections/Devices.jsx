@@ -122,9 +122,9 @@ export function Devices() {
 
   const openWrite = (device) => {
     setWriteTarget(device);
-    getJSON(`/api/drivers/${device.driver_id}/describe`)
+    getJSON(`/api/devices/${device.id}/writables`)
       .then((res) => {
-        const ws = (res.data && res.data.writable) || [];
+        const ws = Array.isArray(res) ? res : (res && res.writable) || [];
         setWriteMeta(ws);
         if (ws.length) {
           setWriteForm({ field: ws[0].field, value: '' });
@@ -140,7 +140,13 @@ export function Devices() {
   const submitWrite = (e) => {
     e.preventDefault();
     setWriteError('');
-    postJSON(`/api/devices/${writeTarget().id}/write`, writeForm())
+    const payload = {
+      function: 'write',
+      params: {
+        [writeForm().field]: writeForm().value,
+      },
+    };
+    postJSON(`/api/devices/${writeTarget().id}/execute`, payload)
       .then(() => {
         toast.show('success', '写入成功');
         setShowWriteModal(false);
