@@ -298,7 +298,6 @@ make deploy-windows  # Windows
 | GET | `/` | 仪表盘 |
 | GET | `/alarms` | 报警日志 |
 | GET | `/realtime` | 实时数据 |
-| GET | `/history` | 历史数据 |
 | GET | `/gateway` | 网关设置 |
 | GET | `/resources` | 资源管理 |
 | GET | `/devices` | 设备管理 |
@@ -381,8 +380,6 @@ make deploy-windows  # Windows
 |------|------|------|
 | GET | `/api/data` | 缓存概览 |
 | GET | `/api/data/cache/{id}` | 设备缓存 |
-| GET | `/api/data/points` | 最新数据点 |
-| GET | `/api/data/points/{id}` | 指定设备实时数据 |
 | GET | `/api/data/history` | 历史数据 |
 
 ### 数据存储说明

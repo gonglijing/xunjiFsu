@@ -2,6 +2,7 @@ import { createSignal, createEffect, Show } from 'solid-js';
 import { getJSON } from '../api';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
+import { formatDateTime } from '../utils/time';
 
 function Realtime() {
   const toast = useToast();
@@ -108,6 +109,44 @@ function Realtime() {
     }).join(' ');
   };
 
+  const buildTicks = (list, width, height, padding) => {
+    if (list.length === 0) return { xTicks: [], yTicks: [] };
+    const minT = list[0].t;
+    const maxT = list[list.length - 1].t;
+    let minV = list[0].v;
+    let maxV = list[0].v;
+    list.forEach((p) => {
+      if (p.v < minV) minV = p.v;
+      if (p.v > maxV) maxV = p.v;
+    });
+    const rangeT = maxT - minT || 1;
+    const rangeV = maxV - minV || 1;
+
+    const ySteps = 4;
+    const yTicks = [];
+    for (let i = 0; i <= ySteps; i += 1) {
+      const ratio = i / ySteps;
+      const value = maxV - rangeV * ratio;
+      const y = padding + ratio * (height - padding * 2);
+      yTicks.push({ y, value: value.toFixed(2) });
+    }
+
+    const xSteps = 4;
+    const xTicks = [];
+    for (let i = 0; i <= xSteps; i += 1) {
+      const ratio = i / xSteps;
+      const t = minT + rangeT * ratio;
+      const x = padding + ratio * (width - padding * 2);
+      const d = new Date(t);
+      const label = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      xTicks.push({ x, label });
+    }
+
+    return { xTicks, yTicks };
+  };
+
+  const chartTicks = () => buildTicks(series(), 700, 260, 28);
+
   createEffect(() => {
     getJSON('/api/devices').then((res) => {
       const list = res.data || res;
@@ -163,7 +202,7 @@ function Realtime() {
                 const deviceName = devices().find((d) => String(d.id) === String(p.device_id))?.name || p.device_name || '';
                 return (
                   <tr key={p.id || `${p.device_id}-${p.field_name}`}>
-                    <td>{p.collected_at || p.CollectedAt || ''}</td>
+                    <td>{formatDateTime(p.collected_at || p.CollectedAt)}</td>
                     <td>{deviceName}</td>
                     <td>{p.field_name || ''}</td>
                     <td>{p.value}</td>
@@ -251,8 +290,20 @@ function Realtime() {
                 <div style="border:1px solid var(--border-color); border-radius:12px; padding:12px;">
                   <Show when={series().length > 1} fallback={<div style="color:var(--text-muted); padding:16px; text-align:center;">暂无可绘制数据</div>}>
                     <svg viewBox="0 0 700 260" style="width:100%; height:260px;">
+                      {chartTicks().yTicks.map((t, idx) => (
+                        <g key={`y-${idx}`}>
+                          <line x1="28" x2="680" y1={t.y} y2={t.y} stroke="rgba(255,255,255,0.06)" />
+                          <text x="8" y={t.y + 4} font-size="10" fill="var(--text-muted)">{t.value}</text>
+                        </g>
+                      ))}
+                      {chartTicks().xTicks.map((t, idx) => (
+                        <g key={`x-${idx}`}>
+                          <line x1={t.x} x2={t.x} y1="24" y2="232" stroke="rgba(255,255,255,0.04)" />
+                          <text x={t.x - 12} y="248" font-size="10" fill="var(--text-muted)">{t.label}</text>
+                        </g>
+                      ))}
                       <path
-                        d={buildPath(series(), 700, 260, 24)}
+                        d={buildPath(series(), 700, 260, 28)}
                         fill="none"
                         stroke="var(--accent-blue)"
                         stroke-width="2"
@@ -274,7 +325,7 @@ function Realtime() {
                     <tbody>
                       {historyData().map((p) => (
                         <tr key={p.id || `${p.device_id}-${p.field_name}-${p.collected_at}`}>
-                          <td>{p.collected_at || p.CollectedAt || ''}</td>
+                          <td>{formatDateTime(p.collected_at || p.CollectedAt)}</td>
                           <td>{p.value || p.Value}</td>
                         </tr>
                       ))}

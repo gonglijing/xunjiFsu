@@ -5,7 +5,6 @@ const mainLinks = [
   { to: '/', label: '仪表盘', icon: '◉' },
   { to: '/alarms', label: '报警', icon: '⚠' },
   { to: '/realtime', label: '实时', icon: '◈' },
-  { to: '/history', label: '历史', icon: '▤' },
 ];
 
 const settingsLinks = [

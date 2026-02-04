@@ -12,7 +12,6 @@ import { NorthboundPage } from './pages/NorthboundPage';
 import { ThresholdsPage } from './pages/ThresholdsPage';
 import AlarmsPage from './pages/AlarmsPage';
 import Realtime from './pages/Realtime';
-import History from './pages/History';
 import { StoragePage } from './pages/StoragePage';
 
 function App() {
@@ -60,8 +59,6 @@ function App() {
         return <AlarmsPage />;
       case currentPath.startsWith('/realtime'):
         return <Realtime />;
-      case currentPath.startsWith('/history'):
-        return <History />;
       default:
         return <Dashboard />;
     }

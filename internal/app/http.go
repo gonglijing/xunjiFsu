@@ -131,8 +131,6 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	api.HandleFunc("/data", h.GetDataCache).Methods("GET")
 	api.HandleFunc("/data/cache/{id}", h.GetDataCacheByDeviceID).Methods("GET")
 
-	api.HandleFunc("/data/points/{id}", h.GetDataPoints).Methods("GET")
-	api.HandleFunc("/data/points", h.GetLatestDataPoints).Methods("GET")
 	api.HandleFunc("/data/history", h.GetHistoryData).Methods("GET")
 
 	api.HandleFunc("/storage", h.GetStorageConfigs).Methods("GET")

@@ -2,6 +2,7 @@ import { createSignal, createEffect, onCleanup, For } from 'solid-js';
 import { getJSON, postJSON } from '../api';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
+import { formatDateTime } from '../utils/time';
 
 export function RealtimeMini() {
   const toast = useToast();
@@ -54,7 +55,7 @@ export function RealtimeMini() {
                 const name = deviceMap().get(String(p.device_id)) || p.device_name || p.DeviceName || p.device_id;
                 return (
                   <tr key={p.id || `${p.device_id}-${p.field_name}`}>
-                    <td>{p.collected_at?.slice(5, 19) || p.CollectedAt}</td>
+                    <td>{formatDateTime(p.collected_at || p.CollectedAt)}</td>
                     <td>{name}</td>
                     <td>{p.field_name || p.FieldName}</td>
                     <td>{p.value || p.Value}</td>

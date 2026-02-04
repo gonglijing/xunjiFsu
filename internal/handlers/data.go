@@ -114,24 +114,6 @@ func (h *Handler) GetDataCacheByDeviceID(w http.ResponseWriter, r *http.Request)
 	WriteSuccess(w, cache)
 }
 
-// 历史数据
-func (h *Handler) GetDataPoints(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
-		return
-	}
-	points, err := database.GetDataPointsByDevice(id, 1000)
-	if err != nil {
-		WriteServerError(w, err.Error())
-		return
-	}
-	if points == nil {
-		points = []*database.DataPoint{}
-	}
-	WriteSuccess(w, points)
-}
-
 func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
 	deviceID := r.URL.Query().Get("device_id")
 	fieldName := r.URL.Query().Get("field_name")
@@ -196,15 +178,6 @@ func parseTimeParam(value string) (time.Time, error) {
 		return ts, nil
 	}
 	return time.Time{}, fmt.Errorf("invalid time format")
-}
-
-func (h *Handler) GetLatestDataPoints(w http.ResponseWriter, r *http.Request) {
-	points, err := database.GetLatestDataPoints(100)
-	if err != nil {
-		WriteServerError(w, err.Error())
-		return
-	}
-	WriteSuccess(w, points)
 }
 
 // 存储配置

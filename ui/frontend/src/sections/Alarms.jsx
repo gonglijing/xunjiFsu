@@ -2,6 +2,7 @@ import { createSignal, createEffect, For } from 'solid-js';
 import { getJSON } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import { formatDateTime } from '../utils/time';
 
 export function Alarms() {
   const toast = useToast();
@@ -46,7 +47,7 @@ export function Alarms() {
               <For each={items()}>
                 {(a) => (
                   <tr>
-                    <td>{a.triggered_at?.slice(0, 19) || a.triggered_at}</td>
+                    <td>{formatDateTime(a.triggered_at)}</td>
                     <td>{a.device_id}</td>
                     <td>{a.field_name}</td>
                     <td>{a.actual_value}</td>
