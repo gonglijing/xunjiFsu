@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"io"
+	"net"
 	"testing"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -95,5 +97,78 @@ func assertMapEqual(t *testing.T, got, want map[string]string) {
 		if gotVal != wantVal {
 			t.Fatalf("key %s expected %s got %s", key, wantVal, gotVal)
 		}
+	}
+}
+
+type fakeSerialPort struct {
+	closed bool
+}
+
+func (p *fakeSerialPort) Write(_ []byte) (int, error) {
+	return 0, nil
+}
+
+func (p *fakeSerialPort) Read(_ []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (p *fakeSerialPort) Close() error {
+	p.closed = true
+	return nil
+}
+
+func TestStartExecution(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+	device := &models.Device{ID: 1, Name: "dev1"}
+
+	done, err := executor.startExecution(device)
+	if err != nil {
+		t.Fatalf("startExecution error: %v", err)
+	}
+
+	if _, err := executor.startExecution(device); err == nil {
+		t.Fatalf("expected concurrent startExecution to fail")
+	}
+
+	done()
+
+	if done2, err := executor.startExecution(device); err != nil {
+		t.Fatalf("expected startExecution after done to succeed: %v", err)
+	} else {
+		done2()
+	}
+}
+
+func TestUnregisterSerialPortCloses(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+	port := &fakeSerialPort{}
+
+	executor.RegisterSerialPort(1, port)
+	executor.UnregisterSerialPort(1)
+
+	if !port.closed {
+		t.Fatalf("expected serial port to be closed on unregister")
+	}
+}
+
+func TestSetResourcePathClosesTCPOnChange(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+
+	c1, c2 := net.Pipe()
+	defer c2.Close()
+
+	executor.RegisterTCP(1, c1)
+	executor.SetResourcePath(1, "127.0.0.1:502")
+	executor.SetResourcePath(1, "127.0.0.1:503")
+
+	if _, err := c1.Write([]byte("x")); err == nil {
+		t.Fatalf("expected closed conn after path change")
+	}
+
+	if _, err := c2.Write([]byte("x")); err == nil {
+		t.Fatalf("expected other end to be closed")
 	}
 }

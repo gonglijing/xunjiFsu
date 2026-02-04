@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,35 +25,6 @@ var ErrDriverNotLoaded = errors.New("driver not loaded")
 
 // ErrDriverExecutionFailed 驱动执行失败
 var ErrDriverExecutionFailed = errors.New("driver execution failed")
-
-// readWasmFile 尝试读取 wasm 文件，支持相对路径的多种基准
-func readWasmFile(path string) ([]byte, error) {
-	if path == "" {
-		return nil, fmt.Errorf("empty wasm path")
-	}
-	// 1) 绝对路径或直接相对当前工作目录
-	if data, err := os.ReadFile(path); err == nil {
-		return data, nil
-	}
-	// 2) 以当前工作目录拼接
-	if cwd, err := os.Getwd(); err == nil {
-		if data, err := os.ReadFile(filepath.Join(cwd, path)); err == nil {
-			return data, nil
-		}
-	}
-	// 3) 以可执行文件目录为基准
-	if exePath, err := os.Executable(); err == nil {
-		base := filepath.Dir(exePath)
-		if data, err := os.ReadFile(filepath.Join(base, path)); err == nil {
-			return data, nil
-		}
-		// 4) 上一级（常见于 go run 临时目录）
-		if data, err := os.ReadFile(filepath.Join(base, "..", path)); err == nil {
-			return data, nil
-		}
-	}
-	return nil, fmt.Errorf("cannot read wasm file: %s", path)
-}
 
 func hexPreview(b []byte, max int) string {
 	if len(b) == 0 {
@@ -162,44 +131,16 @@ func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resou
 		}
 	}
 
-	// 创建 Extism plugin (包含 Host Functions)
-	manifest := extism.Manifest{
-		Wasm: []extism.Wasm{
-			&extism.WasmData{
-				Name: driver.Name,
-				Data: wasmData,
-			},
-		},
-	}
-
 	// 创建设置配置 (传递给插件)
 	config := map[string]string{
 		"resource_id": fmt.Sprintf("%d", resourceID),
 	}
 
-	ctx := context.Background()
 	hostFuncs := m.createHostFunctions(resourceID)
-
-	plugin, err := extism.NewPlugin(ctx, manifest, extism.PluginConfig{
-		EnableWasi: true,
-	}, hostFuncs)
+	plugin, err := newWasmPlugin(driver.Name, wasmData, hostFuncs, config)
 	if err != nil {
 		return fmt.Errorf("failed to create plugin: %w", err)
 	}
-
-	plugin.SetLogger(func(level extism.LogLevel, message string) {
-		switch level {
-		case extism.LogLevelError:
-			logger.Error("Driver log", fmt.Errorf(message), "driver", driver.Name)
-		case extism.LogLevelWarn:
-			logger.Warn("Driver log", "driver", driver.Name, "message", message)
-		default:
-			logger.Info("Driver log", "driver", driver.Name, "level", level.String(), "message", message)
-		}
-	})
-
-	// 设置配置
-	plugin.Config = config
 
 	wasmDriver := &WasmDriver{
 		ID:         driver.ID,
@@ -403,7 +344,10 @@ func (e *DriverExecutor) RegisterSerialPort(resourceID int64, port SerialPort) {
 func (e *DriverExecutor) UnregisterSerialPort(resourceID int64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	delete(e.serialPorts, resourceID)
+	if port, ok := e.serialPorts[resourceID]; ok {
+		_ = port.Close()
+		delete(e.serialPorts, resourceID)
+	}
 }
 
 func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Device) error {
@@ -551,7 +495,45 @@ func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
 // SetResourcePath 设置资源路径 (用于TCP懒连接)
 func (e *DriverExecutor) SetResourcePath(resourceID int64, path string) {
 	e.mu.Lock()
+	if prev, ok := e.resourcePaths[resourceID]; ok && prev != "" && prev != path {
+		if conn, ok := e.tcpConns[resourceID]; ok {
+			_ = conn.Close()
+			delete(e.tcpConns, resourceID)
+		}
+	}
 	e.resourcePaths[resourceID] = path
+	e.mu.Unlock()
+}
+
+// CloseResource 关闭指定资源相关的连接和缓存
+func (e *DriverExecutor) CloseResource(resourceID int64) {
+	e.mu.Lock()
+	if port, ok := e.serialPorts[resourceID]; ok {
+		_ = port.Close()
+		delete(e.serialPorts, resourceID)
+	}
+	if conn, ok := e.tcpConns[resourceID]; ok {
+		_ = conn.Close()
+		delete(e.tcpConns, resourceID)
+	}
+	delete(e.resourcePaths, resourceID)
+	delete(e.resourceMux, resourceID)
+	e.mu.Unlock()
+}
+
+// CloseAllResources 关闭所有资源连接
+func (e *DriverExecutor) CloseAllResources() {
+	e.mu.Lock()
+	for id, port := range e.serialPorts {
+		_ = port.Close()
+		delete(e.serialPorts, id)
+	}
+	for id, conn := range e.tcpConns {
+		_ = conn.Close()
+		delete(e.tcpConns, id)
+	}
+	e.resourcePaths = make(map[int64]string)
+	e.resourceMux = make(map[int64]*sync.Mutex)
 	e.mu.Unlock()
 }
 
