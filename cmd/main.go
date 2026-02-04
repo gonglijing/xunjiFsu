@@ -39,4 +39,7 @@ func setupLogger(cfg *config.Config) {
 	level := logger.ParseLevel(cfg.LogLevel)
 	logger.SetLevel(level)
 	logger.SetJSONOutput(cfg.LogJSON)
+	if _, err := logger.InitFileOutput("logs/xunji.log", 2*1024*1024); err != nil {
+		log.Printf("Failed to init file logger: %v", err)
+	}
 }

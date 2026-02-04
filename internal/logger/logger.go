@@ -2,6 +2,7 @@ package logger
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"os"
 	"runtime"
@@ -179,6 +180,7 @@ type LogEntry struct {
 
 // 全局logger
 var global *StructuredLogger
+var globalOutput io.Writer = os.Stdout
 
 func init() {
 	global = NewStructuredLogger(INFO, "gogw", false)
@@ -192,6 +194,21 @@ func SetLevel(level LogLevel) {
 // SetJSONOutput 设置JSON输出
 func SetJSONOutput(enabled bool) {
 	global.jsonOutput = enabled
+}
+
+// SetOutput 设置日志输出目标
+func SetOutput(writer io.Writer) {
+	if writer == nil {
+		writer = os.Stdout
+	}
+	globalOutput = writer
+	global.logger.SetOutput(writer)
+	log.SetOutput(writer)
+}
+
+// Output 返回当前日志输出目标
+func Output() io.Writer {
+	return globalOutput
 }
 
 // Debug 全局调试日志

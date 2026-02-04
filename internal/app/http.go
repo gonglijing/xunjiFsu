@@ -35,7 +35,7 @@ func buildHandlerChain(cfg *config.Config, router *mux.Router) http.Handler {
 		gorillaHandlers.AllowCredentials(),
 	)
 
-	loggingHandler := gorillaHandlers.LoggingHandler(os.Stdout, router)
+	loggingHandler := gorillaHandlers.LoggingHandler(logger.Output(), router)
 	gzipHandler := handlers.GzipMiddleware(loggingHandler)
 
 	timeoutConfig := handlers.DefaultTimeoutConfig()
