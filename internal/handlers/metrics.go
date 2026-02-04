@@ -12,39 +12,39 @@ import (
 
 // SystemMetrics 系统运行指标
 type SystemMetrics struct {
-	Timestamp    time.Time       `json:"timestamp"`
-	Uptime       string          `json:"uptime"`
-	GoMetrics    GoMetrics       `json:"go"`
-	Database     DatabaseMetrics `json:"database"`
-	Collector    CollectorMetrics `json:"collector"`
+	Timestamp time.Time        `json:"timestamp"`
+	Uptime    string           `json:"uptime"`
+	GoMetrics GoMetrics        `json:"go"`
+	Database  DatabaseMetrics  `json:"database"`
+	Collector CollectorMetrics `json:"collector"`
 }
 
 // GoMetrics Go运行时指标
 type GoMetrics struct {
-	Version      string  `json:"version"`
-	Goroutines   int     `json:"goroutines"`
-	MemoryAlloc  float64 `json:"memory_alloc_mb"`
-	MemoryTotal  float64 `json:"memory_total_mb"`
-	HeapAlloc    float64 `json:"heap_alloc_mb"`
-	NumGC        uint32  `json:"num_gc"`
-	GCPause      float64 `json:"gc_pause_ms"`
+	Version     string  `json:"version"`
+	Goroutines  int     `json:"goroutines"`
+	MemoryAlloc float64 `json:"memory_alloc_mb"`
+	MemoryTotal float64 `json:"memory_total_mb"`
+	HeapAlloc   float64 `json:"heap_alloc_mb"`
+	NumGC       uint32  `json:"num_gc"`
+	GCPause     float64 `json:"gc_pause_ms"`
 }
 
 // DatabaseMetrics 数据库指标
 type DatabaseMetrics struct {
-	ParamDBConns    int `json:"param_db_open_conns"`
+	ParamDBConns     int `json:"param_db_open_conns"`
 	ParamDBIdleConns int `json:"param_db_idle_conns"`
-	DataDBConns     int `json:"data_db_open_conns"`
-	DataDBIdleConns int `json:"data_db_idle_conns"`
-	DataPointsCount int `json:"data_points_count"`
-	CacheCount      int `json:"cache_count"`
+	DataDBConns      int `json:"data_db_open_conns"`
+	DataDBIdleConns  int `json:"data_db_idle_conns"`
+	DataPointsCount  int `json:"data_points_count"`
+	CacheCount       int `json:"cache_count"`
 }
 
 // CollectorMetrics 采集器指标
 type CollectorMetrics struct {
-	Running       bool     `json:"running"`
-	DeviceCount   int      `json:"device_count"`
-	TaskCount     int      `json:"task_count"`
+	Running     bool `json:"running"`
+	DeviceCount int  `json:"device_count"`
+	TaskCount   int  `json:"task_count"`
 }
 
 // startTime 程序启动时间
@@ -61,27 +61,27 @@ func Metrics(w http.ResponseWriter, r *http.Request) {
 
 	var dataPointsCount, cacheCount int
 	database.DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&dataPointsCount)
-	database.DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&cacheCount)
+	database.ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&cacheCount)
 
 	metrics := SystemMetrics{
 		Timestamp: time.Now(),
 		Uptime:    time.Since(metricsStartTime).String(),
 		GoMetrics: GoMetrics{
-			Version:      runtime.Version(),
-			Goroutines:   runtime.NumGoroutine(),
-			MemoryAlloc:  float64(m.Alloc) / 1024 / 1024,
-			MemoryTotal:  float64(m.TotalAlloc) / 1024 / 1024,
-			HeapAlloc:    float64(m.HeapAlloc) / 1024 / 1024,
-			NumGC:        m.NumGC,
-			GCPause:      float64(m.GCCPUFraction) * 1000,
+			Version:     runtime.Version(),
+			Goroutines:  runtime.NumGoroutine(),
+			MemoryAlloc: float64(m.Alloc) / 1024 / 1024,
+			MemoryTotal: float64(m.TotalAlloc) / 1024 / 1024,
+			HeapAlloc:   float64(m.HeapAlloc) / 1024 / 1024,
+			NumGC:       m.NumGC,
+			GCPause:     float64(m.GCCPUFraction) * 1000,
 		},
 		Database: DatabaseMetrics{
-			ParamDBConns:    paramStats.OpenConnections,
+			ParamDBConns:     paramStats.OpenConnections,
 			ParamDBIdleConns: paramStats.Idle,
-			DataDBConns:     dataStats.OpenConnections,
-			DataDBIdleConns: dataStats.Idle,
-			DataPointsCount: dataPointsCount,
-			CacheCount:      cacheCount,
+			DataDBConns:      dataStats.OpenConnections,
+			DataDBIdleConns:  dataStats.Idle,
+			DataPointsCount:  dataPointsCount,
+			CacheCount:       cacheCount,
 		},
 		Collector: CollectorMetrics{
 			Running: false, // 需要从外部设置

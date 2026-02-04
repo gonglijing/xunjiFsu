@@ -123,6 +123,8 @@ func InitDataDBWithPath(path string) error {
 	if err := DataDB.Ping(); err != nil {
 		return fmt.Errorf("failed to ping data database: %w", err)
 	}
+	// data.db 仅做历史存储，不依赖 devices 表，禁用外键以避免跨库引用错误
+	_, _ = DataDB.Exec("PRAGMA foreign_keys = OFF")
 
 	// 从文件恢复数据（如果存在）
 	if _, err := os.Stat(dataDBFile); err == nil {
@@ -291,50 +293,12 @@ func syncDataToDisk() error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// 4. 复制数据缓存
-	cache, err := DataDB.Query("SELECT device_id, field_name, value, value_type, updated_at FROM data_cache")
-	if err != nil {
-		return fmt.Errorf("failed to query data cache: %w", err)
-	}
-	defer cache.Close()
-
-	tx, err = diskDB.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	stmt, err = tx.Prepare(`INSERT OR REPLACE INTO data_cache 
-		(id, device_id, field_name, value, value_type, updated_at) 
-		VALUES (NULL, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	for cache.Next() {
-		var deviceID int64
-		var fieldName, value, valueType string
-		var updatedAt time.Time
-		if err := cache.Scan(&deviceID, &fieldName, &value, &valueType, &updatedAt); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if _, err := stmt.Exec(deviceID, fieldName, value, valueType, updatedAt); err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	// 5. 原子替换文件
+	// 4. 原子替换文件
 	if err := os.Rename(tempFile, dataDBFile); err != nil {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
-	log.Printf("Data synced to disk: %d points + cache", count)
+	log.Printf("Data synced to disk: %d points", count)
 	return nil
 }
 
@@ -1023,12 +987,12 @@ func DeleteStorageConfig(id int64) error {
 	return err
 }
 
-// ==================== 实时数据缓存操作 (data.db - 内存暂存) ====================
+// ==================== 实时数据缓存操作 (param.db) ====================
 
 // SaveDataCache 保存实时数据缓存（内存）
 func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType string) error {
-	_, err := DataDB.Exec(
-		`INSERT OR REPLACE INTO data_cache (device_id, field_name, value, value_type, updated_at)
+	_, err := ParamDB.Exec(
+		`INSERT OR REPLACE INTO data_cache (device_id, field_name, value, value_type, collected_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		deviceID, fieldName, value, valueType,
 	)
@@ -1044,17 +1008,17 @@ func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType strin
 // enforceDataCacheLimit 强制执行缓存大小限制
 func enforceDataCacheLimit() {
 	var count int
-	DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count)
+	ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count)
 	if count > MaxDataCache {
-		DataDB.Exec("DELETE FROM data_cache WHERE id IN (SELECT id FROM data_cache ORDER BY updated_at ASC LIMIT ?)", count-MaxDataCache)
+		ParamDB.Exec("DELETE FROM data_cache WHERE id IN (SELECT id FROM data_cache ORDER BY collected_at ASC LIMIT ?)", count-MaxDataCache)
 		log.Printf("Cleaned up data cache, removed %d entries", count-MaxDataCache)
 	}
 }
 
 // GetDataCacheByDeviceID 根据设备ID获取数据缓存（从内存）
 func GetDataCacheByDeviceID(deviceID int64) ([]*models.DataCache, error) {
-	rows, err := DataDB.Query(
-		"SELECT id, device_id, field_name, value, value_type, updated_at FROM data_cache WHERE device_id = ?",
+	rows, err := ParamDB.Query(
+		"SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache WHERE device_id = ?",
 		deviceID,
 	)
 	if err != nil {
@@ -1075,8 +1039,8 @@ func GetDataCacheByDeviceID(deviceID int64) ([]*models.DataCache, error) {
 
 // GetAllDataCache 获取所有数据缓存（从内存）
 func GetAllDataCache() ([]*models.DataCache, error) {
-	rows, err := DataDB.Query(
-		"SELECT id, device_id, field_name, value, value_type, updated_at FROM data_cache",
+	rows, err := ParamDB.Query(
+		"SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache",
 	)
 	if err != nil {
 		return nil, err

@@ -119,8 +119,21 @@ CREATE TABLE IF NOT EXISTS alarm_logs (
     FOREIGN KEY (threshold_id) REFERENCES thresholds(id) ON DELETE SET NULL
 );
 
+-- 采集数据缓存表（用于存储最新的采集数据）
+CREATE TABLE IF NOT EXISTS data_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id INTEGER NOT NULL,
+    field_name TEXT NOT NULL,
+    value TEXT,
+    value_type TEXT DEFAULT 'string',
+    collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    UNIQUE(device_id, field_name)
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_alarm_logs_device ON alarm_logs(device_id);
 CREATE INDEX IF NOT EXISTS idx_alarm_logs_triggered ON alarm_logs(triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_data_cache_device ON data_cache(device_id);
 CREATE INDEX IF NOT EXISTS idx_devices_resource ON devices(resource_id);
 CREATE INDEX IF NOT EXISTS idx_devices_driver ON devices(driver_id);

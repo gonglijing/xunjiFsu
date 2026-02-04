@@ -5,9 +5,6 @@
 CREATE INDEX IF NOT EXISTS idx_data_points_device_time ON data_points(device_id, collected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_data_points_device_field ON data_points(device_id, field_name);
 
--- 数据缓存表索引
-CREATE INDEX IF NOT EXISTS idx_data_cache_device ON data_cache(device_id);
-
 -- 报警日志表索引
 CREATE INDEX IF NOT EXISTS idx_alarm_logs_device_time ON alarm_logs(device_id, triggered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alarm_logs_unacked ON alarm_logs(acknowledged, triggered_at DESC);
