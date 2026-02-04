@@ -54,7 +54,7 @@
 | **驱动管理** | Extism + TinyGo WASM 插件式驱动 |
 | **数据采集** | 优先队列调度、自定义采集周期 |
 | **阈值报警** | 多条件判断、严重程度分级、自动触发 |
-| **双数据库** | param.db (配置) + data.db (历史数据) |
+| **双数据库** | param.db (配置) + data.db (历史数据，内存缓冲 + 磁盘归档) |
 | **北向接口** | HTTP / MQTT / XunJi 多协议适配 |
 
 ### Web 管理界面
@@ -229,7 +229,7 @@ make deploy-windows  # Windows
 | 配置项 | 值 |
 |--------|-----|
 | 配置数据库 | `param.db` |
-| 数据数据库 | `data.db` |
+| 数据数据库 | `data.db`（内存缓冲 + 磁盘归档） |
 | 监听地址 | `:8080` |
 | 默认用户 | `admin` |
 | 默认密码 | `123456` |
@@ -250,7 +250,7 @@ make deploy-windows  # Windows
 |------|------|
 | 名称 | 设备唯一标识 |
 | 资源 | 关联的资源 |
-| 驱动类型 | `modbus_rtu` / `modbus_tcp` |
+| 驱动类型 | `modbus_rtu` / `modbus_tcp`（旧）或 `modbus_rtu_wasm` / `modbus_tcp_wasm` / `modbus_rtu_excel` / `modbus_tcp_excel` |
 | 通信参数 | 波特率、数据位、停止位、校验位 / IP、端口 |
 | 设备地址 | Modbus 从机地址 |
 | 采集周期 | 毫秒 |
@@ -280,6 +280,8 @@ make deploy-windows  # Windows
 
 ## API 接口
 
+> 所有 `/api` 路径需要 JWT 鉴权（`Authorization: Bearer <token>`）。
+
 ### 认证
 
 | 方法 | 路径 | 说明 |
@@ -293,8 +295,33 @@ make deploy-windows  # Windows
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | 仪表盘 |
+| GET | `/alarms` | 报警日志 |
 | GET | `/realtime` | 实时数据 |
 | GET | `/history` | 历史数据 |
+| GET | `/gateway` | 网关设置 |
+| GET | `/resources` | 资源管理 |
+| GET | `/devices` | 设备管理 |
+| GET | `/drivers` | 驱动管理 |
+| GET | `/northbound` | 北向配置 |
+| GET | `/storage` | 存储策略 |
+| GET | `/thresholds` | 阈值配置 |
+
+### 健康检查
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 健康检查 |
+| GET | `/ready` | 就绪检查 |
+| GET | `/live` | 存活检查 |
+| GET | `/metrics` | 指标 |
+
+### 系统
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/status` | 系统状态 |
+| POST | `/api/collector/start` | 启动采集器 |
+| POST | `/api/collector/stop` | 停止采集器 |
 
 ### 资源
 
@@ -304,6 +331,7 @@ make deploy-windows  # Windows
 | POST | `/api/resources` | 创建资源 |
 | PUT | `/api/resources/{id}` | 更新资源 |
 | DELETE | `/api/resources/{id}` | 删除资源 |
+| POST | `/api/resources/{id}/toggle` | 启用/禁用 |
 
 ### 设备
 
@@ -314,13 +342,18 @@ make deploy-windows  # Windows
 | PUT | `/api/devices/{id}` | 更新设备 |
 | DELETE | `/api/devices/{id}` | 删除设备 |
 | POST | `/api/devices/{id}/toggle` | 切换状态 |
+| POST | `/api/devices/{id}/execute` | 执行驱动函数（读/写） |
+| GET | `/api/devices/{id}/writables` | 获取可写字段元数据 |
 
 ### 驱动
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/drivers` | 驱动列表 |
+| GET | `/api/drivers/files` | 驱动文件列表 |
 | POST | `/api/drivers` | 创建驱动 |
+| PUT | `/api/drivers/{id}` | 更新驱动 |
+| DELETE | `/api/drivers/{id}` | 删除驱动 |
 | POST | `/api/drivers/upload` | 上传 WASM 文件 |
 | GET | `/api/drivers/{id}/download` | 下载驱动文件 |
 
@@ -332,13 +365,42 @@ make deploy-windows  # Windows
 | POST | `/api/northbound` | 创建北向配置 |
 | PUT | `/api/northbound/{id}` | 更新配置 |
 | DELETE | `/api/northbound/{id}` | 删除配置 |
+| POST | `/api/northbound/{id}/toggle` | 启用/禁用 |
+
+### 报警
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/alarms` | 报警日志 |
+| POST | `/api/alarms/{id}/acknowledge` | 确认报警 |
 
 ### 数据
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/api/data` | 缓存概览 |
+| GET | `/api/data/cache/{id}` | 设备缓存 |
 | GET | `/api/data/points` | 最新数据点 |
+| GET | `/api/data/points/{id}` | 指定设备实时数据 |
 | GET | `/api/data/history` | 历史数据 |
+
+### 数据存储说明
+
+- `data_cache` 存在 `data.db` 的**内存库**中，保存每个设备字段的最新值。
+- `data_points` 先写入内存数据库，达到阈值或周期触发时**增量同步**到磁盘 `data.db`。
+- 同步到磁盘后，内存中已同步的数据会被清理，减少内存占用和磁盘频繁写入。
+- 历史查询会**合并内存 + 磁盘**数据，确保读取完整历史。
+
+### 存储
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/storage` | 存储策略列表 |
+| POST | `/api/storage` | 创建存储策略 |
+| PUT | `/api/storage/{id}` | 更新存储策略 |
+| DELETE | `/api/storage/{id}` | 删除存储策略 |
+| POST | `/api/storage/run` | 按策略清理 |
+| POST | `/api/storage/cleanup` | 手动清理 |
 
 ### 阈值
 
@@ -346,7 +408,25 @@ make deploy-windows  # Windows
 |------|------|------|
 | GET | `/api/thresholds` | 阈值列表 |
 | POST | `/api/thresholds` | 创建阈值 |
+| PUT | `/api/thresholds/{id}` | 更新阈值 |
 | DELETE | `/api/thresholds/{id}` | 删除阈值 |
+
+### 用户
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/users` | 用户列表 |
+| POST | `/api/users` | 创建用户 |
+| PUT | `/api/users/{id}` | 更新用户 |
+| DELETE | `/api/users/{id}` | 删除用户 |
+| PUT | `/api/users/password` | 修改密码 |
+
+### 网关配置
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/gateway/config` | 获取网关配置 |
+| PUT | `/api/gateway/config` | 更新网关配置 |
 
 ## 驱动开发
 
