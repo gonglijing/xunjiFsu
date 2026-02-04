@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +12,13 @@ import (
 )
 
 const defaultDriverFunction = "handle"
+const (
+	defaultSerialReadTimeout = 200 * time.Millisecond
+	defaultSerialOpenBackoff = 200 * time.Millisecond
+	defaultTCPDialTimeout    = 5 * time.Second
+	defaultTCPDialBackoff    = 200 * time.Millisecond
+	defaultTCPReadTimeout    = 500 * time.Millisecond
+)
 
 func validI64Ptr(ptr uint64) bool {
 	return ptr != 0 && ptr <= uint64(^uint32(0))
@@ -90,6 +99,34 @@ func buildDriverContext(device *models.Device, resourceID int64, resourceType st
 	}
 }
 
+var ErrPluginEmptyOutput = errors.New("plugin returned empty output")
+
+func callPlugin(ctx context.Context, driver *WasmDriver, function string, input []byte) (uint32, []byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rc, output, err := driver.plugin.CallWithContext(ctx, function, input)
+	if err != nil {
+		return rc, nil, err
+	}
+
+	if len(output) == 0 {
+		if alt, err2 := driver.plugin.GetOutput(); err2 == nil && len(alt) > 0 {
+			output = alt
+		}
+	}
+
+	if len(output) == 0 {
+		errMsg := driver.plugin.GetError()
+		if errMsg != "" {
+			return rc, nil, fmt.Errorf("%w: %s", ErrPluginEmptyOutput, errMsg)
+		}
+		return rc, nil, ErrPluginEmptyOutput
+	}
+
+	return rc, output, nil
+}
+
 func (e *DriverExecutor) startExecution(device *models.Device) (func(), error) {
 	e.mu.Lock()
 	if e.executing[device.ID] {
@@ -133,6 +170,69 @@ func (e *DriverExecutor) ensureSerialResource(resourceID int64, resourceType str
 		return fmt.Errorf("open serial resource %d failed: %w", resourceID, err)
 	}
 	return nil
+}
+
+func (e *DriverExecutor) serialReadTimeout() time.Duration {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.serialTimeout > 0 {
+		return e.serialTimeout
+	}
+	return defaultSerialReadTimeout
+}
+
+func (e *DriverExecutor) serialOpenAttempts() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.serialOpenRetries < 0 {
+		return 1
+	}
+	return e.serialOpenRetries + 1
+}
+
+func (e *DriverExecutor) serialOpenBackoff() time.Duration {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.serialOpenBackoffOverride > 0 {
+		return e.serialOpenBackoffOverride
+	}
+	return defaultSerialOpenBackoff
+}
+
+func (e *DriverExecutor) tcpDialTimeout() time.Duration {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.tcpDialTimeoutOverride > 0 {
+		return e.tcpDialTimeoutOverride
+	}
+	return defaultTCPDialTimeout
+}
+
+func (e *DriverExecutor) tcpDialAttempts() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.tcpDialRetries < 0 {
+		return 1
+	}
+	return e.tcpDialRetries + 1
+}
+
+func (e *DriverExecutor) tcpDialBackoff() time.Duration {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.tcpDialBackoffOverride > 0 {
+		return e.tcpDialBackoffOverride
+	}
+	return defaultTCPDialBackoff
+}
+
+func (e *DriverExecutor) tcpReadTimeout() time.Duration {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.tcpReadTimeoutOverride > 0 {
+		return e.tcpReadTimeoutOverride
+	}
+	return defaultTCPReadTimeout
 }
 
 func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID int64) error {

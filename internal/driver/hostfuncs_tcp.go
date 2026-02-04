@@ -41,7 +41,7 @@ func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFu
 
 			tout := time.Duration(timeoutMs)
 			if tout <= 0 {
-				tout = 500 * time.Millisecond
+				tout = executor.tcpReadTimeout()
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(tout))
 			buf := make([]byte, rCap)

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -170,5 +171,49 @@ func TestSetResourcePathClosesTCPOnChange(t *testing.T) {
 
 	if _, err := c2.Write([]byte("x")); err == nil {
 		t.Fatalf("expected other end to be closed")
+	}
+}
+
+func TestSetTimeoutsOverridesDefaults(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+
+	executor.SetTimeouts(2*time.Second, 3*time.Second, 4*time.Second)
+
+	if got := executor.serialReadTimeout(); got != 2*time.Second {
+		t.Fatalf("expected serial timeout 2s, got %v", got)
+	}
+	if got := executor.tcpDialTimeout(); got != 3*time.Second {
+		t.Fatalf("expected tcp dial timeout 3s, got %v", got)
+	}
+	if got := executor.tcpReadTimeout(); got != 4*time.Second {
+		t.Fatalf("expected tcp read timeout 4s, got %v", got)
+	}
+}
+
+func TestSetRetriesOverridesDefaults(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+
+	if got := executor.serialOpenAttempts(); got != 1 {
+		t.Fatalf("expected default serial attempts 1, got %d", got)
+	}
+	if got := executor.tcpDialAttempts(); got != 1 {
+		t.Fatalf("expected default tcp attempts 1, got %d", got)
+	}
+
+	executor.SetRetries(2, 3, 150*time.Millisecond, 250*time.Millisecond)
+
+	if got := executor.serialOpenAttempts(); got != 3 {
+		t.Fatalf("expected serial attempts 3, got %d", got)
+	}
+	if got := executor.tcpDialAttempts(); got != 4 {
+		t.Fatalf("expected tcp attempts 4, got %d", got)
+	}
+	if got := executor.serialOpenBackoff(); got != 150*time.Millisecond {
+		t.Fatalf("expected serial backoff 150ms, got %v", got)
+	}
+	if got := executor.tcpDialBackoff(); got != 250*time.Millisecond {
+		t.Fatalf("expected tcp backoff 250ms, got %v", got)
 	}
 }

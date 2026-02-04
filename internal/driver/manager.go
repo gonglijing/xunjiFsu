@@ -26,6 +26,15 @@ var ErrDriverNotLoaded = errors.New("driver not loaded")
 // ErrDriverExecutionFailed 驱动执行失败
 var ErrDriverExecutionFailed = errors.New("driver execution failed")
 
+// ErrDriverTimeout 驱动执行超时
+var ErrDriverTimeout = errors.New("driver execution timeout")
+
+// ErrDriverCanceled 驱动执行被取消
+var ErrDriverCanceled = errors.New("driver execution canceled")
+
+// ErrDriverBadOutput 驱动输出无效
+var ErrDriverBadOutput = errors.New("driver output invalid")
+
 func hexPreview(b []byte, max int) string {
 	if len(b) == 0 {
 		return ""
@@ -82,9 +91,10 @@ type WasmDriver struct {
 
 // DriverManager 驱动管理器
 type DriverManager struct {
-	mu       sync.RWMutex
-	drivers  map[int64]*WasmDriver
-	executor *DriverExecutor // 引用执行器以访问串口
+	mu          sync.RWMutex
+	drivers     map[int64]*WasmDriver
+	executor    *DriverExecutor // 引用执行器以访问串口
+	callTimeout time.Duration
 }
 
 // NewDriverManager 创建驱动管理器
@@ -98,6 +108,13 @@ func NewDriverManager() *DriverManager {
 // SetExecutor 设置驱动执行器（用于访问串口资源）
 func (m *DriverManager) SetExecutor(executor *DriverExecutor) {
 	m.executor = executor
+}
+
+// SetCallTimeout 设置驱动执行超时时间（为0表示不设置超时）
+func (m *DriverManager) SetCallTimeout(timeout time.Duration) {
+	m.mu.Lock()
+	m.callTimeout = timeout
+	m.mu.Unlock()
 }
 
 // createHostFunctions 创建 Host Functions
@@ -187,8 +204,14 @@ func (m *DriverManager) UnloadDriver(id int64) error {
 
 // ExecuteDriver 执行驱动
 func (m *DriverManager) ExecuteDriver(id int64, function string, driverCtx *DriverContext) (*DriverResult, error) {
+	return m.ExecuteDriverWithContext(context.Background(), id, function, driverCtx)
+}
+
+// ExecuteDriverWithContext 执行驱动（支持超时/取消）
+func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, function string, driverCtx *DriverContext) (*DriverResult, error) {
 	m.mu.RLock()
 	driver, exists := m.drivers[id]
+	timeout := m.callTimeout
 	m.mu.RUnlock()
 
 	if !exists {
@@ -218,28 +241,32 @@ func (m *DriverManager) ExecuteDriver(id int64, function string, driverCtx *Driv
 		return nil, fmt.Errorf("failed to marshal input: %w", err)
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	// 调用插件函数
-	rc, output, err := driver.plugin.Call(function, inputJSON)
+	rc, output, err := callPlugin(ctx, driver, function, inputJSON)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call plugin: %w", err)
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			return nil, fmt.Errorf("%w: %v", ErrDriverTimeout, err)
+		case errors.Is(err, context.Canceled):
+			return nil, fmt.Errorf("%w: %v", ErrDriverCanceled, err)
+		case errors.Is(err, ErrPluginEmptyOutput):
+			return nil, fmt.Errorf("%w: %v", ErrDriverBadOutput, err)
+		}
+		logger.Warn("Plugin call failed", "driver_id", id, "function", function, "error", err, "rc", rc, "input_len", len(inputJSON))
+		return nil, fmt.Errorf("%w: %v", ErrDriverExecutionFailed, err)
 	}
 
 	if rc != 0 {
 		logger.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "rc", rc)
-	}
-
-	// 若直接返回为空，尝试从 runtime 读取输出寄存
-	if len(output) == 0 {
-		if alt, err2 := driver.plugin.GetOutput(); err2 == nil && len(alt) > 0 {
-			output = alt
-		} else {
-			errMsg := driver.plugin.GetError()
-			if errMsg != "" {
-				logger.Warn("Plugin error set", "driver_id", id, "function", function, "error", errMsg)
-			}
-			logger.Warn("Plugin returned empty output", "driver_id", id, "function", function, "rc", rc, "input_len", len(inputJSON))
-			return nil, fmt.Errorf("plugin returned empty output (function=%s)", function)
-		}
 	}
 
 	// 解析输出
@@ -250,7 +277,7 @@ func (m *DriverManager) ExecuteDriver(id int64, function string, driverCtx *Driv
 			max = len(output)
 		}
 		logger.Warn("Failed to parse plugin output", "driver_id", id, "function", function, "output_preview", string(output[:max]))
-		return nil, fmt.Errorf("failed to parse output: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDriverBadOutput, err)
 	}
 
 	result.Timestamp = time.Now()
@@ -305,13 +332,20 @@ func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
 
 // DriverExecutor 驱动执行器
 type DriverExecutor struct {
-	manager       *DriverManager
-	serialPorts   map[int64]SerialPort // 资源ID到串口的映射
-	tcpConns      map[int64]net.Conn   // 资源ID到TCP连接
-	resourcePaths map[int64]string     // 资源ID到路径的映射 (用于TCP懒连接)
-	mu            sync.RWMutex
-	executing     map[int64]bool
-	resourceMux   map[int64]*sync.Mutex // 同一资源串口的互斥锁，避免并发读写
+	manager                   *DriverManager
+	serialPorts               map[int64]SerialPort // 资源ID到串口的映射
+	tcpConns                  map[int64]net.Conn   // 资源ID到TCP连接
+	resourcePaths             map[int64]string     // 资源ID到路径的映射 (用于TCP懒连接)
+	mu                        sync.RWMutex
+	executing                 map[int64]bool
+	resourceMux               map[int64]*sync.Mutex // 同一资源串口的互斥锁，避免并发读写
+	serialTimeout             time.Duration
+	serialOpenRetries         int
+	serialOpenBackoffOverride time.Duration
+	tcpDialTimeoutOverride    time.Duration
+	tcpDialRetries            int
+	tcpDialBackoffOverride    time.Duration
+	tcpReadTimeoutOverride    time.Duration
 }
 
 // NewDriverExecutor 创建驱动执行器
@@ -396,12 +430,24 @@ func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Devic
 		Parity:   parity,
 		StopBits: stopBits,
 	}
-	port, err := serial.Open(res.Path, mode)
-	if err != nil {
-		return fmt.Errorf("open serial %s failed: %w", res.Path, err)
+	attempts := e.serialOpenAttempts()
+	backoff := e.serialOpenBackoff()
+	var port SerialPort
+	var openErr error
+	for i := 0; i < attempts; i++ {
+		port, openErr = serial.Open(res.Path, mode)
+		if openErr == nil {
+			break
+		}
+		if i < attempts-1 {
+			time.Sleep(backoff)
+		}
+	}
+	if openErr != nil {
+		return fmt.Errorf("open serial %s failed: %w", res.Path, openErr)
 	}
 	if setter, ok := port.(interface{ SetReadTimeout(time.Duration) error }); ok {
-		_ = setter.SetReadTimeout(200 * time.Millisecond)
+		_ = setter.SetReadTimeout(e.serialReadTimeout())
 	}
 	e.RegisterSerialPort(resourceID, port)
 	logger.Info("Serial port opened", "resource_id", resourceID, "path", res.Path, "baud", baud, "data_bits", dataBits, "stop_bits", device.StopBits, "parity", device.Parity)
@@ -466,30 +512,43 @@ func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
 		return nil
 	}
 
-	// 建立新连接
-	e.mu.Lock()
-	// 双重检查
-	if existingConn, ok := e.tcpConns[resourceID]; ok && existingConn != nil {
-		e.mu.Unlock()
-		return existingConn
-	}
+	dialTimeout := e.tcpDialTimeout()
+	dialAttempts := e.tcpDialAttempts()
+	dialBackoff := e.tcpDialBackoff()
 
-	conn, err := net.DialTimeout("tcp", path, 5*time.Second)
+	// 建立新连接
+	var dialConn net.Conn
+	var err error
+	for i := 0; i < dialAttempts; i++ {
+		dialConn, err = net.DialTimeout("tcp", path, dialTimeout)
+		if err == nil {
+			break
+		}
+		if i < dialAttempts-1 {
+			time.Sleep(dialBackoff)
+		}
+	}
 	if err != nil {
-		e.mu.Unlock()
 		return nil
 	}
 
 	// 设置连接参数
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
+	if tcpConn, ok := dialConn.(*net.TCPConn); ok {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
 
-	e.tcpConns[resourceID] = conn
+	// 双重检查
+	e.mu.Lock()
+	if existingConn, ok := e.tcpConns[resourceID]; ok && existingConn != nil {
+		e.mu.Unlock()
+		_ = dialConn.Close()
+		return existingConn
+	}
+	e.tcpConns[resourceID] = dialConn
 	e.mu.Unlock()
 
-	return conn
+	return dialConn
 }
 
 // SetResourcePath 设置资源路径 (用于TCP懒连接)
@@ -502,6 +561,31 @@ func (e *DriverExecutor) SetResourcePath(resourceID int64, path string) {
 		}
 	}
 	e.resourcePaths[resourceID] = path
+	e.mu.Unlock()
+}
+
+// SetTimeouts overrides default timeouts. Use zero to keep defaults.
+func (e *DriverExecutor) SetTimeouts(serialRead, tcpDial, tcpRead time.Duration) {
+	e.mu.Lock()
+	e.serialTimeout = serialRead
+	e.tcpDialTimeoutOverride = tcpDial
+	e.tcpReadTimeoutOverride = tcpRead
+	e.mu.Unlock()
+}
+
+// SetRetries overrides retry counts and backoffs. Use zero values to keep defaults.
+func (e *DriverExecutor) SetRetries(serialOpen, tcpDial int, serialBackoff, tcpBackoff time.Duration) {
+	if serialOpen < 0 {
+		serialOpen = 0
+	}
+	if tcpDial < 0 {
+		tcpDial = 0
+	}
+	e.mu.Lock()
+	e.serialOpenRetries = serialOpen
+	e.tcpDialRetries = tcpDial
+	e.serialOpenBackoffOverride = serialBackoff
+	e.tcpDialBackoffOverride = tcpBackoff
 	e.mu.Unlock()
 }
 
@@ -558,6 +642,11 @@ func (e *DriverExecutor) getResourceLock(resourceID int64) *sync.Mutex {
 
 // Execute 执行驱动读取（带资源访问锁）
 func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
+	return e.ExecuteWithContext(context.Background(), device)
+}
+
+// ExecuteWithContext 执行驱动读取（支持超时/取消）
+func (e *DriverExecutor) ExecuteWithContext(ctx context.Context, device *models.Device) (*DriverResult, error) {
 	if device.DriverID == nil {
 		return nil, fmt.Errorf("device %s has no driver", device.Name)
 	}
@@ -571,7 +660,7 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 	e.ensureResourcePath(resourceID, resourceType, device)
 
 	deviceConfig := buildDeviceConfig(device)
-	ctx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
+	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
 
 	unlock := e.lockResource(resourceID)
 	if unlock != nil {
@@ -587,12 +676,17 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 	}
 
 	// 默认入口函数名（TinyGo 驱动导出为 handle）
-	return e.manager.ExecuteDriver(*device.DriverID, defaultDriverFunction, ctx)
+	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, defaultDriverFunction, driverCtx)
 }
 
 // CollectData 采集数据
 func (e *DriverExecutor) CollectData(device *models.Device) (*models.CollectData, error) {
-	result, err := e.Execute(device)
+	return e.CollectDataWithContext(context.Background(), device)
+}
+
+// CollectDataWithContext 采集数据（支持超时/取消）
+func (e *DriverExecutor) CollectDataWithContext(ctx context.Context, device *models.Device) (*models.CollectData, error) {
+	result, err := e.ExecuteWithContext(ctx, device)
 	if err != nil {
 		return nil, err
 	}
