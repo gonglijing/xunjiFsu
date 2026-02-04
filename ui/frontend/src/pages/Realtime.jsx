@@ -64,12 +64,12 @@ function Realtime() {
     const params = new URLSearchParams({
       device_id: deviceID,
       field_name: fieldName,
-      start: startISO,
-      end: endISO,
+      start: startVal,
+      end: endVal,
     });
     getJSON(`/api/data/history?${params.toString()}`)
       .then((res) => {
-        const list = res.data || res || [];
+        const list = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : []);
         list.sort((a, b) => {
           const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
           const bt = new Date(b.collected_at || b.CollectedAt || 0).getTime();

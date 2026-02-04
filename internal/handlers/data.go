@@ -126,6 +126,9 @@ func (h *Handler) GetDataPoints(w http.ResponseWriter, r *http.Request) {
 		WriteServerError(w, err.Error())
 		return
 	}
+	if points == nil {
+		points = []*database.DataPoint{}
+	}
 	WriteSuccess(w, points)
 }
 

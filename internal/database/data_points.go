@@ -233,11 +233,11 @@ func getDiskDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, sta
 	args := []any{deviceID, fieldName}
 	if !startTime.IsZero() {
 		query += " AND collected_at >= ?"
-		args = append(args, startTime)
+		args = append(args, formatSQLiteTime(startTime))
 	}
 	if !endTime.IsZero() {
 		query += " AND collected_at <= ?"
-		args = append(args, endTime)
+		args = append(args, formatSQLiteTime(endTime))
 	}
 	query += " ORDER BY collected_at DESC LIMIT ?"
 	args = append(args, limit)
@@ -257,11 +257,11 @@ func getDiskDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Ti
 	args := []any{deviceID}
 	if !startTime.IsZero() {
 		query += " AND collected_at >= ?"
-		args = append(args, startTime)
+		args = append(args, formatSQLiteTime(startTime))
 	}
 	if !endTime.IsZero() {
 		query += " AND collected_at <= ?"
-		args = append(args, endTime)
+		args = append(args, formatSQLiteTime(endTime))
 	}
 	query += " ORDER BY collected_at DESC LIMIT ?"
 	args = append(args, limit)
@@ -300,11 +300,11 @@ func GetDataPointsByDeviceAndTimeLimit(deviceID int64, startTime, endTime time.T
 	args := []any{deviceID}
 	if !startTime.IsZero() {
 		query += " AND collected_at >= ?"
-		args = append(args, startTime)
+		args = append(args, formatSQLiteTime(startTime))
 	}
 	if !endTime.IsZero() {
 		query += " AND collected_at <= ?"
-		args = append(args, endTime)
+		args = append(args, formatSQLiteTime(endTime))
 	}
 	query += " ORDER BY collected_at DESC LIMIT ?"
 	args = append(args, limit)
@@ -334,11 +334,11 @@ func GetDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTi
 	args := []any{deviceID, fieldName}
 	if !startTime.IsZero() {
 		query += " AND collected_at >= ?"
-		args = append(args, startTime)
+		args = append(args, formatSQLiteTime(startTime))
 	}
 	if !endTime.IsZero() {
 		query += " AND collected_at <= ?"
-		args = append(args, endTime)
+		args = append(args, formatSQLiteTime(endTime))
 	}
 	query += " ORDER BY collected_at DESC LIMIT ?"
 	args = append(args, limit)
@@ -356,6 +356,13 @@ func GetDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTi
 		return memPoints, nil
 	}
 	return mergeDataPoints(memPoints, diskPoints, limit), nil
+}
+
+func formatSQLiteTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02 15:04:05")
 }
 
 // GetDataPointsByDevice 根据设备ID获取历史数据（内存 + 磁盘）
