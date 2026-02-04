@@ -28,16 +28,20 @@ function Realtime() {
   });
 
   return (
-    <Card
-      title="实时数据"
-      extra={
-        <select class="form-select" value={selected()} onChange={(e) => setSelected(e.target.value)}>
-          {devices().map((d) => (
-            <option key={d.id} value={d.id}>{d.name || d.id}</option>
-          ))}
-        </select>
-      }
-    >
+    <Card title="实时数据">
+      <div class="tabs" style="flex-wrap:wrap; gap:6px; margin-bottom:16px;">
+        {devices().map((d) => (
+          <button
+            class={`tab-btn ${selected() === String(d.id) ? 'active' : ''}`}
+            onClick={() => setSelected(String(d.id))}
+          >
+            {d.name || d.id}
+          </button>
+        ))}
+        {devices().length === 0 && (
+          <div style="color:var(--text-muted); padding:8px 4px;">暂无设备</div>
+        )}
+      </div>
       {loading() ? (
         <div style="padding:24px;">加载中...</div>
       ) : (

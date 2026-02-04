@@ -87,36 +87,31 @@ func syncDataToDisk() error {
 
 	log.Println("Syncing data to disk...")
 
-	// 1. 创建临时数据库文件
-	tempFile := dataDBFile + ".tmp"
-	diskDB, err := sql.Open("sqlite", tempFile)
+	var maxID int64
+	if err := DataDB.QueryRow("SELECT IFNULL(MAX(id), 0) FROM data_points").Scan(&maxID); err != nil {
+		return fmt.Errorf("failed to get max data point id: %w", err)
+	}
+	if maxID == 0 {
+		return nil
+	}
+
+	// 1. 打开/创建磁盘数据库
+	diskDB, err := sql.Open("sqlite", dataDBFile)
 	if err != nil {
-		return fmt.Errorf("failed to open temp database: %w", err)
+		return fmt.Errorf("failed to open data database: %w", err)
 	}
 	defer diskDB.Close()
 
-	// 2. 复制 schema
-	schemaRows, err := DataDB.Query("SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-	if err != nil {
-		return fmt.Errorf("failed to get schema: %w", err)
+	if _, err := diskDB.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+		return fmt.Errorf("failed to set disk pragma: %w", err)
 	}
-	defer schemaRows.Close()
-
-	for schemaRows.Next() {
-		var sql string
-		if err := schemaRows.Scan(&sql); err != nil {
-			return err
-		}
-		if _, err := diskDB.Exec(sql); err != nil {
-			return fmt.Errorf("failed to create table: %w", err)
-		}
-	}
-	if err := schemaRows.Err(); err != nil {
+	if err := ensureDiskDataSchema(diskDB); err != nil {
 		return err
 	}
 
-	// 3. 批量复制数据点
-	points, err := DataDB.Query("SELECT device_id, device_name, field_name, value, value_type, collected_at FROM data_points ORDER BY collected_at")
+	// 2. 批量复制数据点（仅同步已存在的部分）
+	points, err := DataDB.Query(`SELECT device_id, device_name, field_name, value, value_type, collected_at 
+		FROM data_points WHERE id <= ? ORDER BY id`, maxID)
 	if err != nil {
 		return fmt.Errorf("failed to query data points: %w", err)
 	}
@@ -128,9 +123,9 @@ func syncDataToDisk() error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO data_points 
-		(id, device_id, device_name, field_name, value, value_type, collected_at) 
-		VALUES (NULL, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO data_points 
+		(device_id, device_name, field_name, value, value_type, collected_at) 
+		VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
@@ -160,12 +155,33 @@ func syncDataToDisk() error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// 4. 原子替换文件
-	if err := os.Rename(tempFile, dataDBFile); err != nil {
-		return fmt.Errorf("failed to rename temp file: %w", err)
+	// 3. 删除已同步的内存数据
+	if _, err := DataDB.Exec("DELETE FROM data_points WHERE id <= ?", maxID); err != nil {
+		return fmt.Errorf("failed to cleanup synced data points: %w", err)
 	}
 
 	log.Printf("Data synced to disk: %d points", count)
+	return nil
+}
+
+func ensureDiskDataSchema(db *sql.DB) error {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(device_id, field_name, collected_at)
+	)`); err != nil {
+		return fmt.Errorf("failed to ensure data_points table: %w", err)
+	}
+
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_data_points_device_time ON data_points(device_id, collected_at DESC)"); err != nil {
+		return fmt.Errorf("failed to ensure data_points index: %w", err)
+	}
+
 	return nil
 }
 

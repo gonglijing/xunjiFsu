@@ -61,7 +61,7 @@ func Metrics(w http.ResponseWriter, r *http.Request) {
 
 	var dataPointsCount, cacheCount int
 	database.DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&dataPointsCount)
-	database.ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&cacheCount)
+	database.DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&cacheCount)
 
 	metrics := SystemMetrics{
 		Timestamp: time.Now(),

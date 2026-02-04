@@ -53,6 +53,14 @@ func TestSyncDataToDisk(t *testing.T) {
 		t.Fatalf("syncDataToDisk: %v", err)
 	}
 
+	var memCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&memCount); err != nil {
+		t.Fatalf("count memory data points: %v", err)
+	}
+	if memCount != 0 {
+		t.Fatalf("expected memory data points to be cleared, got %d", memCount)
+	}
+
 	diskDB, err := openSQLite(dataDBFile, 1, 1)
 	if err != nil {
 		t.Fatalf("open disk db: %v", err)

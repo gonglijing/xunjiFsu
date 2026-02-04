@@ -3,12 +3,17 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"github.com/gonglijing/xunjiFsu/internal/models"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-// ==================== 历史数据点操作 (data.db - 内存暂存) ====================
+// ==================== 历史数据点操作 (data.db - 内存 + 磁盘) ====================
 
 // DataPoint 历史数据点
 type DataPoint struct {
@@ -35,6 +40,14 @@ func SaveDataPoint(deviceID int64, deviceName, fieldName, value, valueType strin
 	// 检查并清理过量的数据点
 	enforceDataPointsLimit()
 	return nil
+}
+
+func scanDataPoint(rows *sql.Rows) (*DataPoint, error) {
+	point := &DataPoint{}
+	if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
+		return nil, err
+	}
+	return point, nil
 }
 
 // DataPointEntry 单个数据点条目
@@ -92,6 +105,122 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 	return nil
 }
 
+type dataPointKey struct {
+	deviceID    int64
+	fieldName   string
+	collectedAt int64
+}
+
+func mergeDataPoints(primary, secondary []*DataPoint, limit int) []*DataPoint {
+	if len(secondary) == 0 {
+		if limit > 0 && len(primary) > limit {
+			return primary[:limit]
+		}
+		return primary
+	}
+
+	combined := make([]*DataPoint, 0, len(primary)+len(secondary))
+	combined = append(combined, primary...)
+	combined = append(combined, secondary...)
+
+	sort.Slice(combined, func(i, j int) bool {
+		return combined[i].CollectedAt.After(combined[j].CollectedAt)
+	})
+
+	seen := make(map[dataPointKey]struct{}, len(combined))
+	result := make([]*DataPoint, 0, len(combined))
+	for _, point := range combined {
+		if point == nil {
+			continue
+		}
+		key := dataPointKey{
+			deviceID:    point.DeviceID,
+			fieldName:   point.FieldName,
+			collectedAt: point.CollectedAt.UnixNano(),
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, point)
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+	}
+
+	return result
+}
+
+func oldestCollectedAt(points []*DataPoint) time.Time {
+	if len(points) == 0 {
+		return time.Time{}
+	}
+	return points[len(points)-1].CollectedAt
+}
+
+func dataDiskDSN(path string) string {
+	if strings.HasPrefix(path, "file:") {
+		if strings.Contains(path, "mode=") {
+			return path
+		}
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		return path + sep + "mode=ro"
+	}
+	return "file:" + filepath.ToSlash(path) + "?mode=ro"
+}
+
+func openDataDiskDB() (*sql.DB, error) {
+	if dataDBFile == "" {
+		return nil, fmt.Errorf("data db path is empty")
+	}
+	if _, err := os.Stat(dataDBFile); err != nil {
+		return nil, err
+	}
+	return openSQLite(dataDiskDSN(dataDBFile), 1, 1)
+}
+
+func getDiskDataPointsByDevice(deviceID int64, limit int, before time.Time) ([]*DataPoint, error) {
+	db, err := openDataDiskDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at
+		FROM data_points WHERE device_id = ?`
+	args := []any{deviceID}
+	if !before.IsZero() {
+		query += " AND collected_at < ?"
+		args = append(args, before)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	return queryList[*DataPoint](db, query, args, scanDataPoint)
+}
+
+func getDiskLatestDataPoints(limit int, before time.Time) ([]*DataPoint, error) {
+	db, err := openDataDiskDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at FROM data_points`
+	args := []any{}
+	if !before.IsZero() {
+		query += " WHERE collected_at < ?"
+		args = append(args, before)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	return queryList[*DataPoint](db, query, args, scanDataPoint)
+}
+
 // enforceDataPointsLimit 强制执行数据点大小限制
 func enforceDataPointsLimit() {
 	var count int
@@ -115,46 +244,52 @@ func GetDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Time) 
 		FROM data_points WHERE device_id = ? AND collected_at >= ? AND collected_at <= ? 
 		ORDER BY collected_at DESC`,
 		[]any{deviceID, startTime, endTime},
-		func(rows *sql.Rows) (*DataPoint, error) {
-			point := &DataPoint{}
-			if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-				return nil, err
-			}
-			return point, nil
-		},
+		scanDataPoint,
 	)
 }
 
-// GetDataPointsByDevice 根据设备ID获取历史数据（从内存）
+// GetDataPointsByDevice 根据设备ID获取历史数据（内存 + 磁盘）
 func GetDataPointsByDevice(deviceID int64, limit int) ([]*DataPoint, error) {
-	return queryList[*DataPoint](DataDB,
+	memPoints, err := queryList[*DataPoint](DataDB,
 		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
 		FROM data_points WHERE device_id = ? ORDER BY collected_at DESC LIMIT ?`,
 		[]any{deviceID, limit},
-		func(rows *sql.Rows) (*DataPoint, error) {
-			point := &DataPoint{}
-			if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-				return nil, err
-			}
-			return point, nil
-		},
+		scanDataPoint,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	diskPoints, err := getDiskDataPointsByDevice(deviceID, limit, oldestCollectedAt(memPoints))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Failed to read data points from disk: %v", err)
+		}
+		return memPoints, nil
+	}
+	return mergeDataPoints(memPoints, diskPoints, limit), nil
 }
 
-// GetLatestDataPoints 获取最新的历史数据点（从内存）
+// GetLatestDataPoints 获取最新的历史数据点（内存 + 磁盘）
 func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
-	return queryList[*DataPoint](DataDB,
+	memPoints, err := queryList[*DataPoint](DataDB,
 		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
 		FROM data_points ORDER BY collected_at DESC LIMIT ?`,
 		[]any{limit},
-		func(rows *sql.Rows) (*DataPoint, error) {
-			point := &DataPoint{}
-			if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-				return nil, err
-			}
-			return point, nil
-		},
+		scanDataPoint,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	diskPoints, err := getDiskLatestDataPoints(limit, oldestCollectedAt(memPoints))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Failed to read latest data points from disk: %v", err)
+		}
+		return memPoints, nil
+	}
+	return mergeDataPoints(memPoints, diskPoints, limit), nil
 }
 
 // InsertCollectData 将采集数据写入缓存与历史库

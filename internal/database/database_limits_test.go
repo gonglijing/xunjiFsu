@@ -80,19 +80,19 @@ func TestEnforceDataCacheLimit(t *testing.T) {
 		maxDataCacheLimit = oldLimit
 	}()
 
-	if ParamDB != nil {
-		_ = ParamDB.Close()
+	if DataDB != nil {
+		_ = DataDB.Close()
 	}
 	var err error
-	ParamDB, err = openSQLite(":memory:", 1, 1)
+	DataDB, err = openSQLite(":memory:", 1, 1)
 	if err != nil {
-		t.Fatalf("open param db: %v", err)
+		t.Fatalf("open data db: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = ParamDB.Close()
+		_ = DataDB.Close()
 	})
 
-	_, err = ParamDB.Exec(`CREATE TABLE data_cache (
+	_, err = DataDB.Exec(`CREATE TABLE data_cache (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		device_id INTEGER NOT NULL,
 		field_name TEXT NOT NULL,
@@ -105,7 +105,7 @@ func TestEnforceDataCacheLimit(t *testing.T) {
 		t.Fatalf("create data_cache: %v", err)
 	}
 
-	tx, err := ParamDB.Begin()
+	tx, err := DataDB.Begin()
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
@@ -131,14 +131,14 @@ func TestEnforceDataCacheLimit(t *testing.T) {
 	enforceDataCacheLimit()
 
 	var count int
-	if err := ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count); err != nil {
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count); err != nil {
 		t.Fatalf("count data_cache: %v", err)
 	}
 	if count != 3 {
 		t.Fatalf("expected 3 rows after cleanup, got %d", count)
 	}
 
-	rows, err := ParamDB.Query("SELECT field_name FROM data_cache ORDER BY collected_at ASC")
+	rows, err := DataDB.Query("SELECT field_name FROM data_cache ORDER BY collected_at ASC")
 	if err != nil {
 		t.Fatalf("query remaining: %v", err)
 	}
