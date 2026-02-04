@@ -262,5 +262,10 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 	if err := e.manager.LoadDriver(drv, wasmData, resourceID); err != nil {
 		return fmt.Errorf("load driver %d failed: %w", drv.ID, err)
 	}
+	if version, err := e.manager.GetDriverVersion(driverID); err == nil && version != "" {
+		if err := database.UpdateDriverVersion(driverID, version); err != nil {
+			logger.Warn("Update driver version failed", "driver_id", driverID, "error", err)
+		}
+	}
 	return nil
 }

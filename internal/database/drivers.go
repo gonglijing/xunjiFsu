@@ -85,3 +85,21 @@ func UpsertDriverFile(name, path string) error {
 		 VALUES (?, ?, '', '', '', 1)`, name, path)
 	return err
 }
+
+// UpdateDriverVersionByName updates driver version by name.
+func UpdateDriverVersionByName(name, version string) error {
+	_, err := ParamDB.Exec(
+		"UPDATE drivers SET version = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+		version, name,
+	)
+	return err
+}
+
+// UpdateDriverVersion updates driver version by id.
+func UpdateDriverVersion(id int64, version string) error {
+	_, err := ParamDB.Exec(
+		"UPDATE drivers SET version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		version, id,
+	)
+	return err
+}

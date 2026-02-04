@@ -67,6 +67,7 @@ export function Drivers() {
                   <th>ID</th>
                   <th>名称</th>
                   <th>文件</th>
+                  <th>版本</th>
                   <th>大小</th>
                   <th>操作</th>
                 </tr>
@@ -78,6 +79,7 @@ export function Drivers() {
                       <td>{d.id}</td>
                       <td>{d.name}</td>
                       <td>{d.filename || d.file_path || ''}</td>
+                      <td>{d.version || '-'}</td>
                       <td>{d.size ? (d.size / 1024).toFixed(1) + ' KB' : '-'}</td>
                       <td class="flex" style="gap:8px;">
                         <a class="btn" href={`/api/drivers/${d.id}/download`}>下载</a>
@@ -89,7 +91,7 @@ export function Drivers() {
                 <For each={items().length === 0 ? [1] : []}>
                   {() => (
                     <tr>
-                      <td colSpan={5} style="text-align:center; padding:24px; color:var(--text-muted);">暂无驱动</td>
+                      <td colSpan={6} style="text-align:center; padding:24px; color:var(--text-muted);">暂无驱动</td>
                     </tr>
                   )}
                 </For>

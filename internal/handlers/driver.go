@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
+	driverpkg "github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -42,6 +43,12 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 	if driver.FilePath == "" {
 		driver.FilePath = h.driverFilePath(driver.Name, "")
+	}
+
+	if wasmData, err := os.ReadFile(h.driverFilePath(driver.Name, driver.FilePath)); err == nil {
+		if version, err := driverpkg.ExtractDriverVersion(wasmData); err == nil && version != "" {
+			driver.Version = version
+		}
 	}
 
 	id, err := database.CreateDriver(&driver)
@@ -175,12 +182,21 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 
 	// 写入/忽略驱动元数据
 	_ = database.UpsertDriverFile(strings.TrimSuffix(header.Filename, ".wasm"), destPath)
+	driverName := strings.TrimSuffix(header.Filename, ".wasm")
+	version := ""
+	if wasmData, err := os.ReadFile(destPath); err == nil {
+		if v, err := driverpkg.ExtractDriverVersion(wasmData); err == nil && v != "" {
+			_ = database.UpdateDriverVersionByName(driverName, v)
+			version = v
+		}
+	}
 
 	// 返回成功信息
 	WriteSuccess(w, map[string]interface{}{
 		"filename": header.Filename,
 		"path":     destPath,
 		"size":     header.Size,
+		"version":  version,
 	})
 }
 
