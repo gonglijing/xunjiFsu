@@ -137,242 +137,10 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 	if executor == nil {
 		return nil
 	}
-
-	readWithTimeout := func(port SerialPort, buf []byte, expect int, timeout time.Duration) (int, error) {
-		deadline := time.Now().Add(timeout)
-		read := 0
-		tmp := make([]byte, expect)
-		for read < expect && time.Now().Before(deadline) {
-			n, err := port.Read(tmp)
-			if n > 0 {
-				copy(buf[read:], tmp[:n])
-				read += n
-			}
-			if err != nil {
-				return read, err
-			}
-			if read >= expect {
-				break
-			}
-			time.Sleep(2 * time.Millisecond)
-		}
-		if read < expect {
-			return read, fmt.Errorf("timeout")
-		}
-		return read, nil
-	}
-
-	// serial_read: 从串口读取数据
-	serialRead := extism.NewHostFunctionWithStack(
-		"serial_read",
-		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			ptr := stack[0]
-			size := int(stack[1]) // 读取请求的大小
-			if ptr == 0 || size <= 0 || ptr > uint64(^uint32(0)) {
-				stack[0] = 0 // 返回 0 表示失败
-				return
-			}
-			buf := make([]byte, size)
-
-			port := executor.GetSerialPort(resourceID)
-			if port == nil {
-				stack[0] = 0 // 返回 0 表示失败
-				return
-			}
-
-			n, err := port.Read(buf)
-			if err != nil {
-				stack[0] = 0
-				return
-			}
-
-			// 将数据写入插件内存
-			p.Memory().Write(uint32(ptr), buf[:n])
-			stack[0] = uint64(n) // 返回实际读取的字节数
-		},
-		[]extism.ValueType{extism.ValueTypeI64, extism.ValueTypeI64},
-		[]extism.ValueType{extism.ValueTypeI64},
-	)
-
-	// serial_write: 向串口写入数据
-	serialWrite := extism.NewHostFunctionWithStack(
-		"serial_write",
-		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			ptr := stack[0]
-			size := int(stack[1])
-			if ptr == 0 || size <= 0 || ptr > uint64(^uint32(0)) {
-				stack[0] = 0
-				return
-			}
-
-			// 从插件内存读取数据
-			data, _ := p.Memory().Read(uint32(ptr), uint32(size))
-
-			port := executor.GetSerialPort(resourceID)
-			if port == nil {
-				stack[0] = 0
-				return
-			}
-
-			n, err := port.Write(data)
-			if err != nil {
-				stack[0] = 0
-				return
-			}
-
-			stack[0] = uint64(n) // 返回实际写入的字节数
-		},
-		[]extism.ValueType{extism.ValueTypeI64, extism.ValueTypeI64},
-		[]extism.ValueType{extism.ValueTypeI64},
-	)
-
-	// serial_transceive: 先写再读（用于半双工协议，如自定义 RTU）
-	serialTransceive := extism.NewHostFunctionWithStack(
-		"serial_transceive",
-		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			writePtr := stack[0]
-			writeSize := int(stack[1])
-			readPtr := stack[2]
-			readCap := int(stack[3])
-			timeoutMs := int(stack[4])
-
-			port := executor.GetSerialPort(resourceID)
-			if port == nil || writeSize <= 0 || readCap <= 0 {
-				if port == nil {
-					logger.Warn("Serial port not found", "resource_id", resourceID)
-				}
-				stack[0] = 0
-				return
-			}
-			if writePtr == 0 || readPtr == 0 || writePtr > uint64(^uint32(0)) || readPtr > uint64(^uint32(0)) {
-				stack[0] = 0
-				return
-			}
-
-			if resetIn, ok := port.(interface{ ResetInputBuffer() error }); ok {
-				_ = resetIn.ResetInputBuffer()
-			}
-			if resetOut, ok := port.(interface{ ResetOutputBuffer() error }); ok {
-				_ = resetOut.ResetOutputBuffer()
-			}
-
-			if rts, ok := port.(interface{ SetRTS(bool) error }); ok {
-				_ = rts.SetRTS(true)
-			}
-			if dtr, ok := port.(interface{ SetDTR(bool) error }); ok {
-				_ = dtr.SetDTR(true)
-			}
-
-			req, _ := p.Memory().Read(uint32(writePtr), uint32(writeSize))
-			if n, err := port.Write(req); err != nil {
-				logger.Warn("Serial write failed", "resource_id", resourceID, "error", err)
-				stack[0] = 0
-				return
-			} else {
-				logger.Info("Serial write", "resource_id", resourceID, "written", n, "len", len(req), "req", hexPreview(req, 32))
-			}
-
-			if rts, ok := port.(interface{ SetRTS(bool) error }); ok {
-				_ = rts.SetRTS(false)
-			}
-			if dtr, ok := port.(interface{ SetDTR(bool) error }); ok {
-				_ = dtr.SetDTR(false)
-			}
-			time.Sleep(3 * time.Millisecond)
-
-			buf := make([]byte, readCap)
-			tout := time.Duration(timeoutMs)
-			if tout <= 0 {
-				tout = 500 * time.Millisecond
-			}
-			n, err := readWithTimeout(port, buf, readCap, tout)
-			if n == 0 {
-				if err != nil {
-					logger.Warn("Serial read failed", "resource_id", resourceID, "error", err.Error(), "req", hexPreview(req, 32))
-				} else {
-					logger.Warn("Serial read timeout", "resource_id", resourceID, "req", hexPreview(req, 32))
-				}
-				stack[0] = 0
-				return
-			}
-			if err != nil {
-				logger.Warn("Serial read partial", "resource_id", resourceID, "read", n, "error", err.Error())
-			}
-			p.Memory().Write(uint32(readPtr), buf[:n])
-			stack[0] = uint64(n)
-		},
-		[]extism.ValueType{
-			extism.ValueTypeI64, // write ptr
-			extism.ValueTypeI64, // write size
-			extism.ValueTypeI64, // read ptr
-			extism.ValueTypeI64, // read cap
-			extism.ValueTypeI64, // timeout ms
-		},
-		[]extism.ValueType{extism.ValueTypeI64}, // bytes read
-	)
-
-	// sleep_ms: 毫秒延时
-	sleepMs := extism.NewHostFunctionWithStack(
-		"sleep_ms",
-		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			ms := int(stack[0])
-			time.Sleep(time.Duration(ms) * time.Millisecond)
-		},
-		[]extism.ValueType{extism.ValueTypeI64},
-		[]extism.ValueType{},
-	)
-
-	// tcp_transceive: 写后读（与 serial_transceive 对齐）
-	tcpTransceive := extism.NewHostFunctionWithStack(
-		"tcp_transceive",
-		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-			wPtr := stack[0]
-			wSize := int(stack[1])
-			rPtr := stack[2]
-			rCap := int(stack[3])
-			timeoutMs := int(stack[4])
-
-			conn := executor.GetTCPConn(resourceID)
-			if conn == nil || wSize <= 0 || rCap <= 0 {
-				stack[0] = 0
-				return
-			}
-			if wPtr == 0 || rPtr == 0 || wPtr > uint64(^uint32(0)) || rPtr > uint64(^uint32(0)) {
-				stack[0] = 0
-				return
-			}
-
-			req, _ := p.Memory().Read(uint32(wPtr), uint32(wSize))
-			if _, err := conn.Write(req); err != nil {
-				stack[0] = 0
-				return
-			}
-
-			tout := time.Duration(timeoutMs)
-			if tout <= 0 {
-				tout = 500 * time.Millisecond
-			}
-			_ = conn.SetReadDeadline(time.Now().Add(tout))
-			buf := make([]byte, rCap)
-			n, err := conn.Read(buf)
-			if err != nil || n <= 0 {
-				stack[0] = 0
-				return
-			}
-			p.Memory().Write(uint32(rPtr), buf[:n])
-			stack[0] = uint64(n)
-		},
-		[]extism.ValueType{
-			extism.ValueTypeI64, // wPtr
-			extism.ValueTypeI64, // wSize
-			extism.ValueTypeI64, // rPtr
-			extism.ValueTypeI64, // rCap
-			extism.ValueTypeI64, // timeout
-		},
-		[]extism.ValueType{extism.ValueTypeI64},
-	)
-
-	return []extism.HostFunction{serialRead, serialWrite, serialTransceive, sleepMs, tcpTransceive}
+	funcs := make([]extism.HostFunction, 0, 5)
+	funcs = append(funcs, m.createSerialHostFunctions(resourceID)...)
+	funcs = append(funcs, m.createTCPHostFunctions(resourceID)...)
+	return funcs
 }
 
 // LoadDriver 加载驱动
@@ -811,112 +579,33 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 	if device.DriverID == nil {
 		return nil, fmt.Errorf("device %s has no driver", device.Name)
 	}
+	done, err := e.startExecution(device)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 
-	e.mu.Lock()
-	if e.executing[device.ID] {
-		e.mu.Unlock()
-		return nil, fmt.Errorf("device %s is already being read", device.Name)
-	}
-	e.executing[device.ID] = true
-	e.mu.Unlock()
+	resourceID, resourceType := resolveResource(device)
+	e.ensureResourcePath(resourceID, resourceType, device)
 
-	defer func() {
-		e.mu.Lock()
-		delete(e.executing, device.ID)
-		e.mu.Unlock()
-	}()
+	deviceConfig := buildDeviceConfig(device)
+	ctx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
 
-	// 构建设备配置
-	resourceID := int64(0)
-	if device.ResourceID != nil {
-		resourceID = *device.ResourceID
-	}
-	resourceType := device.ResourceType
-	if resourceType == "" {
-		resourceType = device.DriverType
-		if resourceType == "" {
-			resourceType = "modbus_rtu"
-		}
-	}
-
-	// 对于网络类型设备，设置资源路径（用于TCP懒连接）
-	if resourceType == "net" && resourceID > 0 {
-		// 如果还没有缓存路径，尝试从设备配置或资源获取
-		if e.GetResourcePath(resourceID) == "" && device.IPAddress != "" {
-			path := fmt.Sprintf("%s:%d", device.IPAddress, device.PortNum)
-			e.SetResourcePath(resourceID, path)
-		}
-	}
-
-	// 构建 DeviceConfig 从接口字段
-	deviceConfig := make(map[string]string)
-	if device.DriverType == "modbus_rtu" {
-		deviceConfig["serial_port"] = device.SerialPort
-		deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
-		deviceConfig["data_bits"] = fmt.Sprintf("%d", device.DataBits)
-		deviceConfig["stop_bits"] = fmt.Sprintf("%d", device.StopBits)
-		deviceConfig["parity"] = device.Parity
-	} else {
-		deviceConfig["ip_address"] = device.IPAddress
-		deviceConfig["port_num"] = fmt.Sprintf("%d", device.PortNum)
-	}
-	if device.DeviceAddress != "" {
-		deviceConfig["device_address"] = device.DeviceAddress
-	}
-	deviceConfig["func_name"] = "read"
-
-	ctx := &DriverContext{
-		DeviceID:     device.ID,
-		DeviceName:   device.Name,
-		ResourceID:   resourceID,
-		ResourceType: resourceType,
-		Config:       deviceConfig,
-		DeviceConfig: "",
-	}
-
-	// 对同一资源做互斥，避免并发串口访问
-	var unlock func()
-	if resourceID > 0 {
-		lock := e.getResourceLock(resourceID)
-		lock.Lock()
-		unlock = lock.Unlock
-	}
+	unlock := e.lockResource(resourceID)
 	if unlock != nil {
 		defer unlock()
 	}
 
-	// 串口资源自动打开
-	if resourceID > 0 {
-		if err := e.ensureSerialPort(resourceID, device); err != nil && resourceType == "serial" {
-			return nil, fmt.Errorf("open serial resource %d failed: %w", resourceID, err)
-		}
+	if err := e.ensureSerialResource(resourceID, resourceType, device); err != nil {
+		return nil, err
 	}
 
-	// 若驱动未加载，尝试按需加载
-	if e.manager.IsLoaded(*device.DriverID) {
-		if loaded, err := e.manager.GetDriver(*device.DriverID); err == nil && loaded != nil {
-			if resourceID > 0 && loaded.resourceID != resourceID {
-				logger.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
-				_ = e.manager.UnloadDriver(loaded.ID)
-			}
-		}
-	}
-	if !e.manager.IsLoaded(*device.DriverID) {
-		if drv, err := database.GetDriverByID(*device.DriverID); err == nil && drv != nil && drv.FilePath != "" {
-			if wasmData, err := readWasmFile(drv.FilePath); err == nil {
-				if err := e.manager.LoadDriver(drv, wasmData, resourceID); err != nil {
-					return nil, fmt.Errorf("load driver %d failed: %w", drv.ID, err)
-				}
-			} else {
-				return nil, fmt.Errorf("read driver wasm failed: %w", err)
-			}
-		} else {
-			return nil, ErrDriverNotFound
-		}
+	if err := e.ensureDriverLoaded(device, resourceID); err != nil {
+		return nil, err
 	}
 
 	// 默认入口函数名（TinyGo 驱动导出为 handle）
-	return e.manager.ExecuteDriver(*device.DriverID, "handle", ctx)
+	return e.manager.ExecuteDriver(*device.DriverID, defaultDriverFunction, ctx)
 }
 
 // CollectData 采集数据
