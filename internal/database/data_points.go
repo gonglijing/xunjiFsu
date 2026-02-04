@@ -294,6 +294,11 @@ func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
 
 // InsertCollectData 将采集数据写入缓存与历史库
 func InsertCollectData(data *models.CollectData) error {
+	return InsertCollectDataWithOptions(data, true)
+}
+
+// InsertCollectDataWithOptions 写入缓存，并可选写入历史
+func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) error {
 	if data == nil {
 		return fmt.Errorf("collect data is nil")
 	}
@@ -303,6 +308,9 @@ func InsertCollectData(data *models.CollectData) error {
 		if err := SaveDataCache(data.DeviceID, data.DeviceName, field, value, "string"); err != nil {
 			log.Printf("SaveDataCache error: %v", err)
 		}
+		if !storeHistory {
+			continue
+		}
 		entries = append(entries, DataPointEntry{
 			DeviceID:    data.DeviceID,
 			DeviceName:  data.DeviceName,
@@ -311,6 +319,9 @@ func InsertCollectData(data *models.CollectData) error {
 			ValueType:   "string",
 			CollectedAt: data.Timestamp,
 		})
+	}
+	if !storeHistory {
+		return nil
 	}
 	return BatchSaveDataPoints(entries)
 }

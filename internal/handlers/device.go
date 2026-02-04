@@ -69,6 +69,9 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, "Invalid request body: "+err.Error())
 		return
 	}
+	if device.StorageInterval <= 0 {
+		device.StorageInterval = database.DefaultStorageIntervalSeconds
+	}
 
 	id, err := database.CreateDevice(&device)
 	if err != nil {
@@ -93,6 +96,9 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	if err := ParseRequest(r, &device); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return
+	}
+	if device.StorageInterval <= 0 {
+		device.StorageInterval = database.DefaultStorageIntervalSeconds
 	}
 
 	device.ID = id

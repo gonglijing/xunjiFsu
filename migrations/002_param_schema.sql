@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS devices (
     port_num INTEGER,
     device_address TEXT,
     protocol TEXT DEFAULT 'tcp' CHECK(protocol IN ('tcp', 'udp')),
+    storage_interval INTEGER DEFAULT 300,
     enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

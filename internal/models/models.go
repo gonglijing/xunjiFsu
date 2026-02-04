@@ -67,6 +67,7 @@ type Device struct {
 	// 设备地址和周期
 	DeviceAddress   string `json:"device_address" db:"device_address"`
 	CollectInterval int    `json:"collect_interval" db:"collect_interval"` // 采集周期(ms)
+	StorageInterval int    `json:"storage_interval" db:"storage_interval"` // 存储周期(s)
 	Timeout         int    `json:"timeout" db:"timeout"`                   // 响应超时(ms)
 	// 驱动（保留用于未来扩展）
 	DriverID     *int64 `json:"driver_id" db:"driver_id"`

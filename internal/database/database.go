@@ -19,6 +19,7 @@ const (
 	MaxDataPoints        = 100000          // 内存数据库最大数据点数
 	MaxDataCache         = 10000           // 内存缓存最大条目数
 	DefaultRetentionDays = 30              // 默认历史保留天数
+	DefaultStorageIntervalSeconds = 300    // 默认存储周期(s)
 
 	// 连接池配置（可调整）
 	DefaultMaxOpenConns = 25        // 默认最大打开连接数

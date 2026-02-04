@@ -29,11 +29,12 @@ type Collector struct {
 
 // collectTask 采集任务
 type collectTask struct {
-	device     *models.Device
-	interval   time.Duration
-	nextRun    time.Time
-	lastRun    time.Time
-	lastUpload time.Time
+	device          *models.Device
+	interval        time.Duration
+	storageInterval time.Duration
+	nextRun         time.Time
+	lastRun         time.Time
+	lastStored      time.Time
 }
 
 // taskHeap 任务优先队列（小根堆）
@@ -125,11 +126,13 @@ func (c *Collector) loadEnabledDevices() error {
 	for _, device := range devices {
 		if device.Enabled == 1 {
 			interval := time.Duration(device.CollectInterval) * time.Millisecond
+			storageInterval := resolveStorageInterval(device.StorageInterval)
 			task := &collectTask{
-				device:   device,
-				interval: interval,
-				nextRun:  time.Now().Add(interval),
-				lastRun:  time.Time{},
+				device:          device,
+				interval:        interval,
+				storageInterval: storageInterval,
+				nextRun:         time.Now().Add(interval),
+				lastRun:         time.Time{},
 			}
 			c.tasks[device.ID] = task
 			heap.Push(c.taskHeap, task)
@@ -174,7 +177,7 @@ func (c *Collector) runLoop() {
 		c.mu.Unlock()
 
 		// 实际采集
-		c.collectOnce(task.device)
+		c.collectOnce(task)
 		select {
 		case <-c.stopChan:
 			return
@@ -184,7 +187,8 @@ func (c *Collector) runLoop() {
 }
 
 // collectOnce 执行单次采集
-func (c *Collector) collectOnce(device *models.Device) {
+func (c *Collector) collectOnce(task *collectTask) {
+	device := task.device
 	// 串行锁：同一资源串行访问
 	lockCh := c.getResourceLock(device.ResourceID)
 	lockCh <- struct{}{}
@@ -200,9 +204,12 @@ func (c *Collector) collectOnce(device *models.Device) {
 
 	collect := driverResultToCollectData(device, result)
 
-	// 保存数据到内存数据库
-	if err := database.InsertCollectData(collect); err != nil {
+	storeHistory := shouldStoreHistory(task, collect.Timestamp)
+	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
 		log.Printf("Failed to insert data points: %v", err)
+	}
+	if storeHistory {
+		task.lastStored = collect.Timestamp
 	}
 
 	// 阈值计算 & 报警、北向上传
@@ -254,11 +261,13 @@ func (c *Collector) SyncDeviceStatus() {
 			if !exists {
 				// 新启用的设备，加入采集
 				interval := time.Duration(device.CollectInterval) * time.Millisecond
+				storageInterval := resolveStorageInterval(device.StorageInterval)
 				newTask := &collectTask{
-					device:   device,
-					interval: interval,
-					nextRun:  time.Now().Add(interval),
-					lastRun:  time.Time{},
+					device:          device,
+					interval:        interval,
+					storageInterval: storageInterval,
+					nextRun:         time.Now().Add(interval),
+					lastRun:         time.Time{},
 				}
 				c.tasks[device.ID] = newTask
 				heap.Push(c.taskHeap, newTask)
@@ -267,6 +276,7 @@ func (c *Collector) SyncDeviceStatus() {
 				// 已存在的设备，更新配置
 				task.device = device
 				task.interval = time.Duration(device.CollectInterval) * time.Millisecond
+				task.storageInterval = resolveStorageInterval(device.StorageInterval)
 				log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
 			}
 		} else {
@@ -313,11 +323,13 @@ func (c *Collector) AddDevice(device *models.Device) error {
 	}
 
 	interval := time.Duration(device.CollectInterval) * time.Millisecond
+	storageInterval := resolveStorageInterval(device.StorageInterval)
 	task := &collectTask{
-		device:   device,
-		interval: interval,
-		nextRun:  time.Now().Add(interval),
-		lastRun:  time.Time{},
+		device:          device,
+		interval:        interval,
+		storageInterval: storageInterval,
+		nextRun:         time.Now().Add(interval),
+		lastRun:         time.Time{},
 	}
 
 	c.tasks[device.ID] = task
@@ -346,8 +358,30 @@ func (c *Collector) UpdateDevice(device *models.Device) error {
 
 	task.device = device
 	task.interval = time.Duration(device.CollectInterval) * time.Millisecond
+	task.storageInterval = resolveStorageInterval(device.StorageInterval)
 	task.nextRun = time.Now().Add(task.interval)
 	return nil
+}
+
+func resolveStorageInterval(seconds int) time.Duration {
+	if seconds <= 0 {
+		seconds = database.DefaultStorageIntervalSeconds
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func shouldStoreHistory(task *collectTask, collectedAt time.Time) bool {
+	interval := task.storageInterval
+	if interval <= 0 {
+		interval = resolveStorageInterval(0)
+	}
+	if task.lastStored.IsZero() {
+		return true
+	}
+	if collectedAt.IsZero() {
+		collectedAt = time.Now()
+	}
+	return collectedAt.Sub(task.lastStored) >= interval
 }
 
 // checkThresholds 检查阈值

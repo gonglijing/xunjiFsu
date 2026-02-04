@@ -19,6 +19,7 @@ const defaultForm = {
   port_num: 502,
   device_address: '1',
   collect_interval: 1000,
+  storage_interval: 300,
   timeout: 1000,
   resource_id: null,
   enabled: 1,
@@ -178,6 +179,7 @@ export function Devices() {
       port_num: item.port_num || 502,
       device_address: item.device_address || '1',
       collect_interval: item.collect_interval || 1000,
+      storage_interval: item.storage_interval || 300,
       timeout: item.timeout || 1000,
       resource_id: item.resource_id,
       enabled: item.enabled,
@@ -465,6 +467,16 @@ export function Devices() {
                   />
                 </div>
                 <div class="form-group">
+                  <label class="form-label">存储周期(s)</label>
+                  <input 
+                    class="form-input" 
+                    type="number" 
+                    value={form().storage_interval} 
+                    onInput={(e) => setForm({ ...form(), storage_interval: +e.target.value })} 
+                    required 
+                  />
+                </div>
+                <div class="form-group">
                   <label class="form-label">超时(ms)</label>
                   <input 
                     class="form-input" 
@@ -474,17 +486,18 @@ export function Devices() {
                     required 
                   />
                 </div>
-                <div class="form-group">
-                  <label class="form-label">状态</label>
-                  <select 
-                    class="form-select" 
-                    value={form().enabled} 
-                    onChange={(e) => setForm({ ...form(), enabled: +e.target.value })}
-                  >
-                    <option value={1}>启用</option>
-                    <option value={0}>禁用</option>
-                  </select>
-                </div>
+              </div>
+
+              <div class="form-group" style="margin-top:12px;">
+                <label class="form-label">状态</label>
+                <select 
+                  class="form-select" 
+                  value={form().enabled} 
+                  onChange={(e) => setForm({ ...form(), enabled: +e.target.value })}
+                >
+                  <option value={1}>启用</option>
+                  <option value={0}>禁用</option>
+                </select>
               </div>
               
               <div class="flex" style={{ gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
