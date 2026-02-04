@@ -37,20 +37,17 @@ func AddResource(r *models.Resource) (int64, error) {
 }
 
 func ListResources() ([]*models.Resource, error) {
-	rows, err := ParamDB.Query(`SELECT id, name, type, COALESCE(path, '') as path, enabled, created_at, updated_at FROM resources ORDER BY id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*models.Resource
-	for rows.Next() {
-		r := &models.Resource{}
-		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Path, &r.Enabled, &r.CreatedAt, &r.UpdatedAt); err != nil {
-			return nil, err
-		}
-		list = append(list, r)
-	}
-	return list, nil
+	return queryList[*models.Resource](ParamDB,
+		`SELECT id, name, type, COALESCE(path, '') as path, enabled, created_at, updated_at FROM resources ORDER BY id`,
+		nil,
+		func(rows *sql.Rows) (*models.Resource, error) {
+			r := &models.Resource{}
+			if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Path, &r.Enabled, &r.CreatedAt, &r.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return r, nil
+		},
+	)
 }
 
 func UpdateResource(r *models.Resource) error {
@@ -178,6 +175,9 @@ func columnExists(db *sql.DB, table, column string) (bool, error) {
 		if name == column {
 			return true, nil
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
 	}
 	return false, nil
 }

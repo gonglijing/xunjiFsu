@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -73,28 +74,22 @@ func GetDeviceByID(id int64) (*models.Device, error) {
 
 // GetAllDevices 获取所有设备
 func GetAllDevices() ([]*models.Device, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.Device](ParamDB,
 		`SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
 			ip_address, port_num, device_address, collect_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at 
 		FROM devices ORDER BY id`,
+		nil,
+		func(rows *sql.Rows) (*models.Device, error) {
+			device := &models.Device{}
+			if err := rows.Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort,
+				&device.BaudRate, &device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
+				&device.DeviceAddress, &device.CollectInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
+				&device.CreatedAt, &device.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return device, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var devices []*models.Device
-	for rows.Next() {
-		device := &models.Device{}
-		if err := rows.Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort,
-			&device.BaudRate, &device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
-			&device.DeviceAddress, &device.CollectInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
-			&device.CreatedAt, &device.UpdatedAt); err != nil {
-			return nil, err
-		}
-		devices = append(devices, device)
-	}
-	return devices, nil
 }
 
 // UpdateDevice 更新设备

@@ -41,6 +41,10 @@ var DataDB *sql.DB
 var paramDBFile = DefaultParamDBFile
 var dataDBFile = DataDBFile
 var retentionDaysDefault = 30 // fallback if no storage policy
+var maxDataPointsLimit = MaxDataPoints
+var maxDataCacheLimit = MaxDataCache
+var syncBatchTrigger = SyncBatchTrigger
+var syncDataToDiskFn = syncDataToDisk
 
 // StoragePolicy 数据保留策略
 type StoragePolicy struct {
@@ -55,10 +59,12 @@ type StoragePolicy struct {
 
 // 数据同步相关
 var dataSyncMu sync.Mutex
+var dataSyncControlMu sync.Mutex
 var dataSyncTicker *time.Ticker
 var dataSyncStop chan struct{}
 
 // 数据清理相关
+var retentionControlMu sync.Mutex
 var retentionTicker *time.Ticker
 var retentionStop chan struct{}
 
@@ -74,21 +80,13 @@ func InitParamDBWithPath(path string) error {
 	}
 	paramDBFile = path
 
-	var err error
-	ParamDB, err = sql.Open("sqlite", path)
-	if err != nil {
-		return fmt.Errorf("failed to open param database: %w", err)
-	}
-
 	// 配置连接池
 	maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
 	maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
-	ParamDB.SetMaxOpenConns(maxOpen)
-	ParamDB.SetMaxIdleConns(maxIdle)
-	ParamDB.SetConnMaxLifetime(ConnMaxLifetime)
-
-	if err := ParamDB.Ping(); err != nil {
-		return fmt.Errorf("failed to ping param database: %w", err)
+	var err error
+	ParamDB, err = openSQLite(path, maxOpen, maxIdle)
+	if err != nil {
+		return fmt.Errorf("failed to open param database: %w", err)
 	}
 
 	log.Printf("Param database initialized (max_open=%d, max_idle=%d)", maxOpen, maxIdle)
@@ -107,21 +105,13 @@ func InitDataDBWithPath(path string) error {
 	}
 	dataDBFile = path
 
-	var err error
-	DataDB, err = sql.Open("sqlite", ":memory:")
-	if err != nil {
-		return fmt.Errorf("failed to open data database: %w", err)
-	}
-
 	// 配置连接池
 	maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
 	maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
-	DataDB.SetMaxOpenConns(maxOpen)
-	DataDB.SetMaxIdleConns(maxIdle)
-	DataDB.SetConnMaxLifetime(ConnMaxLifetime)
-
-	if err := DataDB.Ping(); err != nil {
-		return fmt.Errorf("failed to ping data database: %w", err)
+	var err error
+	DataDB, err = openSQLite(":memory:", maxOpen, maxIdle)
+	if err != nil {
+		return fmt.Errorf("failed to open data database: %w", err)
 	}
 	// data.db 仅做历史存储，不依赖 devices 表，禁用外键以避免跨库引用错误
 	_, _ = DataDB.Exec("PRAGMA foreign_keys = OFF")
@@ -139,6 +129,11 @@ func InitDataDBWithPath(path string) error {
 
 // StartDataSync 启动数据同步任务（内存 -> 磁盘批量写入）
 func StartDataSync() {
+	dataSyncControlMu.Lock()
+	defer dataSyncControlMu.Unlock()
+	if dataSyncTicker != nil {
+		return
+	}
 	dataSyncStop = make(chan struct{})
 	dataSyncTicker = time.NewTicker(SyncInterval)
 
@@ -162,10 +157,17 @@ func StartDataSync() {
 // 返回true表示已触发同步
 func TriggerSyncIfNeeded() bool {
 	var count int
-	DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count)
-	if count >= SyncBatchTrigger {
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
+		log.Printf("Failed to count data points for sync trigger: %v", err)
+		return false
+	}
+	if count >= syncBatchTrigger {
 		log.Printf("Triggering sync due to data count: %d", count)
-		go syncDataToDisk()
+		go func() {
+			if err := syncDataToDiskFn(); err != nil {
+				log.Printf("Failed to sync data to disk: %v", err)
+			}
+		}()
 		return true
 	}
 	return false
@@ -178,16 +180,25 @@ func SyncDataToDisk() error {
 
 // StopDataSync 停止数据同步任务
 func StopDataSync() {
+	dataSyncControlMu.Lock()
+	defer dataSyncControlMu.Unlock()
 	if dataSyncTicker != nil {
 		dataSyncTicker.Stop()
+		dataSyncTicker = nil
 	}
 	if dataSyncStop != nil {
 		close(dataSyncStop)
+		dataSyncStop = nil
 	}
 }
 
 // StartRetentionCleanup 启动定期历史数据清理
 func StartRetentionCleanup(interval time.Duration) {
+	retentionControlMu.Lock()
+	defer retentionControlMu.Unlock()
+	if retentionTicker != nil {
+		return
+	}
 	if interval <= 0 {
 		interval = 6 * time.Hour
 	}
@@ -212,11 +223,15 @@ func StartRetentionCleanup(interval time.Duration) {
 
 // StopRetentionCleanup 停止历史数据清理任务
 func StopRetentionCleanup() {
+	retentionControlMu.Lock()
+	defer retentionControlMu.Unlock()
 	if retentionTicker != nil {
 		retentionTicker.Stop()
+		retentionTicker = nil
 	}
 	if retentionStop != nil {
 		close(retentionStop)
+		retentionStop = nil
 	}
 }
 
@@ -236,20 +251,23 @@ func syncDataToDisk() error {
 	defer diskDB.Close()
 
 	// 2. 复制 schema
-	schema, err := DataDB.Query("SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+	schemaRows, err := DataDB.Query("SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
 	if err != nil {
 		return fmt.Errorf("failed to get schema: %w", err)
 	}
-	defer schema.Close()
+	defer schemaRows.Close()
 
-	for schema.Next() {
+	for schemaRows.Next() {
 		var sql string
-		if err := schema.Scan(&sql); err != nil {
+		if err := schemaRows.Scan(&sql); err != nil {
 			return err
 		}
 		if _, err := diskDB.Exec(sql); err != nil {
 			return fmt.Errorf("failed to create table: %w", err)
 		}
+	}
+	if err := schemaRows.Err(); err != nil {
+		return err
 	}
 
 	// 3. 批量复制数据点
@@ -287,6 +305,10 @@ func syncDataToDisk() error {
 			return err
 		}
 		count++
+	}
+	if err := points.Err(); err != nil {
+		tx.Rollback()
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -512,23 +534,17 @@ func GetUserByID(id int64) (*models.User, error) {
 
 // GetAllUsers 获取所有用户
 func GetAllUsers() ([]*models.User, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.User](ParamDB,
 		"SELECT id, username, password, role, created_at, updated_at FROM users ORDER BY id",
+		nil,
+		func(rows *sql.Rows) (*models.User, error) {
+			user := &models.User{}
+			if err := rows.Scan(&user.ID, &user.Username, &user.Password, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return user, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var users []*models.User
-	for rows.Next() {
-		user := &models.User{}
-		if err := rows.Scan(&user.ID, &user.Username, &user.Password, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			return nil, err
-		}
-		users = append(users, user)
-	}
-	return users, nil
 }
 
 // UpdateUser 更新用户
@@ -576,24 +592,18 @@ func GetDriverByID(id int64) (*models.Driver, error) {
 
 // GetAllDrivers 获取所有驱动
 func GetAllDrivers() ([]*models.Driver, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.Driver](ParamDB,
 		"SELECT id, name, file_path, description, version, config_schema, enabled, created_at, updated_at FROM drivers ORDER BY id",
+		nil,
+		func(rows *sql.Rows) (*models.Driver, error) {
+			driver := &models.Driver{}
+			if err := rows.Scan(&driver.ID, &driver.Name, &driver.FilePath, &driver.Description, &driver.Version, &driver.ConfigSchema,
+				&driver.Enabled, &driver.CreatedAt, &driver.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return driver, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var drivers []*models.Driver
-	for rows.Next() {
-		driver := &models.Driver{}
-		if err := rows.Scan(&driver.ID, &driver.Name, &driver.FilePath, &driver.Description, &driver.Version, &driver.ConfigSchema,
-			&driver.Enabled, &driver.CreatedAt, &driver.UpdatedAt); err != nil {
-			return nil, err
-		}
-		drivers = append(drivers, driver)
-	}
-	return drivers, nil
 }
 
 // UpdateDriver 更新驱动
@@ -663,46 +673,34 @@ func GetNorthboundConfigByID(id int64) (*models.NorthboundConfig, error) {
 
 // GetAllNorthboundConfigs 获取所有北向配置
 func GetAllNorthboundConfigs() ([]*models.NorthboundConfig, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.NorthboundConfig](ParamDB,
 		"SELECT id, name, type, enabled, config, upload_interval, created_at, updated_at FROM northbound_configs ORDER BY id",
+		nil,
+		func(rows *sql.Rows) (*models.NorthboundConfig, error) {
+			config := &models.NorthboundConfig{}
+			if err := rows.Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
+				&config.CreatedAt, &config.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return config, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var configs []*models.NorthboundConfig
-	for rows.Next() {
-		config := &models.NorthboundConfig{}
-		if err := rows.Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
-			&config.CreatedAt, &config.UpdatedAt); err != nil {
-			return nil, err
-		}
-		configs = append(configs, config)
-	}
-	return configs, nil
 }
 
 // GetEnabledNorthboundConfigs 获取所有启用的北向配置
 func GetEnabledNorthboundConfigs() ([]*models.NorthboundConfig, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.NorthboundConfig](ParamDB,
 		"SELECT id, name, type, enabled, config, upload_interval, created_at, updated_at FROM northbound_configs WHERE enabled = 1 ORDER BY id",
+		nil,
+		func(rows *sql.Rows) (*models.NorthboundConfig, error) {
+			config := &models.NorthboundConfig{}
+			if err := rows.Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
+				&config.CreatedAt, &config.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return config, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var configs []*models.NorthboundConfig
-	for rows.Next() {
-		config := &models.NorthboundConfig{}
-		if err := rows.Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
-			&config.CreatedAt, &config.UpdatedAt); err != nil {
-			return nil, err
-		}
-		configs = append(configs, config)
-	}
-	return configs, nil
 }
 
 // UpdateNorthboundConfig 更新北向配置
@@ -756,70 +754,50 @@ func GetThresholdByID(id int64) (*models.Threshold, error) {
 
 // GetThresholdsByDeviceID 根据设备ID获取阈值
 func GetThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.Threshold](ParamDB,
 		"SELECT id, device_id, field_name, operator, value, severity, enabled, message, created_at, updated_at FROM thresholds WHERE device_id = ?",
-		deviceID,
+		[]any{deviceID},
+		func(rows *sql.Rows) (*models.Threshold, error) {
+			threshold := &models.Threshold{}
+			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
+				&threshold.Enabled, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return threshold, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var thresholds []*models.Threshold
-	for rows.Next() {
-		threshold := &models.Threshold{}
-		if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-			&threshold.Enabled, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
-			return nil, err
-		}
-		thresholds = append(thresholds, threshold)
-	}
-	return thresholds, nil
 }
 
 // GetEnabledThresholdsByDeviceID 根据设备ID获取启用的阈值
 func GetEnabledThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.Threshold](ParamDB,
 		"SELECT id, device_id, field_name, operator, value, severity, enabled, message, created_at, updated_at FROM thresholds WHERE device_id = ? AND enabled = 1",
-		deviceID,
+		[]any{deviceID},
+		func(rows *sql.Rows) (*models.Threshold, error) {
+			threshold := &models.Threshold{}
+			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
+				&threshold.Enabled, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return threshold, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var thresholds []*models.Threshold
-	for rows.Next() {
-		threshold := &models.Threshold{}
-		if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-			&threshold.Enabled, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
-			return nil, err
-		}
-		thresholds = append(thresholds, threshold)
-	}
-	return thresholds, nil
 }
 
 // GetAllThresholds 获取所有阈值
 func GetAllThresholds() ([]*models.Threshold, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.Threshold](ParamDB,
 		"SELECT id, device_id, field_name, operator, value, severity, enabled, message, created_at, updated_at FROM thresholds ORDER BY id",
+		nil,
+		func(rows *sql.Rows) (*models.Threshold, error) {
+			threshold := &models.Threshold{}
+			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
+				&threshold.Enabled, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return threshold, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var thresholds []*models.Threshold
-	for rows.Next() {
-		threshold := &models.Threshold{}
-		if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-			&threshold.Enabled, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
-			return nil, err
-		}
-		thresholds = append(thresholds, threshold)
-	}
-	return thresholds, nil
 }
 
 // UpdateThreshold 更新阈值
@@ -854,50 +832,36 @@ func CreateAlarmLog(log *models.AlarmLog) (int64, error) {
 
 // GetAlarmLogsByDeviceID 根据设备ID获取报警日志
 func GetAlarmLogsByDeviceID(deviceID int64, limit int) ([]*models.AlarmLog, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.AlarmLog](ParamDB,
 		`SELECT id, device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, triggered_at, acknowledged, acknowledged_by, acknowledged_at 
 		FROM alarm_logs WHERE device_id = ? ORDER BY triggered_at DESC LIMIT ?`,
-		deviceID, limit,
+		[]any{deviceID, limit},
+		func(rows *sql.Rows) (*models.AlarmLog, error) {
+			log := &models.AlarmLog{}
+			if err := rows.Scan(&log.ID, &log.DeviceID, &log.ThresholdID, &log.FieldName, &log.ActualValue, &log.ThresholdValue,
+				&log.Operator, &log.Severity, &log.Message, &log.TriggeredAt, &log.Acknowledged, &log.AcknowledgedBy, &log.AcknowledgedAt); err != nil {
+				return nil, err
+			}
+			return log, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var logs []*models.AlarmLog
-	for rows.Next() {
-		log := &models.AlarmLog{}
-		if err := rows.Scan(&log.ID, &log.DeviceID, &log.ThresholdID, &log.FieldName, &log.ActualValue, &log.ThresholdValue,
-			&log.Operator, &log.Severity, &log.Message, &log.TriggeredAt, &log.Acknowledged, &log.AcknowledgedBy, &log.AcknowledgedAt); err != nil {
-			return nil, err
-		}
-		logs = append(logs, log)
-	}
-	return logs, nil
 }
 
 // GetRecentAlarmLogs 获取最近的报警日志
 func GetRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.AlarmLog](ParamDB,
 		`SELECT id, device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, triggered_at, acknowledged, acknowledged_by, acknowledged_at 
 		FROM alarm_logs ORDER BY triggered_at DESC LIMIT ?`,
-		limit,
+		[]any{limit},
+		func(rows *sql.Rows) (*models.AlarmLog, error) {
+			log := &models.AlarmLog{}
+			if err := rows.Scan(&log.ID, &log.DeviceID, &log.ThresholdID, &log.FieldName, &log.ActualValue, &log.ThresholdValue,
+				&log.Operator, &log.Severity, &log.Message, &log.TriggeredAt, &log.Acknowledged, &log.AcknowledgedBy, &log.AcknowledgedAt); err != nil {
+				return nil, err
+			}
+			return log, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var logs []*models.AlarmLog
-	for rows.Next() {
-		log := &models.AlarmLog{}
-		if err := rows.Scan(&log.ID, &log.DeviceID, &log.ThresholdID, &log.FieldName, &log.ActualValue, &log.ThresholdValue,
-			&log.Operator, &log.Severity, &log.Message, &log.TriggeredAt, &log.Acknowledged, &log.AcknowledgedBy, &log.AcknowledgedAt); err != nil {
-			return nil, err
-		}
-		logs = append(logs, log)
-	}
-	return logs, nil
 }
 
 // AcknowledgeAlarmLog 确认报警日志
@@ -938,24 +902,18 @@ func CreateStorageConfig(config *StorageConfig) (int64, error) {
 
 // GetAllStorageConfigs 获取所有存储配置
 func GetAllStorageConfigs() ([]*StorageConfig, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*StorageConfig](ParamDB,
 		"SELECT id, name, product_key, device_key, storage_days, enabled, created_at, updated_at FROM storage_policies ORDER BY id",
+		nil,
+		func(rows *sql.Rows) (*StorageConfig, error) {
+			config := &StorageConfig{}
+			if err := rows.Scan(&config.ID, &config.Name, &config.ProductKey, &config.DeviceKey, &config.StorageDays, &config.Enabled,
+				&config.CreatedAt, &config.UpdatedAt); err != nil {
+				return nil, err
+			}
+			return config, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var configs []*StorageConfig
-	for rows.Next() {
-		config := &StorageConfig{}
-		if err := rows.Scan(&config.ID, &config.Name, &config.ProductKey, &config.DeviceKey, &config.StorageDays, &config.Enabled,
-			&config.CreatedAt, &config.UpdatedAt); err != nil {
-			return nil, err
-		}
-		configs = append(configs, config)
-	}
-	return configs, nil
 }
 
 // GetStorageConfigByID 根据ID获取存储配置
@@ -1008,54 +966,47 @@ func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType strin
 // enforceDataCacheLimit 强制执行缓存大小限制
 func enforceDataCacheLimit() {
 	var count int
-	ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count)
-	if count > MaxDataCache {
-		ParamDB.Exec("DELETE FROM data_cache WHERE id IN (SELECT id FROM data_cache ORDER BY collected_at ASC LIMIT ?)", count-MaxDataCache)
-		log.Printf("Cleaned up data cache, removed %d entries", count-MaxDataCache)
+	if err := ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count); err != nil {
+		log.Printf("Failed to count data cache entries: %v", err)
+		return
+	}
+	if count > maxDataCacheLimit {
+		if _, err := ParamDB.Exec("DELETE FROM data_cache WHERE id IN (SELECT id FROM data_cache ORDER BY collected_at ASC LIMIT ?)", count-maxDataCacheLimit); err != nil {
+			log.Printf("Failed to cleanup data cache: %v", err)
+			return
+		}
+		log.Printf("Cleaned up data cache, removed %d entries", count-maxDataCacheLimit)
 	}
 }
 
 // GetDataCacheByDeviceID 根据设备ID获取数据缓存（从内存）
 func GetDataCacheByDeviceID(deviceID int64) ([]*models.DataCache, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.DataCache](ParamDB,
 		"SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache WHERE device_id = ?",
-		deviceID,
+		[]any{deviceID},
+		func(rows *sql.Rows) (*models.DataCache, error) {
+			item := &models.DataCache{}
+			if err := rows.Scan(&item.ID, &item.DeviceID, &item.FieldName, &item.Value, &item.ValueType, &item.CollectedAt); err != nil {
+				return nil, err
+			}
+			return item, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var cache []*models.DataCache
-	for rows.Next() {
-		item := &models.DataCache{}
-		if err := rows.Scan(&item.ID, &item.DeviceID, &item.FieldName, &item.Value, &item.ValueType, &item.CollectedAt); err != nil {
-			return nil, err
-		}
-		cache = append(cache, item)
-	}
-	return cache, nil
 }
 
 // GetAllDataCache 获取所有数据缓存（从内存）
 func GetAllDataCache() ([]*models.DataCache, error) {
-	rows, err := ParamDB.Query(
+	return queryList[*models.DataCache](ParamDB,
 		"SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache",
+		nil,
+		func(rows *sql.Rows) (*models.DataCache, error) {
+			item := &models.DataCache{}
+			if err := rows.Scan(&item.ID, &item.DeviceID, &item.FieldName, &item.Value, &item.ValueType, &item.CollectedAt); err != nil {
+				return nil, err
+			}
+			return item, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var cache []*models.DataCache
-	for rows.Next() {
-		item := &models.DataCache{}
-		if err := rows.Scan(&item.ID, &item.DeviceID, &item.FieldName, &item.Value, &item.ValueType, &item.CollectedAt); err != nil {
-			return nil, err
-		}
-		cache = append(cache, item)
-	}
-	return cache, nil
 }
 
 // ==================== 历史数据点操作 (data.db - 内存暂存) ====================
@@ -1145,81 +1096,66 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 // enforceDataPointsLimit 强制执行数据点大小限制
 func enforceDataPointsLimit() {
 	var count int
-	DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count)
-	if count > MaxDataPoints {
-		DataDB.Exec("DELETE FROM data_points WHERE id IN (SELECT id FROM data_points ORDER BY collected_at ASC LIMIT ?)", count-MaxDataPoints)
-		log.Printf("Cleaned up data points, removed %d old entries", count-MaxDataPoints)
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
+		log.Printf("Failed to count data points: %v", err)
+		return
+	}
+	if count > maxDataPointsLimit {
+		if _, err := DataDB.Exec("DELETE FROM data_points WHERE id IN (SELECT id FROM data_points ORDER BY collected_at ASC LIMIT ?)", count-maxDataPointsLimit); err != nil {
+			log.Printf("Failed to cleanup data points: %v", err)
+			return
+		}
+		log.Printf("Cleaned up data points, removed %d old entries", count-maxDataPointsLimit)
 	}
 }
 
 // GetDataPointsByDeviceAndTime 根据设备ID和时间范围获取历史数据（从内存）
 func GetDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Time) ([]*DataPoint, error) {
-	rows, err := DataDB.Query(
+	return queryList[*DataPoint](DataDB,
 		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
 		FROM data_points WHERE device_id = ? AND collected_at >= ? AND collected_at <= ? 
 		ORDER BY collected_at DESC`,
-		deviceID, startTime, endTime,
+		[]any{deviceID, startTime, endTime},
+		func(rows *sql.Rows) (*DataPoint, error) {
+			point := &DataPoint{}
+			if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
+				return nil, err
+			}
+			return point, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var points []*DataPoint
-	for rows.Next() {
-		point := &DataPoint{}
-		if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-			return nil, err
-		}
-		points = append(points, point)
-	}
-	return points, nil
 }
 
 // GetDataPointsByDevice 根据设备ID获取历史数据（从内存）
 func GetDataPointsByDevice(deviceID int64, limit int) ([]*DataPoint, error) {
-	rows, err := DataDB.Query(
+	return queryList[*DataPoint](DataDB,
 		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
 		FROM data_points WHERE device_id = ? ORDER BY collected_at DESC LIMIT ?`,
-		deviceID, limit,
+		[]any{deviceID, limit},
+		func(rows *sql.Rows) (*DataPoint, error) {
+			point := &DataPoint{}
+			if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
+				return nil, err
+			}
+			return point, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var points []*DataPoint
-	for rows.Next() {
-		point := &DataPoint{}
-		if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-			return nil, err
-		}
-		points = append(points, point)
-	}
-	return points, nil
 }
 
 // GetLatestDataPoints 获取最新的历史数据点（从内存）
 func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
-	rows, err := DataDB.Query(
+	return queryList[*DataPoint](DataDB,
 		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
 		FROM data_points ORDER BY collected_at DESC LIMIT ?`,
-		limit,
+		[]any{limit},
+		func(rows *sql.Rows) (*DataPoint, error) {
+			point := &DataPoint{}
+			if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
+				return nil, err
+			}
+			return point, nil
+		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var points []*DataPoint
-	for rows.Next() {
-		point := &DataPoint{}
-		if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-			return nil, err
-		}
-		points = append(points, point)
-	}
-	return points, nil
 }
 
 // CleanupOldData 清理过期数据（从内存和磁盘）
@@ -1352,21 +1288,15 @@ func findDeviceIDs(productKey, deviceKey string) ([]int64, error) {
 		args = append(args, deviceKey)
 	}
 
-	rows, err := ParamDB.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
+	return queryList[int64](ParamDB, query, args,
+		func(rows *sql.Rows) (int64, error) {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return 0, err
+			}
+			return id, nil
+		},
+	)
 }
 
 // CleanupData 清理过期数据（根据时间戳）

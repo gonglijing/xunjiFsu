@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"log"
 	"sync"
 	"time"
@@ -9,21 +8,22 @@ import (
 
 // DBHealthChecker 数据库连接健康检查器
 type DBHealthChecker struct {
-	mu           sync.RWMutex
-	paramHealthy bool
-	dataHealthy  bool
-	lastCheck    time.Time
+	mu            sync.RWMutex
+	paramHealthy  bool
+	dataHealthy   bool
+	lastCheck     time.Time
 	checkInterval time.Duration
-	stopChan     chan struct{}
+	stopChan      chan struct{}
+	stopOnce      sync.Once
 }
 
 // NewDBHealthChecker 创建健康检查器
 func NewDBHealthChecker(checkInterval time.Duration) *DBHealthChecker {
 	return &DBHealthChecker{
-		paramHealthy: false,
-		dataHealthy:  false,
+		paramHealthy:  false,
+		dataHealthy:   false,
 		checkInterval: checkInterval,
-		stopChan:     make(chan struct{}),
+		stopChan:      make(chan struct{}),
 	}
 }
 
@@ -51,7 +51,9 @@ func (c *DBHealthChecker) Start() {
 
 // Stop 停止健康检查
 func (c *DBHealthChecker) Stop() {
-	close(c.stopChan)
+	c.stopOnce.Do(func() {
+		close(c.stopChan)
+	})
 	log.Println("Database health checker stopped")
 }
 
@@ -148,12 +150,12 @@ func GetDBStatus() map[string]interface{} {
 
 // ConnectionStats 连接统计
 type ConnectionStats struct {
-	ParamDBOpen    int `json:"param_db_open"`
-	ParamDBIdle    int `json:"param_db_idle"`
-	DataDBOpen     int `json:"data_db_open"`
-	DataDBIdle     int `json:"data_db_idle"`
-	MaxOpenConns   int `json:"max_open_conns"`
-	MaxIdleConns   int `json:"max_idle_conns"`
+	ParamDBOpen  int `json:"param_db_open"`
+	ParamDBIdle  int `json:"param_db_idle"`
+	DataDBOpen   int `json:"data_db_open"`
+	DataDBIdle   int `json:"data_db_idle"`
+	MaxOpenConns int `json:"max_open_conns"`
+	MaxIdleConns int `json:"max_idle_conns"`
 }
 
 // GetConnectionStats 获取连接统计
@@ -179,26 +181,25 @@ func RecoverConnection() error {
 	if err := ParamDB.Ping(); err != nil {
 		log.Printf("Reconnecting ParamDB...")
 		ParamDB.Close()
-		ParamDB, err = sql.Open("sqlite", "param.db")
+		maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
+		maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
+		ParamDB, err = openSQLite(paramDBFile, maxOpen, maxIdle)
 		if err != nil {
 			return err
 		}
-		ParamDB.SetMaxOpenConns(DefaultMaxOpenConns)
-		ParamDB.SetMaxIdleConns(DefaultMaxIdleConns)
-		ParamDB.SetConnMaxLifetime(ConnMaxLifetime)
 	}
 
 	// 尝试重新连接DataDB
 	if err := DataDB.Ping(); err != nil {
 		log.Printf("Reconnecting DataDB...")
 		DataDB.Close()
-		DataDB, err = sql.Open("sqlite", ":memory:")
+		maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
+		maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
+		DataDB, err = openSQLite(":memory:", maxOpen, maxIdle)
 		if err != nil {
 			return err
 		}
-		DataDB.SetMaxOpenConns(DefaultMaxOpenConns)
-		DataDB.SetMaxIdleConns(DefaultMaxIdleConns)
-		DataDB.SetConnMaxLifetime(ConnMaxLifetime)
+		_, _ = DataDB.Exec("PRAGMA foreign_keys = OFF")
 	}
 
 	log.Println("Database connections recovered")

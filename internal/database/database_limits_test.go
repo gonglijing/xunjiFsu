@@ -1,0 +1,258 @@
+package database
+
+import (
+	"fmt"
+	"testing"
+	"time"
+)
+
+func TestTriggerSyncIfNeeded(t *testing.T) {
+	oldTrigger := syncBatchTrigger
+	oldFn := syncDataToDiskFn
+	defer func() {
+		syncBatchTrigger = oldTrigger
+		syncDataToDiskFn = oldFn
+	}()
+
+	syncBatchTrigger = 2
+	done := make(chan struct{})
+	syncDataToDiskFn = func() error {
+		close(done)
+		return nil
+	}
+
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+	var err error
+	DataDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open data db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = DataDB.Close()
+	})
+
+	_, err = DataDB.Exec(`CREATE TABLE data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("create data_points: %v", err)
+	}
+
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now', '-1 seconds'))`, 1, "dev1", "f1", "1", "string")
+	if err != nil {
+		t.Fatalf("insert data point 1: %v", err)
+	}
+
+	if TriggerSyncIfNeeded() {
+		t.Fatalf("expected trigger to be false below threshold")
+	}
+
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now'))`, 1, "dev1", "f2", "2", "string")
+	if err != nil {
+		t.Fatalf("insert data point 2: %v", err)
+	}
+
+	if !TriggerSyncIfNeeded() {
+		t.Fatalf("expected trigger to be true at threshold")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("sync function was not called")
+	}
+}
+
+func TestEnforceDataCacheLimit(t *testing.T) {
+	oldLimit := maxDataCacheLimit
+	maxDataCacheLimit = 3
+	defer func() {
+		maxDataCacheLimit = oldLimit
+	}()
+
+	if ParamDB != nil {
+		_ = ParamDB.Close()
+	}
+	var err error
+	ParamDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open param db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = ParamDB.Close()
+	})
+
+	_, err = ParamDB.Exec(`CREATE TABLE data_cache (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(device_id, field_name)
+	)`)
+	if err != nil {
+		t.Fatalf("create data_cache: %v", err)
+	}
+
+	tx, err := ParamDB.Begin()
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	stmt, err := tx.Prepare(`INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, datetime('now', ?))`)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("prepare insert: %v", err)
+	}
+	for i := 1; i <= 5; i++ {
+		shift := fmt.Sprintf("-%d seconds", 6-i)
+		if _, err := stmt.Exec(1, fmt.Sprintf("f%d", i), fmt.Sprintf("v%d", i), "string", shift); err != nil {
+			_ = stmt.Close()
+			_ = tx.Rollback()
+			t.Fatalf("insert data_cache %d: %v", i, err)
+		}
+	}
+	_ = stmt.Close()
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit tx: %v", err)
+	}
+
+	enforceDataCacheLimit()
+
+	var count int
+	if err := ParamDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count); err != nil {
+		t.Fatalf("count data_cache: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("expected 3 rows after cleanup, got %d", count)
+	}
+
+	rows, err := ParamDB.Query("SELECT field_name FROM data_cache ORDER BY collected_at ASC")
+	if err != nil {
+		t.Fatalf("query remaining: %v", err)
+	}
+	defer rows.Close()
+	var fields []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan field_name: %v", err)
+		}
+		fields = append(fields, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows err: %v", err)
+	}
+	expected := []string{"f3", "f4", "f5"}
+	if len(fields) != len(expected) {
+		t.Fatalf("expected fields %v, got %v", expected, fields)
+	}
+	for i, name := range expected {
+		if fields[i] != name {
+			t.Fatalf("expected fields %v, got %v", expected, fields)
+		}
+	}
+}
+
+func TestEnforceDataPointsLimit(t *testing.T) {
+	oldLimit := maxDataPointsLimit
+	maxDataPointsLimit = 3
+	defer func() {
+		maxDataPointsLimit = oldLimit
+	}()
+
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+	var err error
+	DataDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open data db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = DataDB.Close()
+	})
+
+	_, err = DataDB.Exec(`CREATE TABLE data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("create data_points: %v", err)
+	}
+
+	tx, err := DataDB.Begin()
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	stmt, err := tx.Prepare(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now', ?))`)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("prepare insert: %v", err)
+	}
+	for i := 1; i <= 5; i++ {
+		shift := fmt.Sprintf("-%d seconds", 6-i)
+		if _, err := stmt.Exec(1, "dev1", fmt.Sprintf("f%d", i), fmt.Sprintf("v%d", i), "string", shift); err != nil {
+			_ = stmt.Close()
+			_ = tx.Rollback()
+			t.Fatalf("insert data_points %d: %v", i, err)
+		}
+	}
+	_ = stmt.Close()
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit tx: %v", err)
+	}
+
+	enforceDataPointsLimit()
+
+	var count int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
+		t.Fatalf("count data_points: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("expected 3 rows after cleanup, got %d", count)
+	}
+
+	rows, err := DataDB.Query("SELECT field_name FROM data_points ORDER BY collected_at ASC")
+	if err != nil {
+		t.Fatalf("query remaining: %v", err)
+	}
+	defer rows.Close()
+	var fields []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan field_name: %v", err)
+		}
+		fields = append(fields, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows err: %v", err)
+	}
+	expected := []string{"f3", "f4", "f5"}
+	if len(fields) != len(expected) {
+		t.Fatalf("expected fields %v, got %v", expected, fields)
+	}
+	for i, name := range expected {
+		if fields[i] != name {
+			t.Fatalf("expected fields %v, got %v", expected, fields)
+		}
+	}
+}
