@@ -9,6 +9,10 @@ server:
 drivers:
   dir: "drivers"
 
+# 北向插件目录
+northbound:
+  plugins_dir: "plugin_north"
+
 # 认证配置
 auth:
   session_max_age: 604800  # 7天，单位秒

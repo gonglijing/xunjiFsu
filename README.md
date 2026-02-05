@@ -55,7 +55,7 @@
 | **数据采集** | 优先队列调度、自定义采集周期 |
 | **阈值报警** | 多条件判断、严重程度分级、自动触发 |
 | **双数据库** | param.db (配置) + data.db (历史数据，内存缓冲 + 磁盘归档) |
-| **北向接口** | HTTP / MQTT / XunJi 多协议适配 |
+| **北向接口** | HashiCorp go-plugin + HTTP / MQTT / XunJi 插件 |
 
 ### Web 管理界面
 
@@ -76,6 +76,7 @@
 | 构建工具 | Vite | 5.2.9 |
 | 驱动运行时 | Extism | go-sdk |
 | 驱动开发 | TinyGo | 0.34+ |
+| 北向插件 | HashiCorp go-plugin | net/rpc |
 | 认证 | JWT | 鉴权中间件 |
 | 跨平台 | CGO=0 | arm32 / arm64 / darwin / windows |
 
@@ -85,6 +86,14 @@
 gogw/
 ├── cmd/
 │   └── main.go                 # 程序入口，配置加载
+├── plugin_north/               # 北向插件源码与产物
+│   ├── src/
+│   │   ├── northbound-http/    # HTTP 插件入口
+│   │   ├── northbound-mqtt/    # MQTT 插件入口
+│   │   └── northbound-xunji/   # XunJi 插件入口
+│   ├── northbound-http         # 插件二进制 (make northbound-plugins)
+│   ├── northbound-mqtt
+│   └── northbound-xunji
 ├── internal/
 │   ├── app/
 │   │   ├── app.go              # 启动逻辑、优雅关闭
@@ -118,7 +127,8 @@ gogw/
 │   ├── models/
 │   │   └── models.go           # 数据模型定义
 │   ├── northbound/
-│   │   └── manager.go          # XunJi/HTTP/MQTT 适配器
+│   │   ├── manager.go          # 北向调度与熔断
+│   │   └── plugin.go           # go-plugin 适配与 RPC
 │   ├── resource/
 │   │   └── manager.go          # 串口/TCP 连接管理
 │   └── logger/
@@ -190,12 +200,26 @@ make ui
 # 编译后端（当前平台）
 make build
 
+# 编译北向插件
+make northbound-plugins
+
 # 运行
 ./gogw
 
 # 或使用 make 运行
 make run
 ```
+
+### 北向插件配置
+
+默认插件目录：`plugin_north/`，可在 `config/config.yaml` 中设置：
+
+```yaml
+northbound:
+  plugins_dir: "plugin_north"
+```
+
+如果需要为单个北向配置指定插件路径，可在配置 JSON 中设置 `plugin_path`。
 
 ### 开发模式
 
@@ -448,48 +472,203 @@ make deploy-windows  # Windows
 
 ## 驱动开发
 
-详细驱动开发指南请参考 [drvs/README.md](./drvs/README.md)
+网关使用 **Extism + TinyGo** 框架实现插件式设备驱动，所有驱动以 WASM 形式运行。
 
-### 快速示例
+### 驱动架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        TinyGo 驱动 (WASM)                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │  【用户修改】点表定义                                      │   │
+│   │  const (REG_TEMPERATURE = 0x0000, ...)                   │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │  【用户修改】点表配置                                      │   │
+│   │  var pointConfig = []PointConfig{...}                    │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │  【用户修改】读取/写入逻辑                                  │   │
+│   │  func readAllPoints() {...}                             │   │
+│   │  func doWrite() {...}                                   │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │  【固定不变】Modbus 通信函数                               │   │
+│   │  serial_transceive / tcp_transceive                    │   │
+│   │  buildReadFrame / parseReadResponse / crc16            │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Extism WASM Runtime                           │
+│           (serial_transceive / tcp_transceive)                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 代码结构规范
+
+每个驱动文件分为以下清晰的部分：
+
+| 区域 | 标记 | 说明 | 是否需要修改 |
+|------|------|------|------------|
+| Host 函数声明 | `【固定不变】` | 串口/网络通信接口 | 否 |
+| 配置结构 | `【固定不变】` | DriverConfig | 否 |
+| 点表定义 | `【用户修改】` | 寄存器地址常量 | **是** |
+| 点表配置 | `【用户修改】` | pointConfig 数组 | **是** |
+| 驱动入口 | `【固定不变】` | handle(), describe() | 否 |
+| 读取逻辑 | `【用户修改】` | readAllPoints() | **是** |
+| 写入逻辑 | `【用户修改】` | doWrite() | **是** |
+| 通信函数 | `【固定不变】` | Modbus 收发、帧构建、CRC | 否 |
+| 工具函数 | `【固定不变】` | 配置获取、格式化输出 | 否 |
+
+### 快速开始
+
+```bash
+# 进入驱动目录
+cd drvs
+
+# 编译所有驱动
+make
+
+# 编译单个驱动
+tinygo build -o th_modbusrtu.wasm -target=wasip1 -buildmode=c-shared ./th_modbusrtu.go
+tinygo build -o th_modbustcp.wasm -target=wasip1 -buildmode=c-shared ./th_modbustcp.go
+tinygo build -o ups_kstar.wasm -target=wasip1 -buildmode=c-shared ./ups_kstar.go
+```
+
+### 内置驱动
+
+| 驱动文件 | 协议 | 说明 | 文档 |
+|---------|------|------|------|
+| `th_modbusrtu.go` | Modbus RTU | 温湿度传感器 RTU 驱动 | [README_th_modbusrtu.md](./drvs/README_th_modbusrtu.md) |
+| `th_modbustcp.go` | Modbus TCP | 温湿度传感器 TCP 驱动 | [README_th_modbustcp.md](./drvs/README_th_modbustcp.md) |
+| `temperature_humidity.go` | Modbus RTU | 温湿度传感器通用驱动 | [README_temhumidity.md](./drvs/README_temhumidity.md) |
+| `ups_kstar.go` | Modbus TCP | 科士达 UPS 驱动 | [README_ups_kstar.md](./drvs/README_ups_kstar.md) |
+
+### 编写新驱动
+
+参考以下模板创建新驱动：
 
 ```go
+// =============================================================================
+// [设备名称] - [协议] 驱动
+// =============================================================================
+//
+// 设备点表:
+//   - [字段1]: FC=03, 地址=0x0000, 长度=1, 缩放=0.1, 1位小数
+//   - [字段2]: FC=03, 地址=0x0001, 长度=1, 缩放=1, 0位小数
+//
+// Host 提供: serial_transceive / tcp_transceive
+//
+// =============================================================================
 package main
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 
 	pdk "github.com/extism/go-pdk"
 )
 
-//go:wasmimport extism:host/user serial_transceive
+// =============================================================================
+// 【固定不变】Host 函数声明
+// =============================================================================
+//go:wasmimport extism:host/user serial_transceive  // 或 tcp_transceive
 func serial_transceive(wPtr uint64, wSize uint64, rPtr uint64, rCap uint64, timeoutMs uint64) uint64
 
+// =============================================================================
+// 【固定不变】配置结构
+// =============================================================================
+type DriverConfig struct {
+	DeviceAddress int    `json:"device_address"`
+	FuncName      string `json:"func_name"`
+	FieldName     string `json:"field_name"`
+	Value         string `json:"value"`
+}
+
+// =============================================================================
+// 【用户修改】点表定义
+// =============================================================================
+const (
+	REG_POINT1 = 0x0000 // 寄存器1
+	REG_POINT2 = 0x0001 // 寄存器2
+
+	FUNC_CODE_READ  = 0x03
+	FUNC_CODE_WRITE = 0x06
+)
+
+// =============================================================================
+// 【用户修改】点表配置
+// =============================================================================
+var pointConfig = []PointConfig{
+	{Field: "point1", Address: REG_POINT1, Length: 1, Scale: 0.1, Decimals: 1, RW: "R", Unit: "unit", Label: "字段1"},
+	{Field: "point2", Address: REG_POINT2, Length: 1, Scale: 1, Decimals: 0, RW: "R", Unit: "unit", Label: "字段2"},
+}
+
+type PointConfig struct {
+	Field    string
+	Address  uint16
+	Length   uint16
+	Scale    float64
+	Decimals int
+	RW       string
+	Unit     string
+	Label    string
+}
+
+// =============================================================================
+// 【固定不变】驱动入口
+// =============================================================================
 //go:wasmexport handle
 func handle() int32 {
-    cfg := getConfig()
-    points := readDevice(cfg)
-    outputJSON(map[string]interface{}{
-        "success": true,
-        "data": map[string]interface{}{"points": points},
-    })
-    return 0
+	cfg := getConfig()
+	points := readAllPoints(cfg.DeviceAddress)
+	outputJSON(map[string]interface{}{"success": true, "points": points})
+	return 0
 }
 
-func outputJSON(v interface{}) {
-	b, _ := json.Marshal(v)
-	if len(b) == 0 {
-		b = []byte(`{"success":false,"error":"encode failed"}`)
-	}
-	pdk.Output(b)
+// =============================================================================
+// 【固定不变】描述可写字段
+// =============================================================================
+//go:wasmexport describe
+func describe() int32 {
+	outputJSON(map[string]interface{}{"success": true, "data": map[string]string{}})
+	return 0
 }
+
+// =============================================================================
+// 【用户修改】读取所有测点
+// =============================================================================
+func readAllPoints(devAddr int) []map[string]interface{} {
+	// 根据 pointConfig 批量读取寄存器并转换为实际值
+	...
+}
+
+// =============================================================================
+// 【固定不变】Modbus 通信函数 (参考现有驱动)
+// =============================================================================
+func serialTransceive(...) {...}
+func buildReadFrame(...) {...}
+func parseReadResponse(...) {...}
+func crc16(...) {...}
+
+// =============================================================================
+// 【固定不变】工具函数
+// =============================================================================
+func getConfig() DriverConfig {...}
+func formatFloat(val float64, decimals int) string {...}
+func outputJSON(v interface{}) {...}
 ```
 
-### 编译驱动
-
-```bash
-cd drvs
-tinygo build -o th_modbusrtu.wasm -target=wasip1 -buildmode=c-shared th_modbusrtu.go
-```
+详细开发指南请参考 [drvs/README.md](./drvs/README.md)
 
 ## 数据库架构
 

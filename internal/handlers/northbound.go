@@ -107,23 +107,10 @@ func (h *Handler) DeleteNorthboundConfig(w http.ResponseWriter, r *http.Request)
 
 // registerNorthboundAdapter 内部辅助函数：注册北向适配器
 func (h *Handler) registerNorthboundAdapter(config *models.NorthboundConfig) {
-	var adapter northbound.Northbound
-
-	switch config.Type {
-	case "xunji":
-		adapter = northbound.NewXunJiAdapter()
-	case "http":
-		adapter = northbound.NewHTTPAdapter()
-	case "mqtt":
-		adapter = northbound.NewMQTTAdapter()
-	default:
+	adapter, err := northbound.NewAdapterFromConfig(h.northboundMgr.PluginDir(), config)
+	if err != nil {
 		return
 	}
-
-	if err := adapter.Initialize(config.Config); err != nil {
-		return
-	}
-
 	h.northboundMgr.RegisterAdapter(config.Name, adapter)
 }
 

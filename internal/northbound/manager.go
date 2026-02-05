@@ -40,6 +40,7 @@ type NorthboundManager struct {
 	running     bool
 	breakers    map[string]*circuit.CircuitBreaker
 	pending     map[string]*models.CollectData
+	pluginDir   string
 }
 
 // DefaultBreakerConfig 默认熔断器配置
@@ -52,7 +53,7 @@ var DefaultBreakerConfig = circuit.Config{
 }
 
 // NewNorthboundManager 创建北向管理器
-func NewNorthboundManager() *NorthboundManager {
+func NewNorthboundManager(pluginDir string) *NorthboundManager {
 	return &NorthboundManager{
 		adapters:    make(map[string]Northbound),
 		uploadTimes: make(map[string]time.Time),
@@ -61,7 +62,15 @@ func NewNorthboundManager() *NorthboundManager {
 		stopChan:    make(chan struct{}),
 		breakers:    make(map[string]*circuit.CircuitBreaker),
 		pending:     make(map[string]*models.CollectData),
+		pluginDir:   pluginDir,
 	}
+}
+
+// PluginDir returns the configured northbound plugin directory.
+func (m *NorthboundManager) PluginDir() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.pluginDir
 }
 
 // Start 启动管理器

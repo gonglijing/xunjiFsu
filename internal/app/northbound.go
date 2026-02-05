@@ -37,23 +37,10 @@ func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 }
 
 func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, config *models.NorthboundConfig) error {
-	var adapter northbound.Northbound
-
-	switch config.Type {
-	case "xunji":
-		adapter = northbound.NewXunJiAdapter()
-	case "http":
-		adapter = northbound.NewHTTPAdapter()
-	case "mqtt":
-		adapter = northbound.NewMQTTAdapter()
-	default:
-		return fmt.Errorf("unknown northbound type: %s", config.Type)
-	}
-
-	if err := adapter.Initialize(config.Config); err != nil {
+	adapter, err := northbound.NewAdapterFromConfig(northboundMgr.PluginDir(), config)
+	if err != nil {
 		return fmt.Errorf("initialize northbound adapter %s: %w", config.Name, err)
 	}
-
 	northboundMgr.RegisterAdapter(config.Name, adapter)
 	return nil
 }

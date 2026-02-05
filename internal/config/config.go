@@ -49,6 +49,9 @@ type Config struct {
 	// 驱动目录
 	DriversDir string `json:"drivers_dir"`
 
+	// 北向插件目录
+	NorthboundPluginsDir string `json:"northbound_plugins_dir"`
+
 	// 驱动执行配置
 	DriverCallTimeout       time.Duration `json:"driver_call_timeout"`
 	DriverSerialReadTimeout time.Duration `json:"driver_serial_read_timeout"`
@@ -91,6 +94,7 @@ func DefaultConfig() *Config {
 		CollectorWorkers:        10,
 		SyncInterval:            5 * time.Minute,
 		DriversDir:              "drivers",
+		NorthboundPluginsDir:    "plugin_north",
 		DriverCallTimeout:       0,
 		DriverSerialReadTimeout: 0,
 		DriverSerialOpenRetries: 0,
@@ -167,6 +171,9 @@ func loadFromFile(cfg *Config) error {
 			TCPDialBackoff    string `yaml:"tcp_dial_backoff"`
 			TCPReadTimeout    string `yaml:"tcp_read_timeout"`
 		} `yaml:"drivers"`
+		Northbound struct {
+			PluginsDir string `yaml:"plugins_dir"`
+		} `yaml:"northbound"`
 		Auth struct {
 			SessionMaxAge int `yaml:"session_max_age"`
 		} `yaml:"auth"`
@@ -201,6 +208,9 @@ func loadFromFile(cfg *Config) error {
 	}
 	if yamlCfg.Drivers.Dir != "" {
 		cfg.DriversDir = yamlCfg.Drivers.Dir
+	}
+	if yamlCfg.Northbound.PluginsDir != "" {
+		cfg.NorthboundPluginsDir = yamlCfg.Northbound.PluginsDir
 	}
 	if yamlCfg.Drivers.CallTimeout != "" {
 		if timeout, err := time.ParseDuration(yamlCfg.Drivers.CallTimeout); err == nil {
@@ -331,6 +341,9 @@ func loadFromEnv(cfg *Config) {
 	// 驱动目录
 	if v := os.Getenv("DRIVERS_DIR"); v != "" {
 		cfg.DriversDir = v
+	}
+	if v := os.Getenv("NORTHBOUND_PLUGINS_DIR"); v != "" {
+		cfg.NorthboundPluginsDir = v
 	}
 
 	// 驱动执行配置

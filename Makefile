@@ -1,7 +1,7 @@
 # HuShu智能网关 - Makefile
 # 支持多平台交叉编译
 
-.PHONY: all clean build test fmt vet ui ui-install ui-dev run help \
+.PHONY: all clean build test fmt vet ui ui-install ui-dev run help northbound-plugins \
         deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows
 
 # 默认目标: 编译前端 + 本地运行
@@ -22,6 +22,7 @@ help:
 	@echo "  (无参数)      - 编译前端 + 启动后端 (默认)"
 	@echo "  all           - 同默认目标"
 	@echo "  build         - 编译当前平台后端 (CGO=0)"
+	@echo "  northbound-plugins - 编译北向插件"
 	@echo "  test          - go test ./..."
 	@echo "  fmt           - gofmt + goimports"
 	@echo "  vet           - go vet"
@@ -47,6 +48,9 @@ help:
 PROJECT_NAME := gogw
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo "dev")
 BUILD_TIME := $(shell date +%Y%m%d-%H%M%S)
+NORTHBOUND_PLUGIN_DIR := plugin_north
+NORTHBOUND_PLUGIN_CMDS := northbound-xunji northbound-http northbound-mqtt
+NORTHBOUND_PLUGINS := $(addprefix $(NORTHBOUND_PLUGIN_DIR)/,$(NORTHBOUND_PLUGIN_CMDS))
 
 # 源文件
 MAIN_SRC := cmd/main.go
@@ -63,6 +67,14 @@ build:
 	@echo "=== 构建 $(PROJECT_NAME) $(VERSION) ==="
 	CGO_ENABLED=0 go build -ldflags "-s -w" -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
+
+# 北向插件编译
+northbound-plugins: $(NORTHBOUND_PLUGINS)
+	@echo "✅ 北向插件构建完成: $(NORTHBOUND_PLUGIN_DIR)"
+
+$(NORTHBOUND_PLUGIN_DIR)/northbound-%: plugin_north/src/northbound-%/main.go
+	@mkdir -p $(NORTHBOUND_PLUGIN_DIR)
+	CGO_ENABLED=0 go build -ldflags "-s -w" -o $@ ./plugin_north/src/northbound-$*
 
 test:
 	go test ./...
