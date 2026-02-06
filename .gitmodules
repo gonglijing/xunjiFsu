@@ -2,3 +2,7 @@
 	path = plugin_north
 	url = git@github.com:gonglijing/xunjiNorth.git
 	branch = main
+[submodule "drvs"]
+	path = drvs
+	url = git@github.com:gonglijing/xunjiDrvs.git
+	branch = main

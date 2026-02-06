@@ -1,7 +1,6 @@
 .idea/
 cookies.txt
 drivers/
-drvs/
 main
 ui/frontend/node_modules/
 data.db
@@ -9,3 +8,5 @@ param.db
 ui/static/dist/main.js
 plugin_north/northbound-*
 plugin_north/*.exe
+
+gogw
