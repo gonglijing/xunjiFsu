@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For } from 'solid-js';
-import { del, getJSON, post, upload as uploadWithAuth } from '../api';
+import { del, getJSON, post, upload as uploadWithAuth, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -14,7 +14,7 @@ export function Drivers() {
     setLoading(true);
     getJSON('/api/drivers')
       .then((res) => {
-        setItems(res.data || res);
+        setItems(unwrapData(res, []));
         setError('');
       })
       .catch(() => setError('加载驱动失败'))

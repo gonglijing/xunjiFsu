@@ -342,6 +342,27 @@ func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
 	return driver.resourceID, nil
 }
 
+// LoadDriverFromModel 从驱动模型加载或重载驱动
+func (m *DriverManager) LoadDriverFromModel(driver *models.Driver, resourceID int64) error {
+	if driver == nil {
+		return fmt.Errorf("driver is nil")
+	}
+	if resourceID == 0 {
+		resourceID = parseDriverResourceID(driver.ConfigSchema)
+	}
+	if driver.FilePath == "" {
+		return fmt.Errorf("driver file path is empty")
+	}
+	wasmData, err := readWasmFile(driver.FilePath)
+	if err != nil {
+		return fmt.Errorf("read driver wasm failed: %w", err)
+	}
+	if err := m.ReloadDriver(driver, wasmData, resourceID); err != nil {
+		return fmt.Errorf("reload driver failed: %w", err)
+	}
+	return nil
+}
+
 // DriverRuntime 驱动运行时信息
 type DriverRuntime struct {
 	ID                int64     `json:"id"`
@@ -352,13 +373,9 @@ type DriverRuntime struct {
 	ExportedFunctions []string  `json:"exported_functions,omitempty"`
 }
 
-// GetRuntime 获取单个驱动运行时信息
-func (m *DriverManager) GetRuntime(id int64) (*DriverRuntime, error) {
-	m.mu.RLock()
-	driver, exists := m.drivers[id]
-	m.mu.RUnlock()
-	if !exists {
-		return nil, ErrDriverNotLoaded
+func runtimeFromDriver(driver *WasmDriver) *DriverRuntime {
+	if driver == nil {
+		return nil
 	}
 
 	driver.mu.RLock()
@@ -384,5 +401,36 @@ func (m *DriverManager) GetRuntime(id int64) (*DriverRuntime, error) {
 	}
 	driver.mu.RUnlock()
 
-	return runtime, nil
+	return runtime
+}
+
+// GetRuntime 获取单个驱动运行时信息
+func (m *DriverManager) GetRuntime(id int64) (*DriverRuntime, error) {
+	m.mu.RLock()
+	driver, exists := m.drivers[id]
+	m.mu.RUnlock()
+	if !exists {
+		return nil, ErrDriverNotLoaded
+	}
+	return runtimeFromDriver(driver), nil
+}
+
+// ListRuntimes 获取所有已加载驱动运行态
+func (m *DriverManager) ListRuntimes() []*DriverRuntime {
+	m.mu.RLock()
+	drivers := make([]*WasmDriver, 0, len(m.drivers))
+	for _, d := range m.drivers {
+		drivers = append(drivers, d)
+	}
+	m.mu.RUnlock()
+
+	runtimes := make([]*DriverRuntime, 0, len(drivers))
+	for _, d := range drivers {
+		if rt := runtimeFromDriver(d); rt != nil {
+			runtimes = append(runtimes, rt)
+		}
+	}
+	sort.Slice(runtimes, func(i, j int) bool { return runtimes[i].ID < runtimes[j].ID })
+
+	return runtimes
 }

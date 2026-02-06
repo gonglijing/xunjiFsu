@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For } from 'solid-js';
-import { del, getJSON, postJSON, putJSON } from '../api';
+import { del, getJSON, postJSON, putJSON, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -16,7 +16,7 @@ export function Storage() {
   const load = () => {
     setLoading(true);
     getJSON('/api/storage')
-      .then((res) => setItems(res.data || res))
+      .then((res) => setItems(unwrapData(res, [])))
       .catch(() => toast.show('error', '加载存储配置失败'))
       .finally(() => setLoading(false));
   };

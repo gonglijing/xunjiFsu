@@ -1,5 +1,5 @@
 import { createSignal, createEffect, Show } from 'solid-js';
-import { getJSON } from '../api';
+import { getJSON, unwrapData } from '../api';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
@@ -149,7 +149,7 @@ function Realtime() {
 
   createEffect(() => {
     getJSON('/api/devices').then((res) => {
-      const list = res.data || res;
+      const list = unwrapData(res, []);
       setDevices(list);
       if (list.length) setSelected(String(list[0].id));
     }).catch(() => toast.show('error', '加载设备失败'));
@@ -160,7 +160,7 @@ function Realtime() {
     setLoading(true);
     getJSON(`/api/data/cache/${selected()}`)
       .then((res) => {
-        const list = res.data || res || [];
+        const list = unwrapData(res, []);
         list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
         setPoints(list);
       })

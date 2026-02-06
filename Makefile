@@ -63,16 +63,20 @@ DATA_DIR := data
 # 部署目录
 DEPLOY_DIR := deploy
 
+# 构建优化参数
+COMMON_LDFLAGS := -s -w -buildid=
+BUILD_FLAGS := -trimpath -ldflags "$(COMMON_LDFLAGS)"
+
 # 编译当前平台版本
 build:
 	@echo "=== 构建 $(PROJECT_NAME) $(VERSION) ==="
-	CGO_ENABLED=0 go build -ldflags "-s -w" -o $(PROJECT_NAME) $(MAIN_SRC)
+	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
 
 # 编译最小体积版本
 build-mini:
 	@echo "=== 构建最小体积 $(PROJECT_NAME) $(VERSION) ==="
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -buildid=" -o $(PROJECT_NAME) $(MAIN_SRC)
+	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
 	@if command -v upx >/dev/null 2>&1; then \
 		echo "=== 使用 upx 压缩可执行文件 ==="; \
@@ -86,7 +90,7 @@ northbound-plugins: $(NORTHBOUND_PLUGINS)
 
 $(NORTHBOUND_PLUGIN_DIR)/northbound-%: plugin_north/src/northbound-%/main.go
 	@mkdir -p $(NORTHBOUND_PLUGIN_DIR)
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -buildid=" -o $@ ./plugin_north/src/northbound-$*
+	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $@ ./plugin_north/src/northbound-$*
 	@if command -v upx >/dev/null 2>&1; then upx --best --lzma $@ >/dev/null 2>&1 || true; fi
 
 test:
@@ -157,7 +161,7 @@ prepare-deploy:
 # Linux ARM32 编译
 deploy-arm32: prepare-deploy ui
 	@echo "=== 编译 Linux ARM32 版本 ==="
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/arm32/
 	cp -r migrations $(DEPLOY_DIR)/arm32/
@@ -167,7 +171,7 @@ deploy-arm32: prepare-deploy ui
 # Linux ARM64 编译
 deploy-arm64: prepare-deploy ui
 	@echo "=== 编译 Linux ARM64 版本 ==="
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm64/$(PROJECT_NAME) $(MAIN_SRC)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm64/$(PROJECT_NAME) $(MAIN_SRC)
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/arm64/
 	cp -r migrations $(DEPLOY_DIR)/arm64/
@@ -177,7 +181,7 @@ deploy-arm64: prepare-deploy ui
 # macOS (Intel/AMD64) 编译
 deploy-darwin: prepare-deploy ui
 	@echo "=== 编译 macOS 版本 ==="
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/darwin/$(PROJECT_NAME) $(MAIN_SRC)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/darwin/$(PROJECT_NAME) $(MAIN_SRC)
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/darwin/
 	cp -r migrations $(DEPLOY_DIR)/darwin/
@@ -187,7 +191,7 @@ deploy-darwin: prepare-deploy ui
 # macOS ARM64 (Apple Silicon) 编译
 deploy-darwin-arm64: prepare-deploy ui
 	@echo "=== 编译 macOS ARM64 版本 ==="
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/darwin/$(PROJECT_NAME)-arm64 $(MAIN_SRC)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/darwin/$(PROJECT_NAME)-arm64 $(MAIN_SRC)
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/darwin/
 	cp -r migrations $(DEPLOY_DIR)/darwin/
@@ -197,7 +201,7 @@ deploy-darwin-arm64: prepare-deploy ui
 # Windows AMD64 编译
 deploy-windows: prepare-deploy ui
 	@echo "=== 编译 Windows 版本 ==="
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/windows/$(PROJECT_NAME).exe $(MAIN_SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/windows/$(PROJECT_NAME).exe $(MAIN_SRC)
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/windows/
 	cp -r migrations $(DEPLOY_DIR)/windows/

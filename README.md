@@ -426,6 +426,7 @@ make deploy-windows  # Windows
 | PUT | `/api/drivers/{id}` | 更新驱动 |
 | DELETE | `/api/drivers/{id}` | 删除驱动 |
 | GET | `/api/drivers/{id}/runtime` | 获取驱动运行态 |
+| GET | `/api/drivers/runtime` | 获取所有驱动运行态 |
 | POST | `/api/drivers/{id}/reload` | 重载驱动 |
 | POST | `/api/drivers/upload` | 上传 WASM 文件 |
 | GET | `/api/drivers/{id}/download` | 下载驱动文件 |

@@ -288,11 +288,7 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 	if err != nil || drv == nil || drv.FilePath == "" {
 		return ErrDriverNotFound
 	}
-	wasmData, err := readWasmFile(drv.FilePath)
-	if err != nil {
-		return fmt.Errorf("read driver wasm failed: %w", err)
-	}
-	if err := e.manager.ReloadDriver(drv, wasmData, resourceID); err != nil {
+	if err := e.manager.LoadDriverFromModel(drv, resourceID); err != nil {
 		return fmt.Errorf("load driver %d failed: %w", drv.ID, err)
 	}
 	if version, err := e.manager.GetDriverVersion(driverID); err == nil && version != "" {

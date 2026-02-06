@@ -83,6 +83,10 @@ func NewCircuitBreaker(config *Config) *CircuitBreaker {
 
 // Execute 执行受保护的函数
 func (cb *CircuitBreaker) Execute(fn func() error) error {
+	cb.mu.Lock()
+	cb.requestCount++
+	cb.mu.Unlock()
+
 	if !cb.allowRequest() {
 		return &CircuitOpenError{
 			RetryAfter: cb.retryAfter(),
@@ -182,8 +186,16 @@ func (cb *CircuitBreaker) retryAfter() time.Duration {
 
 // State 获取当前状态
 func (cb *CircuitBreaker) State() CircuitState {
-	cb.mu.RLock()
-	defer cb.mu.RUnlock()
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	// 当处于打开状态且超过恢复超时时间时，自动进入半开状态
+	if cb.state == Open && time.Since(cb.lastFailure) >= cb.config.RecoveryTimeout {
+		cb.state = HalfOpen
+		cb.successes = cb.successes[:0]
+		cb.failures = cb.failures[:0]
+	}
+
 	return cb.state
 }
 

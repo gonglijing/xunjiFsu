@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
-import { del, getJSON, postJSON } from '../api';
+import { del, getJSON, postJSON, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -16,13 +16,13 @@ export function Thresholds() {
 
   const load = () => {
     getJSON('/api/thresholds')
-      .then((res) => setItems(res.data || res))
+      .then((res) => setItems(unwrapData(res, [])))
       .catch(() => toast.show('error', '加载阈值失败'));
   };
 
   const loadDevices = () => {
     getJSON('/api/devices')
-      .then((res) => setDevices(res.data || res))
+      .then((res) => setDevices(unwrapData(res, [])))
       .catch(() => {});
   };
 

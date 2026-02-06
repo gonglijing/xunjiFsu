@@ -104,6 +104,14 @@ export async function upload(url, formData, options = {}) {
   return parseJSON(res);
 }
 
+export function unwrapData(value, fallback = null) {
+  if (value === null || value === undefined) return fallback;
+  if (value && typeof value === 'object' && 'data' in value) {
+    return value.data ?? fallback;
+  }
+  return value;
+}
+
 // SolidJS 资源获取辅助函数
 import { createResource, createSignal } from 'solid-js';
 

@@ -254,6 +254,7 @@ func loadFromFile(cfg *Config) error {
 
 // loadFromEnv 从环境变量加载配置（会覆盖文件配置）
 func loadFromEnv(cfg *Config) {
+	defaultCfg := DefaultConfig()
 
 	// 服务器配置
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -264,11 +265,16 @@ func loadFromEnv(cfg *Config) {
 	if v := os.Getenv("HTTP_READ_TIMEOUT"); v != "" {
 		if timeout, err := time.ParseDuration(v); err == nil {
 			cfg.HTTPReadTimeout = timeout
+		} else if cfg.HTTPReadTimeout == 0 {
+			// 解析失败时回退到默认值
+			cfg.HTTPReadTimeout = defaultCfg.HTTPReadTimeout
 		}
 	}
 	if v := os.Getenv("HTTP_WRITE_TIMEOUT"); v != "" {
 		if timeout, err := time.ParseDuration(v); err == nil {
 			cfg.HTTPWriteTimeout = timeout
+		} else if cfg.HTTPWriteTimeout == 0 {
+			cfg.HTTPWriteTimeout = defaultCfg.HTTPWriteTimeout
 		}
 	}
 	if v := os.Getenv("HTTP_IDLE_TIMEOUT"); v != "" {
@@ -330,11 +336,16 @@ func loadFromEnv(cfg *Config) {
 	if v := os.Getenv("COLLECTOR_WORKERS"); v != "" {
 		if workers, err := strconv.Atoi(v); err == nil {
 			cfg.CollectorWorkers = workers
+		} else if cfg.CollectorWorkers == 0 {
+			// 无效值时保持默认
+			cfg.CollectorWorkers = defaultCfg.CollectorWorkers
 		}
 	}
 	if v := os.Getenv("SYNC_INTERVAL"); v != "" {
 		if interval, err := time.ParseDuration(v); err == nil {
 			cfg.SyncInterval = interval
+		} else if cfg.SyncInterval == 0 {
+			cfg.SyncInterval = defaultCfg.SyncInterval
 		}
 	}
 

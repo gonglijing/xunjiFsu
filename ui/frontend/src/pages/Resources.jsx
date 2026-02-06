@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
-import { getJSON, del, postJSON, putJSON } from '../api';
+import { getJSON, del, postJSON, putJSON, unwrapData } from '../api';
 import Card, { SectionTabs } from '../components/cards';
 import { useToast } from '../components/Toast';
 
@@ -16,7 +16,7 @@ function Resources() {
 
   const load = () => {
     getJSON('/api/resources')
-      .then((res) => setItems(res.data || res))
+      .then((res) => setItems(unwrapData(res, [])))
       .catch(() => toast.show('error', '加载资源失败'));
   };
 

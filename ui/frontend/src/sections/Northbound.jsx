@@ -1,5 +1,5 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
-import { del, getJSON, post, postJSON, putJSON } from '../api';
+import { del, getJSON, post, postJSON, putJSON, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -31,8 +31,8 @@ export function Northbound() {
       getJSON('/api/northbound/status'),
     ])
       .then(([configs, status]) => {
-        setItems(configs.data || configs);
-        setRuntime(status.data || status);
+        setItems(unwrapData(configs, []));
+        setRuntime(unwrapData(status, []));
       })
       .catch(() => toast.show('error', '加载北向配置失败'))
       .finally(() => setLoading(false));
@@ -76,7 +76,7 @@ export function Northbound() {
     setSyncing(true);
     post('/api/gateway/northbound/sync-identity')
       .then((res) => {
-        const data = res?.data || res || {};
+        const data = unwrapData(res, {});
         const updated = data.updated?.length || 0;
         const failed = data.failed ? Object.keys(data.failed).length : 0;
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);

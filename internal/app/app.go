@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -145,13 +144,7 @@ func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error
 			logger.Debug("Skipping driver with empty file_path", "id", d.ID, "name", d.Name)
 			continue
 		}
-		// 读取 WASM 文件
-		wasmData, err := os.ReadFile(d.FilePath)
-		if err != nil {
-			logger.Warn("Failed to read driver file", "id", d.ID, "name", d.Name, "file", d.FilePath, "error", err)
-			continue
-		}
-		if err := manager.LoadDriver(d, wasmData, 0); err != nil {
+		if err := manager.LoadDriverFromModel(d, 0); err != nil {
 			logger.Warn("Failed to load driver", "id", d.ID, "name", d.Name, "error", err)
 			continue
 		}

@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
-import { getJSON, post, putJSON } from '../api';
+import { getJSON, post, putJSON, unwrapData } from '../api';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 
@@ -19,10 +19,11 @@ function GatewayPage() {
     setLoading(true);
     getJSON('/api/gateway/config')
       .then((res) => {
+        const data = unwrapData(res, {});
         setForm({
-          product_key: res.product_key || '',
-          device_key: res.device_key || '',
-          gateway_name: res.gateway_name || 'HuShu智能网关',
+          product_key: data.product_key || '',
+          device_key: data.device_key || '',
+          gateway_name: data.gateway_name || 'HuShu智能网关',
         });
       })
       .catch(() => toast.show('error', '加载网关配置失败'))
@@ -53,7 +54,7 @@ function GatewayPage() {
     setSyncing(true);
     post('/api/gateway/northbound/sync-identity')
       .then((res) => {
-        const data = res?.data || res || {};
+        const data = unwrapData(res, {});
         const updated = data.updated?.length || 0;
         const failed = data.failed ? Object.keys(data.failed).length : 0;
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);

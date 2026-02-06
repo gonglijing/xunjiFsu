@@ -1,8 +1,6 @@
 package pwdutil
 
-import (
-	"golang.org/x/crypto/bcrypt"
-)
+import "golang.org/x/crypto/bcrypt"
 
 const (
 	// Cost 密码哈希成本（值越大越安全，但速度越慢）
@@ -13,7 +11,13 @@ const (
 
 // Hash 生成密码哈希
 func Hash(password string) string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), Cost)
+	// bcrypt 只使用前 72 字节，超过部分会被忽略，这里显式截断避免 panic
+	pwBytes := []byte(password)
+	if len(pwBytes) > 72 {
+		pwBytes = pwBytes[:72]
+	}
+
+	hash, err := bcrypt.GenerateFromPassword(pwBytes, Cost)
 	if err != nil {
 		panic(err)
 	}
@@ -22,7 +26,13 @@ func Hash(password string) string {
 
 // Compare 比较密码和哈希
 func Compare(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	// 与 Hash 保持一致，对密码进行相同的截断处理
+	pwBytes := []byte(password)
+	if len(pwBytes) > 72 {
+		pwBytes = pwBytes[:72]
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(hash), pwBytes)
 	return err == nil
 }
 
