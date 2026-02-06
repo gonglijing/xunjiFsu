@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -28,6 +29,12 @@ func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 		if info, err := os.Stat(path); err == nil {
 			d.Size = info.Size()
 			d.Filename = filepath.Base(path)
+		}
+		if runtime, err := h.driverManager.GetRuntime(d.ID); err == nil && runtime != nil {
+			d.Loaded = runtime.Loaded
+			d.ResourceID = runtime.ResourceID
+			d.LastActive = runtime.LastActive
+			d.Exports = runtime.ExportedFunctions
 		}
 	}
 	WriteSuccess(w, drivers)
@@ -104,9 +111,27 @@ func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
 	}
 
 	driver.ID = id
+	if strings.TrimSpace(driver.Name) == "" {
+		WriteBadRequest(w, "driver name is required")
+		return
+	}
+	if strings.TrimSpace(driver.FilePath) == "" {
+		driver.FilePath = h.driverFilePath(driver.Name, "")
+	}
+	if _, err := os.Stat(driver.FilePath); err != nil {
+		WriteBadRequest(w, "driver wasm file not found")
+		return
+	}
 	if err := database.UpdateDriver(&driver); err != nil {
 		WriteServerError(w, err.Error())
 		return
+	}
+
+	if wasmData, err := os.ReadFile(driver.FilePath); err == nil {
+		if err := h.driverManager.ReloadDriver(&driver, wasmData, 0); err != nil {
+			WriteServerError(w, "driver reloaded failed: "+err.Error())
+			return
+		}
 	}
 
 	WriteSuccess(w, driver)
@@ -125,6 +150,7 @@ func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = database.DeleteDriver(id)
+	_ = h.driverManager.UnloadDriver(id)
 
 	// 删除文件（忽略错误）
 	path := drv.FilePath
@@ -132,6 +158,76 @@ func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
 	_ = os.Remove(path)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ReloadDriver 重载驱动
+func (h *Handler) ReloadDriver(w http.ResponseWriter, r *http.Request) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
+		return
+	}
+
+	drv, err := database.GetDriverByID(id)
+	if err != nil {
+		WriteNotFound(w, "Driver not found")
+		return
+	}
+
+	path := h.driverFilePath(drv.Name, drv.FilePath)
+	wasmData, err := os.ReadFile(path)
+	if err != nil {
+		WriteBadRequest(w, "driver wasm file not found")
+		return
+	}
+
+	if err := h.driverManager.ReloadDriver(drv, wasmData, 0); err != nil {
+		WriteServerError(w, "reload driver failed: "+err.Error())
+		return
+	}
+
+	if version, err := driverpkg.ExtractDriverVersion(wasmData); err == nil && version != "" {
+		_ = database.UpdateDriverVersion(drv.ID, version)
+		drv.Version = version
+	}
+
+	runtime, err := h.driverManager.GetRuntime(drv.ID)
+	if err != nil {
+		WriteSuccess(w, map[string]interface{}{"id": drv.ID, "loaded": true})
+		return
+	}
+	WriteSuccess(w, runtime)
+}
+
+// GetDriverRuntime 获取驱动运行态
+func (h *Handler) GetDriverRuntime(w http.ResponseWriter, r *http.Request) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
+		return
+	}
+
+	_, err = database.GetDriverByID(id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			WriteNotFound(w, "Driver not found")
+			return
+		}
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	runtime, err := h.driverManager.GetRuntime(id)
+	if err != nil {
+		if err == driverpkg.ErrDriverNotLoaded {
+			WriteSuccess(w, map[string]interface{}{"id": id, "loaded": false})
+			return
+		}
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	WriteSuccess(w, runtime)
 }
 
 // UploadDriverFile 上传驱动文件

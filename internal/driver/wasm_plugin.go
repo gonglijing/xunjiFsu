@@ -28,7 +28,7 @@ func newWasmPlugin(driverName string, wasmData []byte, hostFuncs []extism.HostFu
 	plugin.SetLogger(func(level extism.LogLevel, message string) {
 		switch level {
 		case extism.LogLevelError:
-			logger.Error("Driver log", fmt.Errorf(message), "driver", driverName)
+			logger.Error("Driver log", fmt.Errorf("%s", message), "driver", driverName)
 		case extism.LogLevelWarn:
 			logger.Warn("Driver log", "driver", driverName, "message", message)
 		default:

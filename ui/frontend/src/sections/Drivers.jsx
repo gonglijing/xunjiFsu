@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For } from 'solid-js';
-import { del, getJSON, upload as uploadWithAuth } from '../api';
+import { del, getJSON, post, upload as uploadWithAuth } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -7,6 +7,7 @@ export function Drivers() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const [loading, setLoading] = createSignal(true);
+  const [busyId, setBusyId] = createSignal(0);
   const [error, setError] = createSignal('');
 
   const load = () => {
@@ -42,14 +43,43 @@ export function Drivers() {
       .finally(() => { e.target.value = ''; });
   };
 
+  const reloadDriver = (item) => {
+    if (!item?.id) return;
+    setBusyId(item.id);
+    post(`/api/drivers/${item.id}/reload`)
+      .then(() => {
+        toast.show('success', `驱动 ${item.name} 重载成功`);
+        load();
+      })
+      .catch((err) => toast.show('error', err.message || '重载失败'))
+      .finally(() => setBusyId(0));
+  };
+
+  const fmtSize = (size) => {
+    if (!size || size <= 0) return '-';
+    return `${(size / 1024).toFixed(1)} KB`;
+  };
+
+  const fmtTime = (timeStr) => {
+    if (!timeStr) return '-';
+    const t = new Date(timeStr);
+    if (Number.isNaN(t.getTime())) return '-';
+    return t.toLocaleString();
+  };
+
   return (
     <Card
       title="驱动管理"
       extra={
-        <label class="btn btn-primary" style="cursor:pointer;">
-          上传驱动
-          <input type="file" accept=".wasm" style="display:none" onChange={upload} />
-        </label>
+        <div class="flex" style="gap:8px;">
+          <button class="btn" onClick={load} disabled={loading()}>
+            刷新
+          </button>
+          <label class="btn btn-primary" style="cursor:pointer;">
+            上传驱动
+            <input type="file" accept=".wasm" style="display:none" onChange={upload} />
+          </label>
+        </div>
       }
     >
         {loading() ? (
@@ -69,6 +99,8 @@ export function Drivers() {
                   <th>文件</th>
                   <th>版本</th>
                   <th>大小</th>
+                  <th>运行态</th>
+                  <th>最后活跃</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -80,8 +112,17 @@ export function Drivers() {
                       <td>{d.name}</td>
                       <td>{d.filename || d.file_path || ''}</td>
                       <td>{d.version || '-'}</td>
-                      <td>{d.size ? (d.size / 1024).toFixed(1) + ' KB' : '-'}</td>
+                      <td>{fmtSize(d.size)}</td>
+                      <td>
+                        <span class={`badge ${d.loaded ? 'badge-running' : 'badge-stopped'}`}>
+                          {d.loaded ? '已加载' : '未加载'}
+                        </span>
+                      </td>
+                      <td>{fmtTime(d.last_active)}</td>
                       <td class="flex" style="gap:8px;">
+                        <button class="btn" onClick={() => reloadDriver(d)} disabled={busyId() === d.id}>
+                          {busyId() === d.id ? '重载中...' : '重载'}
+                        </button>
                         <a class="btn" href={`/api/drivers/${d.id}/download`}>下载</a>
                         <button class="btn btn-danger" onClick={() => remove(d.id, d.name)}>删除</button>
                       </td>
@@ -91,7 +132,7 @@ export function Drivers() {
                 <For each={items().length === 0 ? [1] : []}>
                   {() => (
                     <tr>
-                      <td colSpan={6} style="text-align:center; padding:24px; color:var(--text-muted);">暂无驱动</td>
+                      <td colSpan={8} style="text-align:center; padding:24px; color:var(--text-muted);">暂无驱动</td>
                     </tr>
                   )}
                 </For>

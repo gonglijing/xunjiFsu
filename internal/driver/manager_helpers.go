@@ -2,8 +2,10 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -60,18 +62,37 @@ func resolveResource(device *models.Device) (int64, string) {
 
 	resourceType := device.ResourceType
 	if resourceType == "" {
-		resourceType = device.DriverType
-		if resourceType == "" {
-			resourceType = "modbus_rtu"
-		}
+		resourceType = inferResourceType(device)
 	}
 
 	return resourceID, resourceType
 }
 
+func inferResourceType(device *models.Device) string {
+	if device == nil {
+		return "serial"
+	}
+	if device.ResourceType != "" {
+		return strings.ToLower(strings.TrimSpace(device.ResourceType))
+	}
+	driverType := strings.ToLower(strings.TrimSpace(device.DriverType))
+	switch {
+	case strings.Contains(driverType, "tcp"), strings.Contains(driverType, "udp"), strings.Contains(driverType, "net"):
+		return "net"
+	case strings.Contains(driverType, "serial"), strings.Contains(driverType, "rtu"):
+		return "serial"
+	default:
+		if device.IPAddress != "" || device.PortNum > 0 {
+			return "net"
+		}
+		return "serial"
+	}
+}
+
 func buildDeviceConfig(device *models.Device) map[string]string {
 	deviceConfig := make(map[string]string)
-	if device.DriverType == "modbus_rtu" {
+	resourceType := inferResourceType(device)
+	if resourceType == "serial" {
 		deviceConfig["serial_port"] = device.SerialPort
 		deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
 		deviceConfig["data_bits"] = fmt.Sprintf("%d", device.DataBits)
@@ -86,6 +107,19 @@ func buildDeviceConfig(device *models.Device) map[string]string {
 	}
 	deviceConfig["func_name"] = "read"
 	return deviceConfig
+}
+
+func parseDriverResourceID(configSchema string) int64 {
+	if strings.TrimSpace(configSchema) == "" {
+		return 0
+	}
+	var cfg struct {
+		ResourceID int64 `json:"resource_id"`
+	}
+	if err := json.Unmarshal([]byte(configSchema), &cfg); err != nil {
+		return 0
+	}
+	return cfg.ResourceID
 }
 
 func buildDriverContext(device *models.Device, resourceID int64, resourceType string, deviceConfig map[string]string) *DriverContext {
@@ -166,7 +200,10 @@ func (e *DriverExecutor) ensureSerialResource(resourceID int64, resourceType str
 	if resourceID <= 0 {
 		return nil
 	}
-	if err := e.ensureSerialPort(resourceID, device); err != nil && resourceType == "serial" {
+	if resourceType != "serial" {
+		return nil
+	}
+	if err := e.ensureSerialPort(resourceID, device); err != nil {
 		return fmt.Errorf("open serial resource %d failed: %w", resourceID, err)
 	}
 	return nil
@@ -240,15 +277,11 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 
 	if e.manager.IsLoaded(driverID) {
 		if loaded, err := e.manager.GetDriver(driverID); err == nil && loaded != nil {
-			if resourceID > 0 && loaded.resourceID != resourceID {
-				logger.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
-				_ = e.manager.UnloadDriver(loaded.ID)
+			if resourceID <= 0 || loaded.resourceID == resourceID {
+				return nil
 			}
+			logger.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
 		}
-	}
-
-	if e.manager.IsLoaded(driverID) {
-		return nil
 	}
 
 	drv, err := database.GetDriverByID(driverID)
@@ -259,7 +292,7 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 	if err != nil {
 		return fmt.Errorf("read driver wasm failed: %w", err)
 	}
-	if err := e.manager.LoadDriver(drv, wasmData, resourceID); err != nil {
+	if err := e.manager.ReloadDriver(drv, wasmData, resourceID); err != nil {
 		return fmt.Errorf("load driver %d failed: %w", drv.ID, err)
 	}
 	if version, err := e.manager.GetDriverVersion(driverID); err == nil && version != "" {
@@ -268,4 +301,13 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 		}
 	}
 	return nil
+}
+
+// ReloadDeviceDriver 强制重载设备对应驱动
+func (e *DriverExecutor) ReloadDeviceDriver(device *models.Device) error {
+	if device == nil || device.DriverID == nil {
+		return fmt.Errorf("device has no driver")
+	}
+	resourceID, _ := resolveResource(device)
+	return e.ensureDriverLoaded(device, resourceID)
 }

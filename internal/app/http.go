@@ -103,6 +103,8 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	api.HandleFunc("/drivers", h.CreateDriver).Methods("POST")
 	api.HandleFunc("/drivers/{id}", h.UpdateDriver).Methods("PUT")
 	api.HandleFunc("/drivers/{id}", h.DeleteDriver).Methods("DELETE")
+	api.HandleFunc("/drivers/{id}/runtime", h.GetDriverRuntime).Methods("GET")
+	api.HandleFunc("/drivers/{id}/reload", h.ReloadDriver).Methods("POST")
 	api.HandleFunc("/drivers/{id}/download", h.DownloadDriver).Methods("GET")
 	api.HandleFunc("/drivers/upload", h.UploadDriverFile).Methods("POST")
 

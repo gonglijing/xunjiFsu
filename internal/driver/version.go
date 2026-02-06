@@ -68,7 +68,7 @@ func parseDriverVersionOutput(output []byte) (string, error) {
 	}
 	if !payload.Success {
 		if payload.Error != "" {
-			return "", fmt.Errorf(payload.Error)
+			return "", fmt.Errorf("%s", payload.Error)
 		}
 		return "", fmt.Errorf("version response not success")
 	}

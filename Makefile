@@ -1,7 +1,7 @@
 # HuShu智能网关 - Makefile
 # 支持多平台交叉编译
 
-.PHONY: all clean build test fmt vet ui ui-install ui-dev run help northbound-plugins \
+.PHONY: all clean build build-mini test fmt vet ui ui-install ui-dev run help northbound-plugins \
         deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows
 
 # 默认目标: 编译前端 + 本地运行
@@ -22,6 +22,7 @@ help:
 	@echo "  (无参数)      - 编译前端 + 启动后端 (默认)"
 	@echo "  all           - 同默认目标"
 	@echo "  build         - 编译当前平台后端 (CGO=0)"
+	@echo "  build-mini    - 编译最小体积后端 (trimpath + 精简 ldflags)"
 	@echo "  northbound-plugins - 编译北向插件"
 	@echo "  test          - go test ./..."
 	@echo "  fmt           - gofmt + goimports"
@@ -68,13 +69,25 @@ build:
 	CGO_ENABLED=0 go build -ldflags "-s -w" -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
 
+# 编译最小体积版本
+build-mini:
+	@echo "=== 构建最小体积 $(PROJECT_NAME) $(VERSION) ==="
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -buildid=" -o $(PROJECT_NAME) $(MAIN_SRC)
+	@echo "✅ 构建完成: $(PROJECT_NAME)"
+	@if command -v upx >/dev/null 2>&1; then \
+		echo "=== 使用 upx 压缩可执行文件 ==="; \
+		upx --best --lzma $(PROJECT_NAME) >/dev/null 2>&1 || true; \
+	fi
+	@ls -lh $(PROJECT_NAME)
+
 # 北向插件编译
 northbound-plugins: $(NORTHBOUND_PLUGINS)
 	@echo "✅ 北向插件构建完成: $(NORTHBOUND_PLUGIN_DIR)"
 
 $(NORTHBOUND_PLUGIN_DIR)/northbound-%: plugin_north/src/northbound-%/main.go
 	@mkdir -p $(NORTHBOUND_PLUGIN_DIR)
-	CGO_ENABLED=0 go build -ldflags "-s -w" -o $@ ./plugin_north/src/northbound-$*
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -buildid=" -o $@ ./plugin_north/src/northbound-$*
+	@if command -v upx >/dev/null 2>&1; then upx --best --lzma $@ >/dev/null 2>&1 || true; fi
 
 test:
 	go test ./...

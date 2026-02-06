@@ -41,6 +41,10 @@ type Driver struct {
 	ConfigSchema string    `json:"config_schema" db:"config_schema"`
 	Filename     string    `json:"filename,omitempty"` // 文件名（不存数据库）
 	Size         int64     `json:"size,omitempty"`     // 文件大小（不存数据库）
+	Loaded       bool      `json:"loaded,omitempty"`
+	ResourceID   int64     `json:"resource_id,omitempty"`
+	LastActive   time.Time `json:"last_active,omitempty"`
+	Exports      []string  `json:"exports,omitempty"`
 	Enabled      int       `json:"enabled" db:"enabled"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`

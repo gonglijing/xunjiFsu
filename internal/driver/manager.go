@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -95,7 +96,7 @@ type DriverManager struct {
 
 // NewDriverManager 创建驱动管理器
 func NewDriverManager() *DriverManager {
-	extism.SetLogLevel(extism.LogLevelDebug)
+	extism.SetLogLevel(extism.LogLevelError)
 	return &DriverManager{
 		drivers: make(map[int64]*WasmDriver),
 	}
@@ -127,6 +128,13 @@ func (m *DriverManager) createHostFunctions(resourceID int64) []extism.HostFunct
 
 // LoadDriver 加载驱动
 func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resourceID int64) error {
+	if driver == nil {
+		return fmt.Errorf("driver is nil")
+	}
+	if len(wasmData) == 0 {
+		return fmt.Errorf("driver wasm is empty")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -135,13 +143,8 @@ func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resou
 	}
 
 	// 从 driver config 中解析 resource_id (如果没有传入)
-	if resourceID == 0 && driver.ConfigSchema != "" {
-		var cfg struct {
-			ResourceID int64 `json:"resource_id"`
-		}
-		if err := json.Unmarshal([]byte(driver.ConfigSchema), &cfg); err == nil {
-			resourceID = cfg.ResourceID
-		}
+	if resourceID == 0 {
+		resourceID = parseDriverResourceID(driver.ConfigSchema)
 	}
 
 	// 创建设置配置 (传递给插件)
@@ -177,6 +180,19 @@ func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resou
 		}
 	}
 	return nil
+}
+
+// ReloadDriver 重载驱动
+func (m *DriverManager) ReloadDriver(driver *models.Driver, wasmData []byte, resourceID int64) error {
+	if driver == nil {
+		return fmt.Errorf("driver is nil")
+	}
+	if m.IsLoaded(driver.ID) {
+		if err := m.UnloadDriver(driver.ID); err != nil && !errors.Is(err, ErrDriverNotFound) {
+			return err
+		}
+	}
+	return m.LoadDriver(driver, wasmData, resourceID)
 }
 
 // UnloadDriver 卸载驱动
@@ -324,4 +340,49 @@ func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
 	}
 
 	return driver.resourceID, nil
+}
+
+// DriverRuntime 驱动运行时信息
+type DriverRuntime struct {
+	ID                int64     `json:"id"`
+	Name              string    `json:"name"`
+	Loaded            bool      `json:"loaded"`
+	ResourceID        int64     `json:"resource_id"`
+	LastActive        time.Time `json:"last_active"`
+	ExportedFunctions []string  `json:"exported_functions,omitempty"`
+}
+
+// GetRuntime 获取单个驱动运行时信息
+func (m *DriverManager) GetRuntime(id int64) (*DriverRuntime, error) {
+	m.mu.RLock()
+	driver, exists := m.drivers[id]
+	m.mu.RUnlock()
+	if !exists {
+		return nil, ErrDriverNotLoaded
+	}
+
+	driver.mu.RLock()
+	runtime := &DriverRuntime{
+		ID:         driver.ID,
+		Name:       driver.Name,
+		Loaded:     true,
+		ResourceID: driver.resourceID,
+		LastActive: driver.lastActive,
+	}
+	if driver.plugin != nil {
+		if mod := driver.plugin.Module(); mod != nil {
+			exports := mod.ExportedFunctions()
+			if len(exports) > 0 {
+				names := make([]string, 0, len(exports))
+				for name := range exports {
+					names = append(names, name)
+				}
+				sort.Strings(names)
+				runtime.ExportedFunctions = names
+			}
+		}
+	}
+	driver.mu.RUnlock()
+
+	return runtime, nil
 }

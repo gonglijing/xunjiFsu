@@ -15,8 +15,8 @@ func TestResolveResourceDefaults(t *testing.T) {
 	if resourceID != 0 {
 		t.Fatalf("expected resourceID 0, got %d", resourceID)
 	}
-	if resourceType != "modbus_rtu" {
-		t.Fatalf("expected resourceType modbus_rtu, got %s", resourceType)
+	if resourceType != "serial" {
+		t.Fatalf("expected resourceType serial, got %s", resourceType)
 	}
 }
 
