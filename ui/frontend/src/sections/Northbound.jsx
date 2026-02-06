@@ -119,6 +119,8 @@ export function Northbound() {
   const [saving, setSaving] = createSignal(false);
   const [syncing, setSyncing] = createSignal(false);
   const [xunjiSchema, setXunjiSchema] = createSignal([]);
+  const [xunjiSchemaLoading, setXunjiSchemaLoading] = createSignal(false);
+  const [xunjiSchemaError, setXunjiSchemaError] = createSignal('');
   const [xunjiConfig, setXunjiConfig] = createSignal({});
   const [xunjiErrors, setXunjiErrors] = createSignal({});
 
@@ -134,23 +136,45 @@ export function Northbound() {
     return normalizeXunJiConfig(xunjiConfig(), xunjiSchema(), form().upload_interval);
   };
 
+  const loadXunJiSchema = (silent = false) => {
+    setXunjiSchemaLoading(true);
+    return getJSON('/api/northbound/schema?type=xunji')
+      .then((schemaResult) => {
+        const schemaData = unwrapData(schemaResult, {});
+        const fields = Array.isArray(schemaData?.fields) ? schemaData.fields : [];
+        setXunjiSchema(fields);
+
+        if (fields.length === 0) {
+          setXunjiSchemaError('XUNJI Schema 为空，请检查后端配置');
+          if (!silent) {
+            toast.show('error', 'XUNJI Schema 为空，请检查后端配置');
+          }
+          return;
+        }
+
+        setXunjiSchemaError('');
+        setXunjiConfig((prev) => normalizeXunJiConfig(prev, fields, form().upload_interval));
+      })
+      .catch((err) => {
+        const message = err?.message || '加载 XUNJI Schema 失败';
+        setXunjiSchema([]);
+        setXunjiSchemaError(message);
+        if (!silent) {
+          toast.show('error', message);
+        }
+      })
+      .finally(() => setXunjiSchemaLoading(false));
+  };
+
   const load = () => {
     setLoading(true);
     Promise.all([
       getJSON('/api/northbound'),
       getJSON('/api/northbound/status'),
-      getJSON('/api/northbound/schema?type=xunji'),
     ])
-      .then(([configs, status, schemaResult]) => {
+      .then(([configs, status]) => {
         setItems(unwrapData(configs, []));
         setRuntime(unwrapData(status, []));
-
-        const schemaData = unwrapData(schemaResult, {});
-        const fields = Array.isArray(schemaData?.fields) ? schemaData.fields : [];
-        setXunjiSchema(fields);
-        if (fields.length === 0) {
-          toast.show('error', 'XUNJI Schema 为空，请检查后端配置');
-        }
       })
       .catch(() => toast.show('error', '加载北向配置失败'))
       .finally(() => setLoading(false));
@@ -158,6 +182,7 @@ export function Northbound() {
 
   createEffect(() => {
     load();
+    loadXunJiSchema(true);
   });
 
   const submit = (e) => {
@@ -168,7 +193,8 @@ export function Northbound() {
     if (payload.type === 'xunji') {
       const schemaFields = xunjiSchema();
       if (schemaFields.length === 0) {
-        toast.show('error', 'XUNJI Schema 尚未加载完成');
+        loadXunJiSchema();
+        toast.show('error', 'XUNJI Schema 尚未加载完成，请稍后重试');
         return;
       }
 
@@ -247,6 +273,9 @@ export function Northbound() {
     setForm(empty);
     setEditing(null);
     setShowModal(true);
+    if (xunjiSchema().length === 0) {
+      loadXunJiSchema(true);
+    }
     setXunjiConfig(normalizeXunJiConfig({}, xunjiSchema(), 5000));
     setXunjiErrors({});
   };
@@ -256,6 +285,9 @@ export function Northbound() {
     const base = { name: item.name, type: item.type, upload_interval: upload, config: item.config, enabled: item.enabled };
 
     if (item.type === 'xunji') {
+      if (xunjiSchema().length === 0) {
+        loadXunJiSchema(true);
+      }
       const parsed = safeParseJSON(item.config, {});
       const cfg = normalizeXunJiConfig(parsed, xunjiSchema(), upload);
       base.upload_interval = toInt(cfg.uploadIntervalMs, upload);
@@ -276,6 +308,9 @@ export function Northbound() {
     const next = { ...current, type: nextType };
 
     if (nextType === 'xunji') {
+      if (xunjiSchema().length === 0) {
+        loadXunJiSchema(true);
+      }
       const parsed = safeParseJSON(current.config, {});
       const cfg = normalizeXunJiConfig(parsed, xunjiSchema(), current.upload_interval);
       next.upload_interval = toInt(cfg.uploadIntervalMs, current.upload_interval);
@@ -309,7 +344,10 @@ export function Northbound() {
       <Card
         title="北向配置列表"
         extra={
-          <div class="flex" style="gap:8px;">
+          <div class="flex" style="gap:8px; align-items:center;">
+            <Show when={xunjiSchemaError()}>
+              <span style="font-size:12px; color:var(--danger);">XUNJI Schema 异常</span>
+            </Show>
             <button class="btn" onClick={syncGatewayIdentity} disabled={syncing()}>
               {syncing() ? '同步中...' : '同步网关身份'}
             </button>
@@ -454,7 +492,16 @@ export function Northbound() {
 
                   <Show
                     when={xunjiSchema().length > 0}
-                    fallback={<div class="form-hint" style="margin-bottom:8px; color:var(--danger);">XUNJI Schema 尚未加载，请稍后重试。</div>}
+                    fallback={(
+                      <div class="form-hint" style="margin-bottom:8px; color:var(--danger);">
+                        <div>{xunjiSchemaLoading() ? 'XUNJI Schema 加载中...' : (xunjiSchemaError() || 'XUNJI Schema 尚未加载')}</div>
+                        <Show when={!xunjiSchemaLoading()}>
+                          <button type="button" class="btn" style="margin-top:8px;" onClick={() => loadXunJiSchema()}>
+                            重试加载 Schema
+                          </button>
+                        </Show>
+                      </div>
+                    )}
                   >
                     <div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px 12px;">
                       <For each={xunjiSchema()}>{(field) => {

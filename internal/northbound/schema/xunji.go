@@ -1,5 +1,7 @@
 package schema
 
+import "strings"
+
 // FieldType defines the supported config value types in northbound schema.
 type FieldType string
 
@@ -8,6 +10,10 @@ const (
 	FieldTypeInt    FieldType = "int"
 	FieldTypeBool   FieldType = "bool"
 )
+
+const XunJiSchemaVersion = "1.0.0"
+
+var SupportedNorthboundSchemaTypes = []string{"xunji"}
 
 // Field describes one config field in Terraform SDK Schema-like style.
 type Field struct {
@@ -40,4 +46,22 @@ var XunJiConfigSchema = []Field{
 	{Key: "alarmBatchSize", Label: "报警批量条数", Type: FieldTypeInt, Optional: true, Default: 20, Description: "每次发送报警条数"},
 	{Key: "alarmQueueSize", Label: "报警队列长度", Type: FieldTypeInt, Optional: true, Default: 1000, Description: "超过后丢弃最旧"},
 	{Key: "realtimeQueueSize", Label: "实时队列长度", Type: FieldTypeInt, Optional: true, Default: 1000, Description: "超过后丢弃最旧"},
+}
+
+func FieldsByType(nbType string) ([]Field, bool) {
+	switch strings.ToLower(strings.TrimSpace(nbType)) {
+	case "", "xunji":
+		return cloneFields(XunJiConfigSchema), true
+	default:
+		return nil, false
+	}
+}
+
+func cloneFields(fields []Field) []Field {
+	if len(fields) == 0 {
+		return []Field{}
+	}
+	out := make([]Field, len(fields))
+	copy(out, fields)
+	return out
 }
