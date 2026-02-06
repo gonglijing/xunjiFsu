@@ -176,6 +176,13 @@ type XunJiConfig struct {
 	ServerURL  string `json:"serverUrl"` // MQTT服务器地址
 	Username   string `json:"username"`
 	Password   string `json:"password"`
+	Topic      string `json:"topic"`
+	AlarmTopic string `json:"alarmTopic"`
+	ClientID   string `json:"clientId"`
+	QOS        int    `json:"qos"`
+	Retain     bool   `json:"retain"`
+	KeepAlive  int    `json:"keepAlive"`      // 秒
+	Timeout    int    `json:"connectTimeout"` // 秒
 }
 
 // NorthboundPayload 北向数据载荷

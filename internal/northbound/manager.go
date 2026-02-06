@@ -1,12 +1,8 @@
 package northbound
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
@@ -109,6 +105,12 @@ func (m *NorthboundManager) Stop() {
 func (m *NorthboundManager) RegisterAdapter(name string, adapter Northbound) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if old, exists := m.adapters[name]; exists {
+		_ = old.Close()
+	}
+	if breaker, exists := m.breakers[name]; exists {
+		breaker.Reset()
+	}
 	m.adapters[name] = adapter
 	m.uploadTimes[name] = time.Time{}
 	m.intervals[name] = 0
@@ -124,16 +126,17 @@ func (m *NorthboundManager) UnregisterAdapter(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if adapter, exists := m.adapters[name]; exists {
-		adapter.Close()
-		delete(m.adapters, name)
-		delete(m.uploadTimes, name)
-		delete(m.intervals, name)
-		delete(m.enabled, name)
-		// 清理熔断器
-		if breaker, exists := m.breakers[name]; exists {
-			breaker.Reset()
-			delete(m.breakers, name)
-		}
+		_ = adapter.Close()
+	}
+	delete(m.adapters, name)
+	delete(m.uploadTimes, name)
+	delete(m.intervals, name)
+	delete(m.enabled, name)
+	delete(m.pending, name)
+	// 清理熔断器
+	if breaker, exists := m.breakers[name]; exists {
+		breaker.Reset()
+		delete(m.breakers, name)
 	}
 }
 
@@ -177,6 +180,75 @@ func (m *NorthboundManager) GetAdapterCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.adapters)
+}
+
+// HasAdapter 检查指定适配器是否已注册
+func (m *NorthboundManager) HasAdapter(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.adapters[name]
+	return ok
+}
+
+// IsEnabled 返回北向运行使能状态
+func (m *NorthboundManager) IsEnabled(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.enabled[name]
+}
+
+// GetInterval 返回北向上传周期
+func (m *NorthboundManager) GetInterval(name string) time.Duration {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.intervals[name]
+}
+
+// GetLastUploadTime 返回最后发送时间
+func (m *NorthboundManager) GetLastUploadTime(name string) time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.uploadTimes[name]
+}
+
+// HasPending 返回是否存在待发送数据
+func (m *NorthboundManager) HasPending(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.pending[name]
+	return ok
+}
+
+// ListRuntimeNames 返回当前北向运行时所有名称（配置、适配器、缓冲、熔断器）
+func (m *NorthboundManager) ListRuntimeNames() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	seen := make(map[string]struct{})
+	for name := range m.adapters {
+		seen[name] = struct{}{}
+	}
+	for name := range m.intervals {
+		seen[name] = struct{}{}
+	}
+	for name := range m.enabled {
+		seen[name] = struct{}{}
+	}
+	for name := range m.pending {
+		seen[name] = struct{}{}
+	}
+	for name := range m.breakers {
+		seen[name] = struct{}{}
+	}
+	for name := range m.uploadTimes {
+		seen[name] = struct{}{}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	return names
 }
 
 // RemoveAdapter 移除适配器
@@ -243,329 +315,6 @@ func (m *NorthboundManager) GetBreakerState(name string) circuit.CircuitState {
 		return breaker.State() // State现在是方法调用
 	}
 	return circuit.Closed
-}
-
-// XunJiAdapter 循迹适配器
-type XunJiAdapter struct {
-	config      *models.XunJiConfig
-	client      interface{} // MQTT客户端
-	lastUpload  time.Time
-	mu          sync.RWMutex
-	initialized bool
-}
-
-// NewXunJiAdapter 创建循迹适配器
-func NewXunJiAdapter() *XunJiAdapter {
-	return &XunJiAdapter{
-		lastUpload: time.Time{},
-	}
-}
-
-// Name 获取名称
-func (a *XunJiAdapter) Name() string {
-	return "xunji"
-}
-
-// Initialize 初始化
-func (a *XunJiAdapter) Initialize(configStr string) error {
-	config := &models.XunJiConfig{}
-	if err := json.Unmarshal([]byte(configStr), config); err != nil {
-		return fmt.Errorf("failed to parse config: %w", err)
-	}
-	a.config = config
-
-	// 初始化MQTT客户端
-	// 注意：需要使用纯Go的MQTT库，如 paho.mqtt.golang
-
-	a.initialized = true
-	return nil
-}
-
-// Send 发送数据
-func (a *XunJiAdapter) Send(data *models.CollectData) error {
-	if !a.initialized {
-		return fmt.Errorf("adapter not initialized")
-	}
-
-	// 构建循迹消息
-	message := a.buildMessage(data)
-	log.Printf("XunJi message: %s", message)
-
-	// 发送到MQTT服务器
-	// 实际实现需要使用MQTT客户端
-
-	return nil
-}
-
-// SendAlarm 发送报警
-func (a *XunJiAdapter) SendAlarm(alarm *models.AlarmPayload) error {
-	if !a.initialized {
-		return fmt.Errorf("adapter not initialized")
-	}
-
-	// 构建报警消息
-	message := a.buildAlarmMessage(alarm)
-	log.Printf("XunJi alarm message: %s", message)
-
-	// 发送到MQTT服务器
-
-	return nil
-}
-
-// buildMessage 构建循迹消息
-func (a *XunJiAdapter) buildMessage(data *models.CollectData) string {
-	properties := make(map[string]interface{})
-	for key, value := range data.Fields {
-		properties[key] = value
-	}
-
-	msg := map[string]interface{}{
-		"id":      fmt.Sprintf("msg_%d", time.Now().UnixNano()),
-		"version": "1.0",
-		"sys": map[string]interface{}{
-			"ack": 1,
-		},
-		"params": map[string]interface{}{
-			"properties": properties,
-			"events":     map[string]interface{}{},
-			"subDevices": []interface{}{
-				map[string]interface{}{
-					"identity": map[string]string{
-						"productKey": data.ProductKey,
-						"deviceKey":  data.DeviceKey,
-					},
-					"properties": properties,
-				},
-			},
-		},
-	}
-
-	jsonBytes, _ := json.Marshal(msg)
-	return string(jsonBytes)
-}
-
-// buildAlarmMessage 构建报警消息
-func (a *XunJiAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
-	eventValue := map[string]interface{}{
-		"field_name":   alarm.FieldName,
-		"actual_value": alarm.ActualValue,
-		"threshold":    alarm.Threshold,
-		"operator":     alarm.Operator,
-		"message":      alarm.Message,
-	}
-
-	event := map[string]interface{}{
-		"value": eventValue,
-		"time":  time.Now().UnixMilli(),
-	}
-
-	events := map[string]interface{}{
-		"alarm": event,
-	}
-
-	msg := map[string]interface{}{
-		"id":      fmt.Sprintf("alarm_%d", time.Now().UnixNano()),
-		"version": "1.0",
-		"sys": map[string]interface{}{
-			"ack": 1,
-		},
-		"params": map[string]interface{}{
-			"properties": map[string]interface{}{},
-			"events":     events,
-			"subDevices": []interface{}{
-				map[string]interface{}{
-					"identity": map[string]string{
-						"productKey": alarm.ProductKey,
-						"deviceKey":  alarm.DeviceKey,
-					},
-					"properties": map[string]interface{}{},
-					"events":     events,
-				},
-			},
-		},
-	}
-
-	jsonBytes, _ := json.Marshal(msg)
-	return string(jsonBytes)
-}
-
-// Close 关闭
-func (a *XunJiAdapter) Close() error {
-	a.initialized = false
-	a.config = nil
-	return nil
-}
-
-// HTTPAdapter HTTP适配器
-type HTTPAdapter struct {
-	config      string
-	url         string
-	headers     map[string]string
-	lastUpload  time.Time
-	timeout     time.Duration
-	mu          sync.RWMutex
-	initialized bool
-}
-
-// HTTPConfig HTTP配置
-type HTTPConfig struct {
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
-	Timeout int               `json:"timeout"` // 秒
-}
-
-// NewHTTPAdapter 创建HTTP适配器
-func NewHTTPAdapter() *HTTPAdapter {
-	return &HTTPAdapter{
-		lastUpload: time.Time{},
-		timeout:    30 * time.Second,
-	}
-}
-
-// Name 获取名称
-func (a *HTTPAdapter) Name() string {
-	return "http"
-}
-
-// Initialize 初始化
-func (a *HTTPAdapter) Initialize(configStr string) error {
-	config := &HTTPConfig{}
-	if err := json.Unmarshal([]byte(configStr), config); err != nil {
-		return fmt.Errorf("failed to parse HTTP config: %w", err)
-	}
-
-	a.config = configStr
-	a.url = config.URL
-	a.headers = config.Headers
-	if config.Timeout > 0 {
-		a.timeout = time.Duration(config.Timeout) * time.Second
-	}
-	a.initialized = true
-
-	log.Printf("HTTP adapter initialized: %s", a.url)
-	return nil
-}
-
-// Send 发送数据
-func (a *HTTPAdapter) Send(data *models.CollectData) error {
-	if !a.initialized {
-		return fmt.Errorf("adapter not initialized")
-	}
-
-	// 构建消息
-	msg := map[string]interface{}{
-		"device_name": data.DeviceName,
-		"timestamp":   data.Timestamp,
-		"fields":      data.Fields,
-	}
-
-	body, _ := json.Marshal(msg)
-	return a.sendRequest(a.url, body, "data")
-}
-
-// SendAlarm 发送报警
-func (a *HTTPAdapter) SendAlarm(alarm *models.AlarmPayload) error {
-	if !a.initialized {
-		return fmt.Errorf("adapter not initialized")
-	}
-
-	body, _ := json.Marshal(alarm)
-	return a.sendRequest(a.url, body, "alarm")
-}
-
-// sendRequest 发送HTTP请求
-func (a *HTTPAdapter) sendRequest(url string, body []byte, msgType string) error {
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// 设置 headers
-	req.Header.Set("Content-Type", "application/json")
-	for k, v := range a.headers {
-		req.Header.Set(k, v)
-	}
-
-	client := &http.Client{Timeout: a.timeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("HTTP %s request failed: %v", msgType, err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	log.Printf("HTTP %s sent successfully to %s", msgType, url)
-	return nil
-}
-
-// Close 关闭
-func (a *HTTPAdapter) Close() error {
-	a.initialized = false
-	return nil
-}
-
-// MQTTAdapter MQTT适配器
-type MQTTAdapter struct {
-	config      string
-	broker      string
-	topic       string
-	clientID    string
-	lastUpload  time.Time
-	mu          sync.RWMutex
-	initialized bool
-}
-
-// NewMQTTAdapter 创建MQTT适配器
-func NewMQTTAdapter() *MQTTAdapter {
-	return &MQTTAdapter{
-		lastUpload: time.Time{},
-	}
-}
-
-// Name 获取名称
-func (a *MQTTAdapter) Name() string {
-	return "mqtt"
-}
-
-// Initialize 初始化
-func (a *MQTTAdapter) Initialize(configStr string) error {
-	// 解析MQTT配置
-	a.config = configStr
-	a.initialized = true
-	return nil
-}
-
-// Send 发送数据
-func (a *MQTTAdapter) Send(data *models.CollectData) error {
-	if !a.initialized {
-		return fmt.Errorf("adapter not initialized")
-	}
-
-	// 发布MQTT消息
-	log.Printf("MQTT data to %s: %v", a.topic, data)
-	return nil
-}
-
-// SendAlarm 发送报警
-func (a *MQTTAdapter) SendAlarm(alarm *models.AlarmPayload) error {
-	if !a.initialized {
-		return fmt.Errorf("adapter not initialized")
-	}
-
-	// 发布MQTT消息
-	log.Printf("MQTT alarm to %s: %v", a.topic, alarm)
-	return nil
-}
-
-// Close 关闭
-func (a *MQTTAdapter) Close() error {
-	a.initialized = false
-	return nil
 }
 
 func (m *NorthboundManager) shouldSend(name string) bool {

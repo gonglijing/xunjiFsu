@@ -66,6 +66,15 @@ export async function postJSON(url, body, options = {}) {
   return parseJSON(res);
 }
 
+export async function post(url, options = {}) {
+  const res = await authFetch(url, {
+    method: 'POST',
+    ...options,
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return parseJSON(res);
+}
+
 export async function putJSON(url, body, options = {}) {
   const res = await authFetch(url, {
     method: 'PUT',

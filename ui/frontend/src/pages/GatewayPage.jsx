@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
-import { getJSON, putJSON } from '../api';
+import { getJSON, post, putJSON } from '../api';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 
@@ -12,6 +12,7 @@ function GatewayPage() {
   });
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
+  const [syncing, setSyncing] = createSignal(false);
   const [err, setErr] = createSignal('');
 
   const load = () => {
@@ -46,6 +47,21 @@ function GatewayPage() {
         toast.show('error', '保存失败');
       })
       .finally(() => setSaving(false));
+  };
+
+  const syncNorthboundIdentity = () => {
+    setSyncing(true);
+    post('/api/gateway/northbound/sync-identity')
+      .then((res) => {
+        const data = res?.data || res || {};
+        const updated = data.updated?.length || 0;
+        const failed = data.failed ? Object.keys(data.failed).length : 0;
+        toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
+      })
+      .catch((er) => {
+        toast.show('error', er.message || '同步失败');
+      })
+      .finally(() => setSyncing(false));
   };
 
   return (
@@ -96,6 +112,9 @@ function GatewayPage() {
             <div class="flex" style={{ gap: '8px', marginTop: '16px' }}>
               <button type="submit" class="btn btn-primary" disabled={saving()}>
                 {saving() ? '保存中...' : '保存配置'}
+              </button>
+              <button type="button" class="btn" onClick={syncNorthboundIdentity} disabled={syncing() || saving()}>
+                {syncing() ? '同步中...' : '同步到北向'}
               </button>
             </div>
           </form>

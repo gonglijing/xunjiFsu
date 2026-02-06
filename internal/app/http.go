@@ -115,10 +115,12 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	api.HandleFunc("/devices/{id}/writables", h.GetDeviceWritables).Methods("GET")
 
 	api.HandleFunc("/northbound", h.GetNorthboundConfigs).Methods("GET")
+	api.HandleFunc("/northbound/status", h.GetNorthboundStatus).Methods("GET")
 	api.HandleFunc("/northbound", h.CreateNorthboundConfig).Methods("POST")
 	api.HandleFunc("/northbound/{id}", h.UpdateNorthboundConfig).Methods("PUT")
 	api.HandleFunc("/northbound/{id}", h.DeleteNorthboundConfig).Methods("DELETE")
 	api.HandleFunc("/northbound/{id}/toggle", h.ToggleNorthboundEnable).Methods("POST")
+	api.HandleFunc("/northbound/{id}/reload", h.ReloadNorthboundConfig).Methods("POST")
 
 	api.HandleFunc("/thresholds", h.GetThresholds).Methods("GET")
 	api.HandleFunc("/thresholds", h.CreateThreshold).Methods("POST")
@@ -155,4 +157,5 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	// 网关配置
 	api.HandleFunc("/gateway/config", h.GetGatewayConfig).Methods("GET")
 	api.HandleFunc("/gateway/config", h.UpdateGatewayConfig).Methods("PUT")
+	api.HandleFunc("/gateway/northbound/sync-identity", h.SyncGatewayIdentityToNorthbound).Methods("POST")
 }

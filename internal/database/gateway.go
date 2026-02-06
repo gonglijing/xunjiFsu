@@ -1,12 +1,14 @@
 package database
 
+import "strings"
+
 // GatewayConfig 网关配置
 type GatewayConfig struct {
-	ID         int64     `json:"id" db:"id"`
-	ProductKey string    `json:"product_key" db:"product_key"`
-	DeviceKey  string    `json:"device_key" db:"device_key"`
-	GatewayName string   `json:"gateway_name" db:"gateway_name"`
-	UpdatedAt  string    `json:"updated_at" db:"updated_at"`
+	ID          int64  `json:"id" db:"id"`
+	ProductKey  string `json:"product_key" db:"product_key"`
+	DeviceKey   string `json:"device_key" db:"device_key"`
+	GatewayName string `json:"gateway_name" db:"gateway_name"`
+	UpdatedAt   string `json:"updated_at" db:"updated_at"`
 }
 
 // InitGatewayConfigTable 创建网关配置表
@@ -52,9 +54,35 @@ func GetGatewayConfig() (*GatewayConfig, error) {
 
 // UpdateGatewayConfig 更新网关配置
 func UpdateGatewayConfig(cfg *GatewayConfig) error {
+	if cfg == nil {
+		return nil
+	}
+
+	if strings.TrimSpace(cfg.GatewayName) == "" {
+		cfg.GatewayName = "HuShu智能网关"
+	}
+
+	targetID := cfg.ID
+	if targetID <= 0 {
+		current, err := GetGatewayConfig()
+		if err != nil {
+			return err
+		}
+		targetID = current.ID
+	}
+
 	_, err := ParamDB.Exec(`UPDATE gateway_config SET product_key = ?, device_key = ?, gateway_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		cfg.ProductKey, cfg.DeviceKey, cfg.GatewayName, cfg.ID)
+		cfg.ProductKey, cfg.DeviceKey, cfg.GatewayName, targetID)
 	return err
+}
+
+// GetGatewayIdentity 获取网关身份信息
+func GetGatewayIdentity() (string, string) {
+	cfg, err := GetGatewayConfig()
+	if err != nil || cfg == nil {
+		return "", ""
+	}
+	return strings.TrimSpace(cfg.ProductKey), strings.TrimSpace(cfg.DeviceKey)
 }
 
 // GetGatewayProductKey 获取产品密钥

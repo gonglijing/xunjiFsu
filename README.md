@@ -221,6 +221,53 @@ northbound:
 
 如果需要为单个北向配置指定插件路径，可在配置 JSON 中设置 `plugin_path`。
 
+#### 配置示例
+
+HTTP:
+
+```json
+{
+  "url": "http://127.0.0.1:8080/ingest",
+  "headers": { "Authorization": "Bearer xxx" },
+  "timeout": 30
+}
+```
+
+MQTT:
+
+```json
+{
+  "broker": "tcp://127.0.0.1:1883",
+  "topic": "gogw/data",
+  "alarm_topic": "gogw/alarm",
+  "client_id": "gogw-mqtt-1",
+  "username": "",
+  "password": "",
+  "qos": 0,
+  "retain": false,
+  "keep_alive": 60,
+  "connect_timeout": 10
+}
+```
+
+XunJi:
+
+```json
+{
+  "productKey": "pk",
+  "deviceKey": "dk",
+  "serverUrl": "tcp://127.0.0.1:1883",
+  "username": "",
+  "password": "",
+  "topic": "xunji/pk/dk",
+  "alarmTopic": "xunji/pk/dk/alarm",
+  "qos": 0,
+  "retain": false,
+  "keepAlive": 60,
+  "connectTimeout": 10
+}
+```
+
 ### 开发模式
 
 ```bash
@@ -386,10 +433,12 @@ make deploy-windows  # Windows
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/northbound` | 北向配置列表 |
+| GET | `/api/northbound/status` | 北向运行状态列表 |
 | POST | `/api/northbound` | 创建北向配置 |
 | PUT | `/api/northbound/{id}` | 更新配置 |
 | DELETE | `/api/northbound/{id}` | 删除配置 |
 | POST | `/api/northbound/{id}/toggle` | 启用/禁用 |
+| POST | `/api/northbound/{id}/reload` | 重载单个北向运行时 |
 
 ### 报警
 
@@ -469,6 +518,7 @@ make deploy-windows  # Windows
 |------|------|------|
 | GET | `/api/gateway/config` | 获取网关配置 |
 | PUT | `/api/gateway/config` | 更新网关配置 |
+| POST | `/api/gateway/northbound/sync-identity` | 将网关 ProductKey/DeviceKey 同步到 xunji 北向配置 |
 
 ## 驱动开发
 

@@ -1,5 +1,5 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
-import { del, getJSON, postJSON, putJSON } from '../api';
+import { del, getJSON, post, postJSON, putJSON } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -8,16 +8,32 @@ const empty = { name: '', type: 'http', upload_interval: 5000, config: '{}', ena
 export function Northbound() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
+  const [runtime, setRuntime] = createSignal([]);
   const [loading, setLoading] = createSignal(true);
   const [form, setForm] = createSignal(empty);
   const [editing, setEditing] = createSignal(null);
   const [showModal, setShowModal] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
+  const [syncing, setSyncing] = createSignal(false);
+
+  const runtimeByName = () => {
+    const map = {};
+    for (const item of runtime()) {
+      if (item?.name) map[item.name] = item;
+    }
+    return map;
+  };
 
   const load = () => {
     setLoading(true);
-    getJSON('/api/northbound')
-      .then((res) => setItems(res.data || res))
+    Promise.all([
+      getJSON('/api/northbound'),
+      getJSON('/api/northbound/status'),
+    ])
+      .then(([configs, status]) => {
+        setItems(configs.data || configs);
+        setRuntime(status.data || status);
+      })
       .catch(() => toast.show('error', '加载北向配置失败'))
       .finally(() => setLoading(false));
   };
@@ -41,10 +57,33 @@ export function Northbound() {
     .finally(() => setSaving(false));
   };
 
-  const toggle = (id, enabled) => {
+  const toggle = (id) => {
     postJSON(`/api/northbound/${id}/toggle`, {})
       .then(load)
       .catch(() => toast.show('error', '切换失败'));
+  };
+
+  const reload = (id) => {
+    post(`/api/northbound/${id}/reload`)
+      .then(() => {
+        toast.show('success', '重载成功');
+        load();
+      })
+      .catch(() => toast.show('error', '重载失败'));
+  };
+
+  const syncGatewayIdentity = () => {
+    setSyncing(true);
+    post('/api/gateway/northbound/sync-identity')
+      .then((res) => {
+        const data = res?.data || res || {};
+        const updated = data.updated?.length || 0;
+        const failed = data.failed ? Object.keys(data.failed).length : 0;
+        toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
+        load();
+      })
+      .catch((err) => toast.show('error', err?.message || '同步失败'))
+      .finally(() => setSyncing(false));
   };
 
   const remove = (id) => {
@@ -71,9 +110,14 @@ export function Northbound() {
       <Card
         title="北向配置列表"
         extra={
-          <button class="btn btn-primary" onClick={openCreate}>
-            新增配置
-          </button>
+          <div class="flex" style="gap:8px;">
+            <button class="btn" onClick={syncGatewayIdentity} disabled={syncing()}>
+              {syncing() ? '同步中...' : '同步网关身份'}
+            </button>
+            <button class="btn btn-primary" onClick={openCreate}>
+              新增配置
+            </button>
+          </div>
         }
       >
         {loading() ? (
@@ -91,6 +135,7 @@ export function Northbound() {
                   <th>类型</th>
                   <th>上传间隔(ms)</th>
                   <th>状态</th>
+                  <th>运行态</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -109,9 +154,23 @@ export function Northbound() {
                           {n.enabled === 1 ? '启用' : '禁用'}
                         </span>
                       </td>
+                      <td>
+                        {(() => {
+                          const rt = runtimeByName()[n.name] || n.runtime || {};
+                          const registered = rt.registered ? '已注册' : '未注册';
+                          const breaker = rt.breaker_state || 'closed';
+                          return (
+                            <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                              <div>{registered} / {rt.enabled ? '运行' : '停止'}</div>
+                              <div>熔断: {breaker}</div>
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td class="flex" style="gap:8px;">
                         <button class="btn" onClick={() => edit(n)}>编辑</button>
-                        <button class="btn" onClick={() => toggle(n.id, n.enabled === 1)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
+                        <button class="btn" onClick={() => toggle(n.id)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
+                        <button class="btn" onClick={() => reload(n.id)}>重载</button>
                         <button class="btn btn-danger" onClick={() => remove(n.id)}>删除</button>
                       </td>
                     </tr>
@@ -119,7 +178,7 @@ export function Northbound() {
                 </For>
                 <Show when={items().length === 0}>
                   <tr>
-                    <td colSpan={6} style="text-align:center; padding:24px; color:var(--text-muted);">暂无配置</td>
+                    <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">暂无配置</td>
                   </tr>
                 </Show>
               </tbody>
