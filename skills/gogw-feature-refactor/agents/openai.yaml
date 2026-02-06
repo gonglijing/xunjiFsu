@@ -1,0 +1,4 @@
+interface:
+  display_name: "GoGW Refactor Assistant"
+  short_description: "Refactor gogw backend/frontend/WASM safely"
+  default_prompt: "Use $gogw-feature-refactor to implement and validate this gogw change end-to-end."

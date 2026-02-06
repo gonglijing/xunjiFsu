@@ -1,0 +1,4 @@
+interface:
+  display_name: "GoGW Submodule Publisher"
+  short_description: "Publish drvs/plugin_north with safe ordering"
+  default_prompt: "Use $gogw-submodule-publisher to publish submodule changes and sync parent gitlinks safely."
