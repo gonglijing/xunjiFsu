@@ -1,7 +1,8 @@
-import { createSignal, createEffect, For } from 'solid-js';
+import { createSignal, createEffect } from 'solid-js';
 import { del, getJSON, postJSON, putJSON, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import CrudTable from '../components/CrudTable';
 
 const empty = { name: '', storage_days: 30, enabled: 1 };
 
@@ -61,56 +62,37 @@ export function Storage() {
       .catch(() => toast.show('error', '清理失败'));
   };
 
+  const columns = [
+    { key: 'id', title: 'ID' },
+    { key: 'name', title: '名称' },
+    { key: 'storage_days', title: '保留天数' },
+    {
+      key: 'enabled',
+      title: '状态',
+      render: (s) => (
+        <span class={`badge ${s.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
+          {s.enabled === 1 ? '启用' : '禁用'}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div class="grid" style="grid-template-columns: 3fr 1.4fr; gap:24px;">
       <Card title="存储策略列表" extra={<button class="btn" onClick={runCleanup}>立即清理</button>}>
-        {loading() ? (
-          <div class="text-center" style="padding:48px; color:var(--text-muted);">
-            <div class="loading-spinner" style="margin:0 auto 16px;"></div>
-            <div>加载中...</div>
-          </div>
-        ) : (
-          <div class="table-container" style="max-height:520px; overflow:auto;">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>名称</th>
-                  <th>保留天数</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={items()}>
-                  {(s) => (
-                    <tr>
-                      <td>{s.id}</td>
-                      <td>{s.name}</td>
-                      <td>{s.storage_days}</td>
-                      <td>
-                        <span class={`badge ${s.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
-                          {s.enabled === 1 ? '启用' : '禁用'}
-                        </span>
-                      </td>
-                      <td class="flex" style="gap:8px;">
-                        <button class="btn" onClick={() => edit(s)}>编辑</button>
-                        <button class="btn btn-danger" onClick={() => remove(s.id)}>删除</button>
-                      </td>
-                    </tr>
-                  )}
-                </For>
-                <For each={items().length === 0 ? [1] : []}>
-                  {() => (
-                    <tr>
-                      <td colSpan={5} style="text-align:center; padding:24px; color:var(--text-muted);">暂无配置</td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </div>
-        )}
+        <CrudTable
+          columns={columns}
+          items={items()}
+          loading={loading()}
+          emptyText="暂无配置"
+          renderActions={(s) => (
+            <div class="flex" style="gap:8px;">
+              <button class="btn" onClick={() => edit(s)}>编辑</button>
+              <button class="btn btn-danger" onClick={() => remove(s.id)}>删除</button>
+            </div>
+          )}
+          style="max-height:520px; overflow:auto;"
+        />
       </Card>
 
       <Card title={editing() ? '编辑存储策略' : '新增存储策略'}>

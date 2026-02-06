@@ -1,7 +1,8 @@
-import { createSignal, createEffect, For } from 'solid-js';
+import { createSignal, createEffect } from 'solid-js';
 import { del, getJSON, post, upload as uploadWithAuth, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import CrudTable from '../components/CrudTable';
 
 export function Drivers() {
   const toast = useToast();
@@ -82,64 +83,63 @@ export function Drivers() {
         </div>
       }
     >
-        {loading() ? (
-          <div class="text-center" style="padding:48px; color:var(--text-muted);">
-            <div class="loading-spinner" style="margin:0 auto 16px;"></div>
-            <div>加载中...</div>
-          </div>
-        ) : error() ? (
-          <div style="color:var(--accent-red); padding:16px 0;">{error()}</div>
-        ) : (
-          <div class="table-container" style="max-height:520px; overflow:auto;">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>名称</th>
-                  <th>文件</th>
-                  <th>版本</th>
-                  <th>大小</th>
-                  <th>运行态</th>
-                  <th>最后活跃</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={items()}>
-                  {(d) => (
-                    <tr>
-                      <td>{d.id}</td>
-                      <td>{d.name}</td>
-                      <td>{d.filename || d.file_path || ''}</td>
-                      <td>{d.version || '-'}</td>
-                      <td>{fmtSize(d.size)}</td>
-                      <td>
-                        <span class={`badge ${d.loaded ? 'badge-running' : 'badge-stopped'}`}>
-                          {d.loaded ? '已加载' : '未加载'}
-                        </span>
-                      </td>
-                      <td>{fmtTime(d.last_active)}</td>
-                      <td class="flex" style="gap:8px;">
-                        <button class="btn" onClick={() => reloadDriver(d)} disabled={busyId() === d.id}>
-                          {busyId() === d.id ? '重载中...' : '重载'}
-                        </button>
-                        <a class="btn" href={`/api/drivers/${d.id}/download`}>下载</a>
-                        <button class="btn btn-danger" onClick={() => remove(d.id, d.name)}>删除</button>
-                      </td>
-                    </tr>
-                  )}
-                </For>
-                <For each={items().length === 0 ? [1] : []}>
-                  {() => (
-                    <tr>
-                      <td colSpan={8} style="text-align:center; padding:24px; color:var(--text-muted);">暂无驱动</td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </div>
-        )}
+      {loading() ? (
+        <div class="text-center" style="padding:48px; color:var(--text-muted);">
+          <div class="loading-spinner" style="margin:0 auto 16px;"></div>
+          <div>加载中...</div>
+        </div>
+      ) : error() ? (
+        <div style="color:var(--accent-red); padding:16px 0;">{error()}</div>
+      ) : (
+        <CrudTable
+          style="max-height:520px; overflow:auto;"
+          loading={loading()}
+          items={items()}
+          emptyText="暂无驱动"
+          columns={[
+            { key: 'id', title: 'ID' },
+            { key: 'name', title: '名称' },
+            {
+              key: 'filename',
+              title: '文件',
+              render: (d) => d.filename || d.file_path || '',
+            },
+            {
+              key: 'version',
+              title: '版本',
+              render: (d) => d.version || '-',
+            },
+            {
+              key: 'size',
+              title: '大小',
+              render: (d) => fmtSize(d.size),
+            },
+            {
+              key: 'loaded',
+              title: '运行态',
+              render: (d) => (
+                <span class={`badge ${d.loaded ? 'badge-running' : 'badge-stopped'}`}>
+                  {d.loaded ? '已加载' : '未加载'}
+                </span>
+              ),
+            },
+            {
+              key: 'last_active',
+              title: '最后活跃',
+              render: (d) => fmtTime(d.last_active),
+            },
+          ]}
+          renderActions={(d) => (
+            <div class="flex" style="gap:8px;">
+              <button class="btn" onClick={() => reloadDriver(d)} disabled={busyId() === d.id}>
+                {busyId() === d.id ? '重载中...' : '重载'}
+              </button>
+              <a class="btn" href={`/api/drivers/${d.id}/download`}>下载</a>
+              <button class="btn btn-danger" onClick={() => remove(d.id, d.name)}>删除</button>
+            </div>
+          )}
+        />
+      )}
     </Card>
   );
 }

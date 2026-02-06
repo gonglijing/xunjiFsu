@@ -13,6 +13,7 @@ import { ThresholdsPage } from './pages/ThresholdsPage';
 import AlarmsPage from './pages/AlarmsPage';
 import Realtime from './pages/Realtime';
 import { StoragePage } from './pages/StoragePage';
+import Topology from './pages/Topology';
 
 function App() {
   const [path, setNavigate, query] = usePath();
@@ -59,6 +60,8 @@ function App() {
         return <AlarmsPage />;
       case currentPath.startsWith('/realtime'):
         return <Realtime />;
+      case currentPath.startsWith('/topology'):
+        return <Topology />;
       default:
         return <Dashboard />;
     }

@@ -1,7 +1,8 @@
-import { createSignal, createEffect, Show, For } from 'solid-js';
+import { createSignal, createEffect, Show } from 'solid-js';
 import { del, getJSON, post, postJSON, putJSON, unwrapData } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import CrudTable from '../components/CrudTable';
 
 const empty = { name: '', type: 'http', upload_interval: 5000, config: '{}', enabled: 1 };
 
@@ -126,64 +127,56 @@ export function Northbound() {
             <div>加载中...</div>
           </div>
         ) : (
-          <div class="table-container" style="max-height:520px; overflow:auto;">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>名称</th>
-                  <th>类型</th>
-                  <th>上传间隔(ms)</th>
-                  <th>状态</th>
-                  <th>运行态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={items()}>
-                  {(n) => (
-                    <tr>
-                      <td>{n.id}</td>
-                      <td>{n.name}</td>
-                      <td>
-                        <span class="badge badge-info">{n.type.toUpperCase()}</span>
-                      </td>
-                      <td>{n.upload_interval}</td>
-                      <td>
-                        <span class={`badge ${n.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
-                          {n.enabled === 1 ? '启用' : '禁用'}
-                        </span>
-                      </td>
-                      <td>
-                        {(() => {
-                          const rt = runtimeByName()[n.name] || n.runtime || {};
-                          const registered = rt.registered ? '已注册' : '未注册';
-                          const breaker = rt.breaker_state || 'closed';
-                          return (
-                            <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
-                              <div>{registered} / {rt.enabled ? '运行' : '停止'}</div>
-                              <div>熔断: {breaker}</div>
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td class="flex" style="gap:8px;">
-                        <button class="btn" onClick={() => edit(n)}>编辑</button>
-                        <button class="btn" onClick={() => toggle(n.id)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
-                        <button class="btn" onClick={() => reload(n.id)}>重载</button>
-                        <button class="btn btn-danger" onClick={() => remove(n.id)}>删除</button>
-                      </td>
-                    </tr>
-                  )}
-                </For>
-                <Show when={items().length === 0}>
-                  <tr>
-                    <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">暂无配置</td>
-                  </tr>
-                </Show>
-              </tbody>
-            </table>
-          </div>
+          <CrudTable
+            style="max-height:520px; overflow:auto;"
+            loading={loading()}
+            items={items()}
+            emptyText="暂无配置"
+            columns={[
+              { key: 'id', title: 'ID' },
+              { key: 'name', title: '名称' },
+              {
+                key: 'type',
+                title: '类型',
+                render: (n) => (
+                  <span class="badge badge-info">{n.type.toUpperCase()}</span>
+                ),
+              },
+              { key: 'upload_interval', title: '上传间隔(ms)' },
+              {
+                key: 'enabled',
+                title: '状态',
+                render: (n) => (
+                  <span class={`badge ${n.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
+                    {n.enabled === 1 ? '启用' : '禁用'}
+                  </span>
+                ),
+              },
+              {
+                key: 'runtime',
+                title: '运行态',
+                render: (n) => {
+                  const rt = runtimeByName()[n.name] || n.runtime || {};
+                  const registered = rt.registered ? '已注册' : '未注册';
+                  const breaker = rt.breaker_state || 'closed';
+                  return (
+                    <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                      <div>{registered} / {rt.enabled ? '运行' : '停止'}</div>
+                      <div>熔断: {breaker}</div>
+                    </div>
+                  );
+                },
+              },
+            ]}
+            renderActions={(n) => (
+              <div class="flex" style="gap:8px;">
+                <button class="btn" onClick={() => edit(n)}>编辑</button>
+                <button class="btn" onClick={() => toggle(n.id)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
+                <button class="btn" onClick={() => reload(n.id)}>重载</button>
+                <button class="btn btn-danger" onClick={() => remove(n.id)}>删除</button>
+              </div>
+            )}
+          />
         )}
       </Card>
 

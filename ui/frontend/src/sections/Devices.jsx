@@ -2,6 +2,8 @@ import { createSignal, createEffect, For, Show } from 'solid-js';
 import { del, getJSON, postJSON, putJSON } from '../api';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import CrudTable from '../components/CrudTable';
+import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 
 const defaultForm = {
   name: '',
@@ -42,6 +44,11 @@ export function Devices() {
   const [writeForm, setWriteForm] = createSignal({ field: '', value: '' });
   const [writeError, setWriteError] = createSignal('');
   const [writeTarget, setWriteTarget] = createSignal(null);
+  const [detailVisible, setDetailVisible] = createSignal(false);
+  const [detailDevice, setDetailDevice] = createSignal(null);
+  const [detailCache, setDetailCache] = createSignal([]);
+  const [detailAlarms, setDetailAlarms] = createSignal([]);
+  const [detailLoading, setDetailLoading] = createSignal(false);
   let modalRoot;
 
   const normalizeList = (res) => {
@@ -79,6 +86,14 @@ export function Devices() {
   createEffect(() => {
     if (!showModal()) return;
     const handler = (e) => { if (e.key === 'Escape') setShowModal(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
+  // ESC 关闭详情抽屉
+  createEffect(() => {
+    if (!detailVisible()) return;
+    const handler = (e) => { if (e.key === 'Escape') closeDetail(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   });
@@ -155,6 +170,31 @@ export function Devices() {
       .catch((err) => setWriteError(err.message || '写入失败'));
   };
 
+  const openDetail = async (device) => {
+    setDetailDevice(device);
+    setDetailVisible(true);
+    setDetailLoading(true);
+    try {
+      const [cacheRes, alarmsRes] = await Promise.all([
+        getJSON(`/api/data/cache/${device.id}`),
+        getJSON('/api/alarms'),
+      ]);
+      const cacheVal = Array.isArray(cacheRes) ? cacheRes : cacheRes?.data || [];
+      const allAlarms = Array.isArray(alarmsRes) ? alarmsRes : alarmsRes?.data || [];
+      setDetailCache(cacheVal);
+      setDetailAlarms(allAlarms.filter((a) => String(a.device_id) === String(device.id)));
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setDetailVisible(false);
+    setDetailDevice(null);
+    setDetailCache([]);
+    setDetailAlarms([]);
+  };
+
   const openCreate = () => {
     setForm(defaultForm);
     setEditing(null);
@@ -218,70 +258,62 @@ export function Devices() {
         ) : error() ? (
           <div style="color:var(--accent-red); padding:16px 0;">{error()}</div>
         ) : (
-          <div class="table-container" style="max-height:520px; overflow:auto;">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>名称</th>
-                  <th>驱动类型</th>
-                  <th>驱动</th>
-                  <th>资源</th>
-                  <th>周期(ms)</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={filtered()}>
-                  {(d) => (
-                    <tr>
-                      <td>{d.id}</td>
-                      <td>{d.name}</td>
-                      <td>{d.driver_type}</td>
-                      <td>{d.driver_name || (d.driver_id ? `驱动 #${d.driver_id}` : '-')}</td>
-                      <td>
-                        {d.resource_name ? (
-                          <div>
-                            <div>{d.resource_name}</div>
-                            <div class="text-muted text-xs">{d.resource_path}</div>
-                          </div>
-                        ) : (
-                          <span style="color:var(--text-muted);">-</span>
-                        )}
-                      </td>
-                      <td>{d.collect_interval}</td>
-                      <td>
-                        <span class={`badge ${d.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
-                          {d.enabled === 1 ? '启用' : '禁用'}
-                        </span>
-                      </td>
-                      <td class="flex" style="gap:4px;">
-                        <button class="btn" onClick={() => edit(d)}>编辑</button>
-                        <button class="btn" onClick={() => toggle(d.id)}>
-                          {d.enabled === 1 ? '禁用' : '启用'}
-                        </button>
-                        <button 
-                          class="btn btn-danger" 
-                          style={{ 'padding-left': '8px', 'padding-right': '8px' }}
-                          onClick={() => remove(d.id)}
-                        >
-                          删
-                        </button>
-                      </td>
-                    </tr>
-                  )}
-                </For>
-                <For each={filtered().length === 0 ? [1] : []}>
-                  {() => (
-                    <tr>
-                      <td colSpan={8} style="text-align:center; padding:24px; color:var(--text-muted);">暂无设备</td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </div>
+          <CrudTable
+            style="max-height:520px; overflow:auto;"
+            loading={loading()}
+            items={filtered()}
+            emptyText="暂无设备"
+            columns={[
+              { key: 'id', title: 'ID' },
+              { key: 'name', title: '名称' },
+              { key: 'driver_type', title: '驱动类型' },
+              {
+                key: 'driver_name',
+                title: '驱动',
+                render: (d) => d.driver_name || (d.driver_id ? `驱动 #${d.driver_id}` : '-'),
+              },
+              {
+                key: 'resource',
+                title: '资源',
+                render: (d) =>
+                  d.resource_name ? (
+                    <div>
+                      <div>{d.resource_name}</div>
+                      <div class="text-muted text-xs">{d.resource_path}</div>
+                    </div>
+                  ) : (
+                    <span style="color:var(--text-muted);">-</span>
+                  ),
+              },
+              { key: 'collect_interval', title: '周期(ms)' },
+              {
+                key: 'enabled',
+                title: '状态',
+                render: (d) => (
+                  <span class={`badge ${d.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
+                    {d.enabled === 1 ? '启用' : '禁用'}
+                  </span>
+                ),
+              },
+            ]}
+            renderActions={(d) => (
+              <div class="flex" style="gap:4px;">
+                <button class="btn" onClick={() => openDetail(d)}>详情</button>
+                <button class="btn" onClick={() => edit(d)}>编辑</button>
+                <button class="btn" onClick={() => toggle(d.id)}>
+                  {d.enabled === 1 ? '禁用' : '启用'}
+                </button>
+                <button
+                  class="btn btn-danger"
+                  style={{ 'padding-left': '8px', 'padding-right': '8px' }}
+                  onClick={() => remove(d.id)}
+                >
+                  删
+                </button>
+                <button class="btn" onClick={() => openWrite(d)}>写入</button>
+              </div>
+            )}
+          />
         )}
       </Card>
 
@@ -559,6 +591,15 @@ export function Devices() {
           </div>
         </div>
       </Show>
+
+      <DeviceDetailDrawer
+        visible={detailVisible()}
+        device={detailDevice}
+        cache={detailCache}
+        alarms={detailAlarms}
+        loading={detailLoading}
+        onClose={closeDetail}
+      />
     </div>
   );
 }
