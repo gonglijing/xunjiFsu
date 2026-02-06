@@ -112,6 +112,7 @@ function DeviceDetailDrawer(props) {
                               <td>{formatDateTime(a.triggered_at)}</td>
                             </tr>
                           )}
+                        </For>
                       </tbody>
                     </table>
                   </div>
