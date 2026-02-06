@@ -1,0 +1,4 @@
+[submodule "plugin_north"]
+	path = plugin_north
+	url = git@github.com:gonglijing/xunjiNorth.git
+	branch = main
