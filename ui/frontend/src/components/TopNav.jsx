@@ -1,13 +1,13 @@
 import { createSignal, Show } from 'solid-js';
 import { isActive } from '../router';
 
-const mainLinks = [
+export const mainLinks = [
   { to: '/', label: '仪表盘', icon: '◉' },
   { to: '/alarms', label: '报警', icon: '⚠' },
   { to: '/realtime', label: '实时', icon: '◈' },
 ];
 
-const settingsLinks = [
+export const settingsLinks = [
   { to: '/gateway', label: '网关设置', icon: '⚙' },
   { to: '/resources', label: '资源', icon: '◐' },
   { to: '/devices', label: '设备', icon: '◑' },

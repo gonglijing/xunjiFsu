@@ -1,7 +1,7 @@
 import { createSignal, createEffect, Show } from 'solid-js';
 import { usePath, navigate } from './router';
 import { getJSON } from './api';
-import TopNav from './components/TopNav';
+import SidebarNav from './components/SidebarNav';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import GatewayPage from './pages/GatewayPage';
@@ -65,14 +65,18 @@ function App() {
   };
 
   return (
-    <div>
+    <div class={path() === '/login' ? '' : 'shell-layout'}>
       <Show when={path() !== '/login'}>
-        <TopNav path={path()} onNav={setNavigate} />
+        <aside class="shell-sidebar">
+          <SidebarNav path={path()} onNav={setNavigate} />
+        </aside>
       </Show>
-      <main class="container" style="padding-top:32px; padding-bottom:32px;">
-        {render()}
+      <main class={path() === '/login' ? 'container login-main' : 'shell-main'}>
+        <div class={path() === '/login' ? '' : 'container'} style="padding-top:24px; padding-bottom:32px;">
+          {render()}
+        </div>
+        <div id="toast-container" class="toast-container"></div>
       </main>
-      <div id="toast-container" class="toast-container"></div>
     </div>
   );
 }

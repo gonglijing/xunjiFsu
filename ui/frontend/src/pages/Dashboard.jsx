@@ -1,9 +1,10 @@
 import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
 import { getJSON, unwrapData } from '../api';
-import StatusCards, { SectionTabs } from '../components/cards';
+import StatusCards from '../components/cards';
 import { RealtimeMini } from '../sections/RealtimeMini';
 import { LatestAlarms } from '../sections/LatestAlarms';
 import { QuickActions } from '../sections/QuickActions';
+import { GatewayStatus } from '../sections/GatewayStatus';
 
 function Dashboard() {
   const [status, setStatus] = createSignal(null);
@@ -23,14 +24,15 @@ function Dashboard() {
   });
 
   return (
-    <div>
+    <div class="dashboard-root">
       <StatusCards data={status()} loading={loading()} />
-      <div class="grid" style="grid-template-columns: 2fr 1fr; gap:24px;">
+      <div class="grid" style="grid-template-columns: 3fr 2fr; gap:24px;">
         <div class="grid" style="grid-template-columns: 1fr; gap:24px;">
+          <GatewayStatus />
           <RealtimeMini />
-          <LatestAlarms />
         </div>
         <div class="grid" style="grid-template-columns: 1fr; gap:24px;">
+          <LatestAlarms />
           <QuickActions collectorRunning={status()?.collector_running} onRefresh={loadStatus} />
         </div>
       </div>
