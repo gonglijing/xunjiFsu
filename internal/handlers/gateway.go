@@ -24,21 +24,13 @@ func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, "invalid body")
 		return
 	}
+	normalizeGatewayConfigInput(&cfg)
 
-	// 转换为数据库模型
-	dbCfg := &database.GatewayConfig{
-		ID:          cfg.ID,
-		ProductKey:  cfg.ProductKey,
-		DeviceKey:   cfg.DeviceKey,
-		GatewayName: cfg.GatewayName,
-	}
-
-	if err := database.UpdateGatewayConfig(dbCfg); err != nil {
+	if err := database.UpdateGatewayConfig(toDatabaseGatewayConfig(&cfg)); err != nil {
 		WriteServerError(w, err.Error())
 		return
 	}
 
-	// 返回更新后的配置
 	updatedCfg, err := database.GetGatewayConfig()
 	if err != nil {
 		WriteServerError(w, err.Error())

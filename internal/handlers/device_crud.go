@@ -1,0 +1,154 @@
+package handlers
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+)
+
+// GetDevices 获取所有设备
+func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
+	devices, err := database.GetAllDevices()
+	if err != nil {
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	resources, _ := database.ListResources()
+	resourceMap := make(map[int64]*models.Resource, len(resources))
+	for _, res := range resources {
+		if res == nil {
+			continue
+		}
+		resourceMap[res.ID] = res
+	}
+
+	drivers, _ := database.GetAllDrivers()
+	driverNameMap := buildDriverNameMap(drivers)
+
+	for _, device := range devices {
+		if device == nil {
+			continue
+		}
+		if device.DriverID != nil {
+			if name, ok := driverNameMap[*device.DriverID]; ok {
+				device.DriverName = name
+			} else {
+				device.DriverName = fmt.Sprintf("驱动 #%d", *device.DriverID)
+			}
+		}
+		if device.ResourceID != nil {
+			if res, ok := resourceMap[*device.ResourceID]; ok {
+				device.ResourceName = res.Name
+				device.ResourceType = res.Type
+				device.ResourcePath = res.Path
+			}
+		}
+	}
+
+	WriteSuccess(w, devices)
+}
+
+// CreateDevice 创建设备
+func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
+	var device models.Device
+	if err := ParseRequest(r, &device); err != nil {
+		WriteBadRequest(w, "Invalid request body: "+err.Error())
+		return
+	}
+	if err := normalizeDeviceInput(&device); err != nil {
+		WriteBadRequest(w, "device name is required")
+		return
+	}
+
+	id, err := database.CreateDevice(&device)
+	if err != nil {
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	device.ID = id
+	WriteCreated(w, device)
+}
+
+// UpdateDevice 更新设备
+func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
+		return
+	}
+	if _, err := database.GetDeviceByID(id); err != nil {
+		WriteNotFound(w, "Device not found")
+		return
+	}
+
+	var device models.Device
+	if err := ParseRequest(r, &device); err != nil {
+		WriteBadRequest(w, "Invalid request body: "+err.Error())
+		return
+	}
+	if err := normalizeDeviceInput(&device); err != nil {
+		WriteBadRequest(w, "device name is required")
+		return
+	}
+
+	device.ID = id
+	if err := database.UpdateDevice(&device); err != nil {
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	WriteSuccess(w, device)
+}
+
+// DeleteDevice 删除设备
+func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
+		return
+	}
+	if _, err := database.GetDeviceByID(id); err != nil {
+		WriteNotFound(w, "Device not found")
+		return
+	}
+
+	if err := database.DeleteDevice(id); err != nil {
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ToggleDeviceEnable 切换设备使能状态
+func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, "Invalid ID")
+		return
+	}
+
+	device, err := database.GetDeviceByID(id)
+	if err != nil {
+		WriteNotFound(w, "Device not found")
+		return
+	}
+
+	nextState := 0
+	if device.Enabled == 0 {
+		nextState = 1
+	}
+
+	if err := database.UpdateDeviceEnabled(id, nextState); err != nil {
+		WriteServerError(w, err.Error())
+		return
+	}
+
+	WriteSuccess(w, map[string]interface{}{
+		"enabled": nextState,
+	})
+}

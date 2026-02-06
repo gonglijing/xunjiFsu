@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -82,7 +83,7 @@ func stringifyParamValue(value interface{}) string {
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	default:
-		return strings.TrimSpace(strings.Trim(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(strings.TrimSpace("")), "", ""), "", ""), ""))
+		return fmt.Sprintf("%v", value)
 	}
 }
 
