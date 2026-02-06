@@ -187,6 +187,20 @@ type XunJiConfig struct {
 	Retain     bool   `json:"retain"`
 	KeepAlive  int    `json:"keepAlive"`      // 秒
 	Timeout    int    `json:"connectTimeout"` // 秒
+	// 插件上报周期（毫秒）。<=0 使用默认值。
+	UploadIntervalMs int `json:"uploadIntervalMs"`
+	// 兼容旧字段：插件内管理上传节奏（毫秒）。<=0 使用默认值。
+	ReportIntervalMs int `json:"reportIntervalMs"`
+	// 插件 gRPC 地址（主程序 -> 插件），为空则按 productKey/deviceKey 自动生成本机地址。
+	GRPCAddress string `json:"grpcAddress"`
+	// 报警批量发送周期（毫秒）。<=0 使用默认值。
+	AlarmFlushIntervalMs int `json:"alarmFlushIntervalMs"`
+	// 单次批量发送报警条数。<=0 使用默认值。
+	AlarmBatchSize int `json:"alarmBatchSize"`
+	// 内部报警队列大小（超出后丢弃最旧数据）。<=0 使用默认值。
+	AlarmQueueSize int `json:"alarmQueueSize"`
+	// 内部实时队列大小（超出后丢弃最旧数据）。<=0 使用默认值。
+	RealtimeQueueSize int `json:"realtimeQueueSize"`
 }
 
 // NorthboundPayload 北向数据载荷

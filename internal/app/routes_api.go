@@ -56,6 +56,7 @@ func registerDeviceRoutes(api *mux.Router, h *handlers.Handler) {
 func registerNorthboundRoutes(api *mux.Router, h *handlers.Handler) {
 	api.HandleFunc("/northbound", h.GetNorthboundConfigs).Methods("GET")
 	api.HandleFunc("/northbound/status", h.GetNorthboundStatus).Methods("GET")
+	api.HandleFunc("/northbound/schema", h.GetNorthboundSchema).Methods("GET")
 	api.HandleFunc("/northbound", h.CreateNorthboundConfig).Methods("POST")
 	api.HandleFunc("/northbound/{id}", h.UpdateNorthboundConfig).Methods("PUT")
 	api.HandleFunc("/northbound/{id}", h.DeleteNorthboundConfig).Methods("DELETE")

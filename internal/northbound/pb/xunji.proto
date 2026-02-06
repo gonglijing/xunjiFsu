@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package northboundpb;
+
+option go_package = "github.com/gonglijing/xunjiFsu/internal/northbound/pb;northboundpb";
+
+service XunjiIngress {
+  rpc PushRealtime (PushRealtimeRequest) returns (PushAck);
+  rpc PushAlarm (PushAlarmRequest) returns (PushAck);
+}
+
+message PushRealtimeRequest {
+  int64 device_id = 1;
+  string device_name = 2;
+  string product_key = 3;
+  string device_key = 4;
+  int64 timestamp_unix_ms = 5;
+  map<string, string> fields = 6;
+}
+
+message PushAlarmRequest {
+  int64 device_id = 1;
+  string device_name = 2;
+  string product_key = 3;
+  string device_key = 4;
+  string field_name = 5;
+  double actual_value = 6;
+  double threshold = 7;
+  string operator = 8;
+  string severity = 9;
+  string message = 10;
+  int64 triggered_unix_ms = 11;
+}
+
+message PushAck {
+  bool success = 1;
+  string message = 2;
+}

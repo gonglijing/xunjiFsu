@@ -261,12 +261,26 @@ XunJi:
   "password": "",
   "topic": "xunji/pk/dk",
   "alarmTopic": "xunji/pk/dk/alarm",
+  "uploadIntervalMs": 5000,
+  "grpcAddress": "127.0.0.1:32001",
+  "alarmFlushIntervalMs": 2000,
+  "alarmBatchSize": 20,
+  "alarmQueueSize": 1000,
+  "realtimeQueueSize": 1000,
   "qos": 0,
   "retain": false,
   "keepAlive": 60,
   "connectTimeout": 10
 }
 ```
+
+说明：
+
+- 主程序与 XUNJI 插件使用 gRPC 通信。
+- 主程序将实时数据和报警数据主动推送到插件 gRPC 服务。
+- `grpcAddress` 可显式指定；若为空，插件与主程序会按 `productKey + deviceKey` 计算同一默认地址。
+- `uploadIntervalMs` 为插件侧 MQTT 上报周期，报警批量参数由插件侧管理。
+- XUNJI 配置参数采用类似 Terraform SDK Schema 的定义方式（必填/可选/默认值/类型校验）。
 
 ### 开发模式
 
@@ -437,6 +451,7 @@ make deploy-windows  # Windows
 |------|------|------|
 | GET | `/api/northbound` | 北向配置列表 |
 | GET | `/api/northbound/status` | 北向运行状态列表 |
+| GET | `/api/northbound/schema?type=xunji` | 获取 XUNJI 配置 Schema（前端动态表单） |
 | POST | `/api/northbound` | 创建北向配置 |
 | PUT | `/api/northbound/{id}` | 更新配置 |
 | DELETE | `/api/northbound/{id}` | 删除配置 |

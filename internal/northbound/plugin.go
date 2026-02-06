@@ -1,18 +1,26 @@
 package northbound
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net/rpc"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	northboundpb "github.com/gonglijing/xunjiFsu/internal/northbound/pb"
 	plugin "github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const NorthboundPluginName = "northbound"
@@ -42,6 +50,9 @@ type PluginAdapter struct {
 	client     *plugin.Client
 	impl       Northbound
 	pluginPath string
+	grpcConn   *grpc.ClientConn
+	xunjiGRPC  northboundpb.XunjiIngressClient
+	grpcTarget string
 }
 
 func NewPluginAdapter(pluginDir, pluginType, name, config string) (*PluginAdapter, error) {
@@ -89,6 +100,12 @@ func NewPluginAdapter(pluginDir, pluginType, name, config string) (*PluginAdapte
 		_ = adapter.Close()
 		return nil, err
 	}
+	if adapter.SelfManaged() {
+		if err := adapter.initXunJiGRPC(config); err != nil {
+			_ = adapter.Close()
+			return nil, err
+		}
+	}
 
 	return adapter, nil
 }
@@ -101,6 +118,37 @@ func (a *PluginAdapter) Initialize(config string) error {
 }
 
 func (a *PluginAdapter) Send(data *models.CollectData) error {
+	if a.xunjiGRPC != nil {
+		if data == nil {
+			return nil
+		}
+		timestamp := data.Timestamp
+		if timestamp.IsZero() {
+			timestamp = time.Now()
+		}
+		fields := make(map[string]string, len(data.Fields))
+		for key, value := range data.Fields {
+			fields[key] = value
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		resp, err := a.xunjiGRPC.PushRealtime(ctx, &northboundpb.PushRealtimeRequest{
+			DeviceId:        data.DeviceID,
+			DeviceName:      data.DeviceName,
+			ProductKey:      data.ProductKey,
+			DeviceKey:       data.DeviceKey,
+			TimestampUnixMs: timestamp.UnixMilli(),
+			Fields:          fields,
+		})
+		if err != nil {
+			return err
+		}
+		if resp != nil && !resp.GetSuccess() {
+			return fmt.Errorf("xunji grpc push realtime rejected: %s", resp.GetMessage())
+		}
+		return nil
+	}
+
 	if a.impl == nil {
 		return errors.New("plugin not initialized")
 	}
@@ -108,6 +156,34 @@ func (a *PluginAdapter) Send(data *models.CollectData) error {
 }
 
 func (a *PluginAdapter) SendAlarm(alarm *models.AlarmPayload) error {
+	if a.xunjiGRPC != nil {
+		if alarm == nil {
+			return nil
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		resp, err := a.xunjiGRPC.PushAlarm(ctx, &northboundpb.PushAlarmRequest{
+			DeviceId:        alarm.DeviceID,
+			DeviceName:      alarm.DeviceName,
+			ProductKey:      alarm.ProductKey,
+			DeviceKey:       alarm.DeviceKey,
+			FieldName:       alarm.FieldName,
+			ActualValue:     alarm.ActualValue,
+			Threshold:       alarm.Threshold,
+			Operator:        alarm.Operator,
+			Severity:        alarm.Severity,
+			Message:         alarm.Message,
+			TriggeredUnixMs: time.Now().UnixMilli(),
+		})
+		if err != nil {
+			return err
+		}
+		if resp != nil && !resp.GetSuccess() {
+			return fmt.Errorf("xunji grpc push alarm rejected: %s", resp.GetMessage())
+		}
+		return nil
+	}
+
 	if a.impl == nil {
 		return errors.New("plugin not initialized")
 	}
@@ -115,6 +191,11 @@ func (a *PluginAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 }
 
 func (a *PluginAdapter) Close() error {
+	if a.grpcConn != nil {
+		_ = a.grpcConn.Close()
+	}
+	a.grpcConn = nil
+	a.xunjiGRPC = nil
 	if a.impl != nil {
 		_ = a.impl.Close()
 	}
@@ -133,6 +214,52 @@ func (a *PluginAdapter) Name() string {
 		return a.name
 	}
 	return a.pluginType
+}
+
+// SelfManaged indicates whether this plugin handles send timing internally.
+func (a *PluginAdapter) SelfManaged() bool {
+	return strings.EqualFold(strings.TrimSpace(a.pluginType), "xunji")
+}
+
+func (a *PluginAdapter) initXunJiGRPC(config string) error {
+	address, err := resolveXunJiGRPCAddress(config)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return fmt.Errorf("dial xunji grpc %s failed: %w", address, err)
+	}
+	a.grpcConn = conn
+	a.xunjiGRPC = northboundpb.NewXunjiIngressClient(conn)
+	a.grpcTarget = address
+	return nil
+}
+
+func resolveXunJiGRPCAddress(config string) (string, error) {
+	parsed := &models.XunJiConfig{}
+	if err := json.Unmarshal([]byte(config), parsed); err != nil {
+		return "", fmt.Errorf("parse xunji config failed: %w", err)
+	}
+	if v := strings.TrimSpace(parsed.GRPCAddress); v != "" {
+		return v, nil
+	}
+	pk := strings.TrimSpace(parsed.ProductKey)
+	dk := strings.TrimSpace(parsed.DeviceKey)
+	if pk == "" || dk == "" {
+		return "", fmt.Errorf("xunji grpc address resolve failed: productKey/deviceKey required")
+	}
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(pk + "|" + dk))
+	port := 30000 + int(hasher.Sum32()%10000)
+	return "127.0.0.1:" + strconv.Itoa(port), nil
 }
 
 // resolvePluginPath resolves the northbound plugin binary.

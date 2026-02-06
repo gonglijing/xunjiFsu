@@ -28,6 +28,7 @@ type Northbound interface {
 type NorthboundManager struct {
 	mu          sync.RWMutex
 	adapters    map[string]Northbound
+	selfManaged map[string]bool
 	uploadTimes map[string]time.Time
 	intervals   map[string]time.Duration
 	enabled     map[string]bool
@@ -52,6 +53,7 @@ var DefaultBreakerConfig = circuit.Config{
 func NewNorthboundManager(pluginDir string) *NorthboundManager {
 	return &NorthboundManager{
 		adapters:    make(map[string]Northbound),
+		selfManaged: make(map[string]bool),
 		uploadTimes: make(map[string]time.Time),
 		intervals:   make(map[string]time.Duration),
 		enabled:     make(map[string]bool),
@@ -112,6 +114,7 @@ func (m *NorthboundManager) RegisterAdapter(name string, adapter Northbound) {
 		breaker.Reset()
 	}
 	m.adapters[name] = adapter
+	m.selfManaged[name] = detectSelfManaged(adapter)
 	m.uploadTimes[name] = time.Time{}
 	m.intervals[name] = 0
 	m.enabled[name] = true
@@ -129,6 +132,7 @@ func (m *NorthboundManager) UnregisterAdapter(name string) {
 		_ = adapter.Close()
 	}
 	delete(m.adapters, name)
+	delete(m.selfManaged, name)
 	delete(m.uploadTimes, name)
 	delete(m.intervals, name)
 	delete(m.enabled, name)
@@ -157,6 +161,11 @@ func (m *NorthboundManager) GetAdapter(name string) (Northbound, error) {
 func (m *NorthboundManager) SetInterval(name string, interval time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.selfManaged[name] {
+		m.intervals[name] = interval
+		delete(m.uploadTimes, name)
+		return
+	}
 	if interval < 500*time.Millisecond {
 		interval = 500 * time.Millisecond
 	}
@@ -243,6 +252,9 @@ func (m *NorthboundManager) ListRuntimeNames() []string {
 	for name := range m.uploadTimes {
 		seen[name] = struct{}{}
 	}
+	for name := range m.selfManaged {
+		seen[name] = struct{}{}
+	}
 
 	names := make([]string, 0, len(seen))
 	for name := range seen {
@@ -270,15 +282,17 @@ func (m *NorthboundManager) SendAlarm(alarm *models.AlarmPayload) {
 	m.mu.RLock()
 	adapters := make([]Northbound, 0, len(m.adapters))
 	names := make([]string, 0, len(m.adapters))
+	enabled := make(map[string]bool, len(m.adapters))
 	for name, adapter := range m.adapters {
 		adapters = append(adapters, adapter)
 		names = append(names, name)
+		enabled[name] = m.enabled[name]
 	}
 	m.mu.RUnlock()
 
 	for i, adapter := range adapters {
 		name := names[i]
-		if !m.enabled[name] {
+		if !enabled[name] {
 			continue
 		}
 		err := m.executeWithBreaker(name, func() error {
@@ -317,16 +331,20 @@ func (m *NorthboundManager) GetBreakerState(name string) circuit.CircuitState {
 	return circuit.Closed
 }
 
-func (m *NorthboundManager) shouldSend(name string) bool {
-	interval := m.intervals[name]
+func shouldSendAt(interval time.Duration, last time.Time) bool {
 	if interval <= 0 {
 		return true
 	}
-	last := m.uploadTimes[name]
 	if last.IsZero() {
 		return true
 	}
 	return time.Since(last) >= interval
+}
+
+func (m *NorthboundManager) shouldSend(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return shouldSendAt(m.intervals[name], m.uploadTimes[name])
 }
 
 func (m *NorthboundManager) markSent(name string) {
@@ -339,15 +357,17 @@ func (m *NorthboundManager) uploadToAdapters(data *models.CollectData) {
 	m.mu.RLock()
 	adapters := make([]Northbound, 0, len(m.adapters))
 	names := make([]string, 0, len(m.adapters))
+	enabled := make(map[string]bool, len(m.adapters))
 	for name, adapter := range m.adapters {
 		adapters = append(adapters, adapter)
 		names = append(names, name)
+		enabled[name] = m.enabled[name]
 	}
 	m.mu.RUnlock()
 
 	for i, adapter := range adapters {
 		name := names[i]
-		if !m.enabled[name] {
+		if !enabled[name] {
 			continue
 		}
 		if !m.shouldSend(name) {
@@ -390,8 +410,14 @@ func (m *NorthboundManager) flushPending() {
 		pendingCopy[name] = data
 	}
 	adapters := make(map[string]Northbound, len(m.adapters))
+	enabled := make(map[string]bool, len(m.adapters))
+	intervals := make(map[string]time.Duration, len(m.intervals))
+	uploadTimes := make(map[string]time.Time, len(m.uploadTimes))
 	for name, ad := range m.adapters {
 		adapters[name] = ad
+		enabled[name] = m.enabled[name]
+		intervals[name] = m.intervals[name]
+		uploadTimes[name] = m.uploadTimes[name]
 	}
 	m.mu.RUnlock()
 
@@ -399,10 +425,10 @@ func (m *NorthboundManager) flushPending() {
 		if data == nil {
 			continue
 		}
-		if !m.enabled[name] {
+		if !enabled[name] {
 			continue
 		}
-		if !m.shouldSend(name) {
+		if !shouldSendAt(intervals[name], uploadTimes[name]) {
 			continue
 		}
 		adapter, ok := adapters[name]
@@ -424,4 +450,9 @@ func (m *NorthboundManager) flushPending() {
 		delete(m.pending, name)
 		m.mu.Unlock()
 	}
+}
+
+func detectSelfManaged(adapter Northbound) bool {
+	_ = adapter
+	return false
 }
