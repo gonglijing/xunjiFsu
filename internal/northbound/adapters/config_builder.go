@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -11,23 +12,15 @@ import (
 // NorthboundConfigBuilder 用于从数据库字段生成适配器配置JSON
 type NorthboundConfigBuilder struct {
 	northboundType string
-	config        map[string]interface{}
+	config         map[string]interface{}
 }
 
 // NewConfigBuilder 创建配置构建器
 func NewConfigBuilder(northboundType string) *NorthboundConfigBuilder {
 	return &NorthboundConfigBuilder{
 		northboundType: northboundType,
-		config:        make(map[string]interface{}),
+		config:         make(map[string]interface{}),
 	}
-}
-
-// SetServerURL 设置服务器地址
-func (b *NorthboundConfigBuilder) SetServerURL(url string) *NorthboundConfigBuilder {
-	if url != "" {
-		b.config["url"] = url
-	}
-	return b
 }
 
 // SetBrokerURL 设置MQTT Broker地址
@@ -42,14 +35,6 @@ func (b *NorthboundConfigBuilder) SetBrokerURL(url string) *NorthboundConfigBuil
 func (b *NorthboundConfigBuilder) SetPort(port int) *NorthboundConfigBuilder {
 	if port > 0 {
 		b.config["port"] = port
-	}
-	return b
-}
-
-// SetPath 设置路径
-func (b *NorthboundConfigBuilder) SetPath(path string) *NorthboundConfigBuilder {
-	if path != "" {
-		b.config["path"] = path
 	}
 	return b
 }
@@ -165,13 +150,6 @@ func (b *NorthboundConfigBuilder) SetExtConfig(extConfig string) *NorthboundConf
 func (b *NorthboundConfigBuilder) Build() string {
 	// 根据类型设置默认值
 	switch b.northboundType {
-	case "http":
-		if _, ok := b.config["url"]; !ok {
-			b.config["url"] = ""
-		}
-		if _, ok := b.config["timeout"]; !ok {
-			b.config["timeout"] = 30
-		}
 	case "mqtt":
 		if _, ok := b.config["broker"]; !ok {
 			b.config["broker"] = ""
@@ -210,6 +188,29 @@ func (b *NorthboundConfigBuilder) Build() string {
 		if _, ok := b.config["uploadIntervalMs"]; !ok {
 			b.config["uploadIntervalMs"] = 5000
 		}
+	case "pandax":
+		if _, ok := b.config["serverUrl"]; !ok {
+			if v, exists := b.config["broker"]; exists {
+				b.config["serverUrl"] = v
+			} else {
+				b.config["serverUrl"] = ""
+			}
+		}
+		if _, ok := b.config["username"]; !ok {
+			b.config["username"] = ""
+		}
+		if _, ok := b.config["qos"]; !ok {
+			b.config["qos"] = 0
+		}
+		if _, ok := b.config["keepAlive"]; !ok {
+			b.config["keepAlive"] = 60
+		}
+		if _, ok := b.config["connectTimeout"]; !ok {
+			b.config["connectTimeout"] = 10
+		}
+		if _, ok := b.config["uploadIntervalMs"]; !ok {
+			b.config["uploadIntervalMs"] = 5000
+		}
 	}
 
 	data, _ := json.Marshal(b.config)
@@ -221,19 +222,6 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 	builder := NewConfigBuilder(cfg.Type)
 
 	switch cfg.Type {
-	case "http":
-		// 构建HTTP配置
-		url := buildHTTPURL(cfg.ServerURL, cfg.Port, cfg.Path)
-		builder.SetServerURL(url)
-		if cfg.Username != "" {
-			builder.SetUsername(cfg.Username)
-		}
-		if cfg.Password != "" {
-			builder.SetPassword(cfg.Password)
-		}
-		builder.SetTimeout(cfg.Timeout)
-		builder.SetExtConfig(cfg.ExtConfig)
-
 	case "mqtt":
 		// 构建MQTT配置
 		broker := buildBrokerURL(cfg.ServerURL, cfg.Port)
@@ -256,7 +244,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 	case "xunji":
 		// 构建XunJi配置
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
-		builder.SetServerURL(serverURL)
+		builder.SetBrokerURL(serverURL)
 		builder.SetProductKey(cfg.ProductKey)
 		builder.SetDeviceKey(cfg.DeviceKey)
 		if cfg.Username != "" {
@@ -274,46 +262,26 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		builder.SetTimeout(cfg.Timeout)
 		builder.SetUploadIntervalMs(cfg.UploadInterval)
 		builder.SetExtConfig(cfg.ExtConfig)
+
+	case "pandax":
+		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
+		builder.SetBrokerURL(serverURL)
+		builder.SetClientID(cfg.ClientID)
+		if cfg.Username != "" {
+			builder.SetUsername(cfg.Username)
+		}
+		if cfg.Password != "" {
+			builder.SetPassword(cfg.Password)
+		}
+		builder.SetQOS(cfg.QOS)
+		builder.SetRetain(cfg.Retain)
+		builder.SetKeepAlive(cfg.KeepAlive)
+		builder.SetTimeout(cfg.Timeout)
+		builder.SetUploadIntervalMs(cfg.UploadInterval)
+		builder.SetExtConfig(cfg.ExtConfig)
 	}
 
 	return builder.Build()
-}
-
-// buildHTTPURL 构建完整的HTTP URL
-func buildHTTPURL(serverURL string, port int, path string) string {
-	if serverURL == "" {
-		return ""
-	}
-
-	// 如果已经是完整URL，直接返回
-	if len(serverURL) >= 7 && (serverURL[:7] == "http://" || serverURL[:8] == "https://") {
-		return serverURL
-	}
-
-	// 构建URL
-	scheme := "http://"
-	if port == 443 {
-		scheme = "https://"
-	}
-
-	result := scheme + serverURL
-
-	// 添加端口
-	if port > 0 {
-		if (port == 80 && scheme == "http://") || (port == 443 && scheme == "https://") {
-			// 默认端口不需要显示
-		} else {
-			result += ":" + strconv.Itoa(port)
-		}
-	}
-
-	// 添加路径
-	if path != "" && path[0] != '/' {
-		path = "/" + path
-	}
-	result += path
-
-	return result
 }
 
 // buildBrokerURL 构建完整的Broker URL
@@ -360,15 +328,15 @@ type ConnectionInfo struct {
 // ParseConnectionInfoFromModel 从模型解析连接信息
 func ParseConnectionInfoFromModel(cfg *models.NorthboundConfig) *ConnectionInfo {
 	info := &ConnectionInfo{
-		Type:      cfg.Type,
-		Server:    cfg.ServerURL,
-		Port:      cfg.Port,
-		Path:      cfg.Path,
-		Username:  cfg.Username,
-		ClientID:  cfg.ClientID,
-		Topic:     cfg.Topic,
+		Type:       cfg.Type,
+		Server:     cfg.ServerURL,
+		Port:       cfg.Port,
+		Path:       cfg.Path,
+		Username:   cfg.Username,
+		ClientID:   cfg.ClientID,
+		Topic:      cfg.Topic,
 		AlarmTopic: cfg.AlarmTopic,
-		Connected: cfg.Connected,
+		Connected:  cfg.Connected,
 	}
 	return info
 }
@@ -376,14 +344,6 @@ func ParseConnectionInfoFromModel(cfg *models.NorthboundConfig) *ConnectionInfo 
 // GetSupportedTypes 返回支持的北向类型及其字段描述
 func GetSupportedTypes() map[string][]string {
 	return map[string][]string{
-		"http": {
-			"server_url: 服务器地址",
-			"port: 端口 (默认80)",
-			"path: 路径 (可选)",
-			"username: 用户名 (可选)",
-			"password: 密码 (可选)",
-			"timeout: 超时秒数 (默认30)",
-		},
 		"mqtt": {
 			"server_url: Broker地址",
 			"port: 端口 (默认1883)",
@@ -413,35 +373,57 @@ func GetSupportedTypes() map[string][]string {
 			"timeout: 连接超时秒数",
 			"upload_interval: 上传周期毫秒数",
 		},
+		"pandax": {
+			"server_url: PandaX Broker 地址",
+			"port: 端口 (默认1883)",
+			"username: 设备 Token（MQTT Username）",
+			"password: 密码 (可选)",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
+		},
 	}
 }
 
 // ValidateConfig 验证配置是否有效
 func ValidateConfig(northboundType string, config map[string]interface{}) error {
 	switch northboundType {
-	case "http":
-		if url, ok := config["url"].(string); !ok || url == "" {
-			return fmt.Errorf("url is required for HTTP adapter")
-		}
 	case "mqtt":
-		if broker, ok := config["broker"].(string); !ok || broker == "" {
+		if broker, ok := config["broker"].(string); !ok || strings.TrimSpace(broker) == "" {
 			return fmt.Errorf("broker is required for MQTT adapter")
 		}
-		if topic, ok := config["topic"].(string); !ok || topic == "" {
+		if topic, ok := config["topic"].(string); !ok || strings.TrimSpace(topic) == "" {
 			return fmt.Errorf("topic is required for MQTT adapter")
 		}
 	case "xunji":
-		if serverUrl, ok := config["serverUrl"].(string); !ok || serverUrl == "" {
+		if serverURL, ok := config["serverUrl"].(string); !ok || strings.TrimSpace(serverURL) == "" {
 			return fmt.Errorf("serverUrl is required for XunJi adapter")
 		}
-		if productKey, ok := config["productKey"].(string); !ok || productKey == "" {
+		if productKey, ok := config["productKey"].(string); !ok || strings.TrimSpace(productKey) == "" {
 			return fmt.Errorf("productKey is required for XunJi adapter")
 		}
-		if deviceKey, ok := config["deviceKey"].(string); !ok || deviceKey == "" {
+		if deviceKey, ok := config["deviceKey"].(string); !ok || strings.TrimSpace(deviceKey) == "" {
 			return fmt.Errorf("deviceKey is required for XunJi adapter")
+		}
+	case "pandax":
+		serverURL, _ := config["serverUrl"].(string)
+		if strings.TrimSpace(serverURL) == "" {
+			if broker, ok := config["broker"].(string); ok {
+				serverURL = broker
+			}
+		}
+		if strings.TrimSpace(serverURL) == "" {
+			return fmt.Errorf("serverUrl is required for PandaX adapter")
+		}
+		if username, ok := config["username"].(string); !ok || strings.TrimSpace(username) == "" {
+			return fmt.Errorf("username is required for PandaX adapter")
 		}
 	default:
 		return fmt.Errorf("unknown northbound type: %s", northboundType)
 	}
+
 	return nil
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
+	northboundschema "github.com/gonglijing/xunjiFsu/internal/northbound/schema"
 )
 
 type northboundRuntimeView struct {
@@ -23,9 +25,21 @@ type northboundRuntimeView struct {
 
 type northboundConfigView struct {
 	*models.NorthboundConfig
-	Runtime      northboundRuntimeView `json:"runtime"`
-	Connection   *ConnectionView       `json:"connection,omitempty"`
-	SupportedTypes []string           `json:"supported_types,omitempty"`
+	Runtime        northboundRuntimeView `json:"runtime"`
+	Connection     *ConnectionView       `json:"connection,omitempty"`
+	SupportedTypes []string              `json:"supported_types,omitempty"`
+	SchemaFields   []SchemaFieldView     `json:"schema_fields,omitempty"`
+}
+
+// SchemaFieldView 用于前端展示 schema 字段信息
+type SchemaFieldView struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Type        string `json:"type"`
+	Required    bool   `json:"required"`
+	Optional    bool   `json:"optional"`
+	Default     any    `json:"default,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // ConnectionView 连接信息视图（不返回密码）
@@ -73,7 +87,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		switch config.Type {
 		case "http":
 			config.Port = 80
-		case "mqtt", "xunji":
+		case "mqtt", "xunji", "pandax":
 			config.Port = 1883
 		}
 	}
@@ -100,7 +114,7 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 	}
 
 	// 验证类型
-	validTypes := []string{"http", "mqtt", "xunji"}
+	validTypes := []string{"mqtt", "pandax", "xunji"}
 	isValid := false
 	for _, t := range validTypes {
 		if strings.ToLower(config.Type) == t {
@@ -110,31 +124,68 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 		}
 	}
 	if !isValid {
-		return fmt.Errorf("invalid type: %s, must be one of: http, mqtt, xunji", config.Type)
+		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, xunji", config.Type)
+	}
+
+	// 如果有 config JSON 字段，验证 schema
+	if config.Config != "" && config.Config != "{}" {
+		if err := validateConfigBySchema(config.Type, config.Config); err != nil {
+			return err
+		}
 	}
 
 	// 根据类型验证必填字段
 	switch config.Type {
-	case "http":
-		if config.ServerURL == "" {
-			return fmt.Errorf("server_url is required for HTTP type")
-		}
 	case "mqtt":
-		if config.ServerURL == "" {
-			return fmt.Errorf("server_url is required for MQTT type")
+		if config.ServerURL == "" && config.Config == "" {
+			return fmt.Errorf("server_url or config is required for MQTT type")
 		}
-		if config.Topic == "" {
-			return fmt.Errorf("topic is required for MQTT type")
+		if config.Topic == "" && config.Config == "" {
+			return fmt.Errorf("topic or config is required for MQTT type")
 		}
 	case "xunji":
-		if config.ServerURL == "" {
-			return fmt.Errorf("server_url is required for XunJi type")
+		if config.ServerURL == "" && config.Config == "" {
+			return fmt.Errorf("server_url or config is required for XunJi type")
 		}
-		if config.ProductKey == "" {
-			return fmt.Errorf("product_key is required for XunJi type")
+		if config.ProductKey == "" && config.Config == "" {
+			return fmt.Errorf("product_key or config is required for XunJi type")
 		}
-		if config.DeviceKey == "" {
-			return fmt.Errorf("device_key is required for XunJi type")
+		if config.DeviceKey == "" && config.Config == "" {
+			return fmt.Errorf("device_key or config is required for XunJi type")
+		}
+	case "pandax":
+		if config.ServerURL == "" && config.Config == "" {
+			return fmt.Errorf("server_url or config is required for PandaX type")
+		}
+		if config.Username == "" && config.Config == "" {
+			return fmt.Errorf("username or config is required for PandaX type")
+		}
+	}
+
+	return nil
+}
+
+// validateConfigBySchema 使用 schema 验证配置 JSON
+func validateConfigBySchema(nbType string, configJSON string) error {
+	fields, ok := northboundschema.FieldsByType(nbType)
+	if !ok {
+		// 不支持的类型，跳过 schema 验证
+		return nil
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return fmt.Errorf("config is invalid JSON: %w", err)
+	}
+
+	// 验证必填字段
+	for _, field := range fields {
+		if !field.Required {
+			continue
+		}
+		value, exists := config[field.Key]
+		if !exists || value == nil || value == "" {
+			return fmt.Errorf("%s is required", field.Label)
 		}
 	}
 
@@ -145,24 +196,53 @@ func enrichNorthboundConfigWithGatewayIdentity(config *models.NorthboundConfig) 
 	if config == nil {
 		return nil
 	}
-	if strings.ToLower(config.Type) != "xunji" {
+	if strings.ToLower(config.Type) != "xunji" && strings.ToLower(config.Type) != "pandax" {
 		return nil
 	}
+
+	// 解析或创建 config JSON
+	var cfg map[string]interface{}
+	if config.Config != "" && config.Config != "{}" {
+		if err := json.Unmarshal([]byte(config.Config), &cfg); err != nil {
+			// 如果解析失败，创建一个新的
+			cfg = make(map[string]interface{})
+		}
+	} else {
+		cfg = make(map[string]interface{})
+	}
+
+	updated := false
+
+	pkField := "productKey"
+	dkField := "deviceKey"
 
 	// 如果 product_key 为空，从网关配置获取
 	if config.ProductKey == "" {
 		gwPK, _ := database.GetGatewayIdentity()
 		if gwPK != "" {
-			config.ProductKey = gwPK
+			cfg[pkField] = gwPK
+			updated = true
 		}
+	} else {
+		cfg[pkField] = config.ProductKey
+		updated = true
 	}
 
 	// 如果 device_key 为空，从网关配置获取
 	if config.DeviceKey == "" {
 		_, gwDK := database.GetGatewayIdentity()
 		if gwDK != "" {
-			config.DeviceKey = gwDK
+			cfg[dkField] = gwDK
+			updated = true
 		}
+	} else {
+		cfg[dkField] = config.DeviceKey
+		updated = true
+	}
+
+	if updated {
+		data, _ := json.Marshal(cfg)
+		config.Config = string(data)
 	}
 
 	return nil
@@ -209,14 +289,31 @@ func (h *Handler) buildNorthboundConfigView(config *models.NorthboundConfig) *no
 		Connected:  config.Connected,
 	}
 
+	// 获取 schema 字段
+	var schemaFields []SchemaFieldView
+	if fields, ok := northboundschema.FieldsByType(config.Type); ok {
+		for _, f := range fields {
+			schemaFields = append(schemaFields, SchemaFieldView{
+				Key:         f.Key,
+				Label:       f.Label,
+				Type:        string(f.Type),
+				Required:    f.Required,
+				Optional:    f.Optional,
+				Default:     f.Default,
+				Description: f.Description,
+			})
+		}
+	}
+
 	// 获取支持的类型列表
 	supportedTypes := adapters.SupportedTypes()
 
 	return &northboundConfigView{
 		NorthboundConfig: config,
-		Runtime:         runtime,
-		Connection:      connView,
-		SupportedTypes:  supportedTypes,
+		Runtime:          runtime,
+		Connection:       connView,
+		SupportedTypes:   supportedTypes,
+		SchemaFields:     schemaFields,
 	}
 }
 
@@ -248,6 +345,11 @@ func (h *Handler) rebuildNorthboundRuntime(cfg *models.NorthboundConfig) error {
 func (h *Handler) registerNorthboundAdapter(config *models.NorthboundConfig) error {
 	// 从模型字段生成配置JSON
 	configJSON := adapters.BuildConfigFromModel(config)
+
+	// 如果已经有 config 字段，优先使用它（支持前端 schema 方式）
+	if config.Config != "" && config.Config != "{}" {
+		configJSON = config.Config
+	}
 
 	// 使用内置适配器
 	adapter := adapters.NewAdapter(config.Type, config.Name)

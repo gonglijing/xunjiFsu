@@ -51,10 +51,10 @@ type NorthboundAdapterWithCommands interface {
 // NewAdapter 创建指定类型的适配器
 func NewAdapter(northboundType, name string) NorthboundAdapter {
 	switch northboundType {
-	case "http":
-		return NewHTTPAdapter(name)
 	case "mqtt":
 		return NewMQTTAdapter(name)
+	case "pandax":
+		return NewPandaXAdapter(name)
 	case "xunji":
 		return NewXunJiAdapter(name)
 	default:
@@ -64,5 +64,5 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 
 // SupportedTypes 返回支持的北向类型
 func SupportedTypes() []string {
-	return []string{"http", "mqtt", "xunji"}
+	return []string{"mqtt", "pandax", "xunji"}
 }

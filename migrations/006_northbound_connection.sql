@@ -15,7 +15,7 @@ DROP TABLE IF EXISTS northbound_configs;
 CREATE TABLE IF NOT EXISTS northbound_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('xunji', 'mqtt', 'http')),
+    type TEXT NOT NULL CHECK(type IN ('xunji', 'pandax', 'mqtt', 'http')),
     enabled INTEGER DEFAULT 1,
     upload_interval INTEGER DEFAULT 10000,
 
@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS northbound_configs (
     -- 扩展配置
     ext_config TEXT,
 
+    -- Schema 配置（JSON）- 用于前端 schema 方式
+    config TEXT,
+
     -- 状态字段
     connected INTEGER DEFAULT 0,
     last_connected_at DATETIME,
@@ -58,6 +61,7 @@ INSERT INTO northbound_configs (
     server_url, port, username, password, client_id,
     topic, alarm_topic, qos, retain, keep_alive, timeout,
     product_key, device_key,
+    config,
     created_at, updated_at
 )
 SELECT
@@ -86,6 +90,8 @@ SELECT
     COALESCE(json_extract(config, '$.connectTimeout'), 30),
     COALESCE(json_extract(config, '$.productKey'), ''),
     COALESCE(json_extract(config, '$.deviceKey'), ''),
+    -- 保留旧的 config 字段
+    config,
     created_at,
     updated_at
 FROM northbound_configs_backup;

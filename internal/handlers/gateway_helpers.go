@@ -46,7 +46,8 @@ func (h *Handler) syncGatewayIdentityToXunjiNorthbound(productKey, deviceKey str
 	failed := make(map[string]string)
 
 	for _, cfg := range configs {
-		if cfg == nil || strings.ToLower(strings.TrimSpace(cfg.Type)) != "xunji" {
+		nbType := strings.ToLower(strings.TrimSpace(cfg.Type))
+		if cfg == nil || (nbType != "xunji" && nbType != "pandax") {
 			continue
 		}
 

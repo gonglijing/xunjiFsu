@@ -52,6 +52,10 @@ func FieldsByType(nbType string) ([]Field, bool) {
 	switch strings.ToLower(strings.TrimSpace(nbType)) {
 	case "", "xunji":
 		return cloneFields(XunJiConfigSchema), true
+	case "mqtt":
+		return cloneFields(MQTTConfigSchema), true
+	case "pandax":
+		return cloneFields(PandaXConfigSchema), true
 	default:
 		return nil, false
 	}

@@ -4,7 +4,7 @@ import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
 
-const empty = { name: '', type: 'http', upload_interval: 5000, config: '{}', enabled: 1 };
+const empty = { name: '', type: 'mqtt', upload_interval: 5000, config: '{}', enabled: 1 };
 
 function toInt(value, fallback = 0) {
   const n = Number.parseInt(`${value ?? ''}`, 10);
@@ -32,7 +32,7 @@ function hasSchemaField(schemaFields, key) {
   return (schemaFields || []).some((field) => field.key === key);
 }
 
-function normalizeXunJiConfig(raw, schemaFields, uploadIntervalFallback = 5000) {
+function normalizeConfig(raw, schemaFields, uploadIntervalFallback = 5000) {
   const src = raw && typeof raw === 'object' ? raw : {};
   const out = { ...buildSchemaDefaults(schemaFields) };
 
@@ -45,11 +45,13 @@ function normalizeXunJiConfig(raw, schemaFields, uploadIntervalFallback = 5000) 
     else out[field.key] = `${value}`;
   }
 
+  // 处理上传周期
   if (hasSchemaField(schemaFields, 'uploadIntervalMs') && toInt(out.uploadIntervalMs, 0) <= 0) {
     const fallback = toInt(src.uploadIntervalMs, toInt(src.reportIntervalMs, toInt(uploadIntervalFallback, 5000)));
     out.uploadIntervalMs = fallback > 0 ? fallback : 5000;
   }
 
+  // QOS 校验
   if (hasSchemaField(schemaFields, 'qos')) {
     out.qos = toInt(out.qos, 0);
     if (out.qos < 0) out.qos = 0;
@@ -57,6 +59,18 @@ function normalizeXunJiConfig(raw, schemaFields, uploadIntervalFallback = 5000) 
   }
 
   return out;
+}
+
+function isXunJiType(nbType) {
+  return nbType === 'xunji';
+}
+
+function isPandaXType(nbType) {
+  return nbType === 'pandax';
+}
+
+function isSchemaDrivenType(nbType) {
+  return isXunJiType(nbType) || isPandaXType(nbType);
 }
 
 function safeParseJSON(value, fallback = {}) {
@@ -67,7 +81,7 @@ function safeParseJSON(value, fallback = {}) {
   }
 }
 
-function validateXunJiConfig(config, schemaFields) {
+function validateConfig(config, schemaFields) {
   const errors = {};
 
   for (const field of schemaFields || []) {
@@ -78,6 +92,7 @@ function validateXunJiConfig(config, schemaFields) {
     }
   }
 
+  // QOS 校验
   if (hasSchemaField(schemaFields, 'qos')) {
     const qos = toInt(config.qos, -1);
     if (qos < 0 || qos > 2) {
@@ -85,22 +100,21 @@ function validateXunJiConfig(config, schemaFields) {
     }
   }
 
+  // 上传周期校验
   if (hasSchemaField(schemaFields, 'uploadIntervalMs') && toInt(config.uploadIntervalMs, 0) <= 0) {
-    errors.uploadIntervalMs = '上传周期必须大于 0';
+    errors.uploadIntervalMs = '上报周期必须大于 0';
   }
 
+  // 报警相关校验
   if (hasSchemaField(schemaFields, 'alarmFlushIntervalMs') && toInt(config.alarmFlushIntervalMs, 0) <= 0) {
     errors.alarmFlushIntervalMs = '报警刷新周期必须大于 0';
   }
-
   if (hasSchemaField(schemaFields, 'alarmBatchSize') && toInt(config.alarmBatchSize, 0) <= 0) {
     errors.alarmBatchSize = '报警批量条数必须大于 0';
   }
-
   if (hasSchemaField(schemaFields, 'alarmQueueSize') && toInt(config.alarmQueueSize, 0) <= 0) {
     errors.alarmQueueSize = '报警队列长度必须大于 0';
   }
-
   if (hasSchemaField(schemaFields, 'realtimeQueueSize') && toInt(config.realtimeQueueSize, 0) <= 0) {
     errors.realtimeQueueSize = '实时队列长度必须大于 0';
   }
@@ -118,11 +132,13 @@ export function Northbound() {
   const [showModal, setShowModal] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [syncing, setSyncing] = createSignal(false);
-  const [xunjiSchema, setXunjiSchema] = createSignal([]);
-  const [xunjiSchemaLoading, setXunjiSchemaLoading] = createSignal(false);
-  const [xunjiSchemaError, setXunjiSchemaError] = createSignal('');
-  const [xunjiConfig, setXunjiConfig] = createSignal({});
-  const [xunjiErrors, setXunjiErrors] = createSignal({});
+
+  // Schema 状态
+  const [schema, setSchema] = createSignal([]);
+  const [schemaLoading, setSchemaLoading] = createSignal(false);
+  const [schemaError, setSchemaError] = createSignal('');
+  const [config, setConfig] = createSignal({});
+  const [configErrors, setConfigErrors] = createSignal({});
 
   const runtimeByName = () => {
     const map = {};
@@ -132,38 +148,38 @@ export function Northbound() {
     return map;
   };
 
-  const buildXunJiPayload = () => {
-    return normalizeXunJiConfig(xunjiConfig(), xunjiSchema(), form().upload_interval);
+  const buildPayload = () => {
+    return normalizeConfig(config(), schema(), form().upload_interval);
   };
 
-  const loadXunJiSchema = (silent = false) => {
-    setXunjiSchemaLoading(true);
-    return getJSON('/api/northbound/schema?type=xunji')
-      .then((schemaResult) => {
-        const schemaData = unwrapData(schemaResult, {});
+  const loadSchema = (nbType, silent = false) => {
+    setSchemaLoading(true);
+    return getJSON(`/api/northbound/schema?type=${nbType}`)
+      .then((result) => {
+        const schemaData = unwrapData(result, {});
         const fields = Array.isArray(schemaData?.fields) ? schemaData.fields : [];
-        setXunjiSchema(fields);
+        setSchema(fields);
 
         if (fields.length === 0) {
-          setXunjiSchemaError('XUNJI Schema 为空，请检查后端配置');
+          setSchemaError(`${nbType.toUpperCase()} Schema 为空，请检查后端配置`);
           if (!silent) {
-            toast.show('error', 'XUNJI Schema 为空，请检查后端配置');
+            toast.show('error', `${nbType.toUpperCase()} Schema 为空，请检查后端配置`);
           }
           return;
         }
 
-        setXunjiSchemaError('');
-        setXunjiConfig((prev) => normalizeXunJiConfig(prev, fields, form().upload_interval));
+        setSchemaError('');
+        setConfig((prev) => normalizeConfig(prev, fields, form().upload_interval));
       })
       .catch((err) => {
-        const message = err?.message || '加载 XUNJI Schema 失败';
-        setXunjiSchema([]);
-        setXunjiSchemaError(message);
+        const message = err?.message || `加载 ${nbType.toUpperCase()} Schema 失败`;
+        setSchema([]);
+        setSchemaError(message);
         if (!silent) {
           toast.show('error', message);
         }
       })
-      .finally(() => setXunjiSchemaLoading(false));
+      .finally(() => setSchemaLoading(false));
   };
 
   const load = () => {
@@ -182,55 +198,65 @@ export function Northbound() {
 
   createEffect(() => {
     load();
-    loadXunJiSchema(true);
+    loadSchema('pandax', true);
   });
 
   const submit = (e) => {
     e.preventDefault();
-
     const payload = { ...form() };
 
-    if (payload.type === 'xunji') {
-      const schemaFields = xunjiSchema();
-      if (schemaFields.length === 0) {
-        loadXunJiSchema();
-        toast.show('error', 'XUNJI Schema 尚未加载完成，请稍后重试');
-        return;
-      }
-
-      const cfg = buildXunJiPayload();
-      const errors = validateXunJiConfig(cfg, schemaFields);
-      setXunjiErrors(errors);
+    // schema 驱动类型使用动态表单
+    if (isSchemaDrivenType(payload.type) && schema().length > 0) {
+      const cfg = buildPayload();
+      const errors = validateConfig(cfg, schema());
+      setConfigErrors(errors);
       if (Object.keys(errors).length > 0) {
-        toast.show('error', '请先修正 XUNJI 配置项');
+        toast.show('error', '请先修正配置项');
         return;
       }
 
-      payload.upload_interval = toInt(cfg.uploadIntervalMs, 5000);
+      // 从 schema 配置同步上传周期
+      if (hasSchemaField(schema(), 'uploadIntervalMs')) {
+        payload.upload_interval = toInt(cfg.uploadIntervalMs, 5000);
+      }
       payload.config = JSON.stringify(cfg);
+
+      if (isPandaXType(payload.type)) {
+        if (payload.server_url === undefined || !`${payload.server_url || ''}`.trim()) {
+          payload.server_url = cfg.serverUrl || cfg.broker || '';
+        }
+        if (payload.username === undefined || !`${payload.username || ''}`.trim()) {
+          payload.username = cfg.username || '';
+        }
+      }
     } else {
+      // 无 schema，使用 JSON 编辑
       try {
         JSON.parse(payload.config || '{}');
       } catch {
         toast.show('error', '配置 JSON 格式错误');
         return;
       }
-      setXunjiErrors({});
+      setConfigErrors({});
     }
 
     setSaving(true);
     const api = editing() ? putJSON(`/api/northbound/${editing()}`, payload) : postJSON('/api/northbound', payload);
     api.then(() => {
       toast.show('success', editing() ? '已更新' : '已创建');
-      setForm(empty);
-      setEditing(null);
-      setShowModal(false);
-      setXunjiConfig(normalizeXunJiConfig({}, xunjiSchema(), 5000));
-      setXunjiErrors({});
+      resetForm();
       load();
     })
       .catch((err) => toast.show('error', err?.message || '操作失败'))
       .finally(() => setSaving(false));
+  };
+
+  const resetForm = () => {
+    setForm(empty);
+    setEditing(null);
+    setShowModal(false);
+    setConfig(normalizeConfig({}, [], 5000));
+    setConfigErrors({});
   };
 
   const toggle = (id) => {
@@ -273,64 +299,75 @@ export function Northbound() {
     setForm(empty);
     setEditing(null);
     setShowModal(true);
-    if (xunjiSchema().length === 0) {
-      loadXunJiSchema(true);
+    setConfig(normalizeConfig({}, [], 5000));
+    setConfigErrors({});
+    // 确保加载了对应类型的 schema
+    const currentType = form().type || 'mqtt';
+    if (isSchemaDrivenType(currentType) && schema().length === 0) {
+      loadSchema(currentType, true);
     }
-    setXunjiConfig(normalizeXunJiConfig({}, xunjiSchema(), 5000));
-    setXunjiErrors({});
   };
 
   const edit = (item) => {
     const upload = toInt(item.upload_interval, 5000);
     const base = { name: item.name, type: item.type, upload_interval: upload, config: item.config, enabled: item.enabled };
 
-    if (item.type === 'xunji') {
-      if (xunjiSchema().length === 0) {
-        loadXunJiSchema(true);
-      }
-      const parsed = safeParseJSON(item.config, {});
-      const cfg = normalizeXunJiConfig(parsed, xunjiSchema(), upload);
-      base.upload_interval = toInt(cfg.uploadIntervalMs, upload);
-      base.config = JSON.stringify(cfg);
-      setXunjiConfig(cfg);
+    const parsed = safeParseJSON(item.config, {});
+
+    if (isSchemaDrivenType(item.type)) {
+      loadSchema(item.type, true).then(() => {
+        const cfg = normalizeConfig(parsed, schema(), upload);
+        if (hasSchemaField(schema(), 'uploadIntervalMs')) {
+          base.upload_interval = toInt(cfg.uploadIntervalMs, upload);
+        }
+        base.config = JSON.stringify(cfg);
+        setConfig(cfg);
+      });
     } else {
-      setXunjiConfig(normalizeXunJiConfig({}, xunjiSchema(), upload));
+      setConfig(normalizeConfig({}, [], upload));
     }
 
     setEditing(item.id);
     setForm(base);
     setShowModal(true);
-    setXunjiErrors({});
+    setConfigErrors({});
   };
 
   const updateType = (nextType) => {
     const current = form();
     const next = { ...current, type: nextType };
 
-    if (nextType === 'xunji') {
-      if (xunjiSchema().length === 0) {
-        loadXunJiSchema(true);
-      }
-      const parsed = safeParseJSON(current.config, {});
-      const cfg = normalizeXunJiConfig(parsed, xunjiSchema(), current.upload_interval);
-      next.upload_interval = toInt(cfg.uploadIntervalMs, current.upload_interval);
-      next.config = JSON.stringify(cfg);
-      setXunjiConfig(cfg);
+    if (isSchemaDrivenType(nextType)) {
+      loadSchema(nextType, true).then(() => {
+        const parsed = safeParseJSON(current.config, {});
+        const cfg = normalizeConfig(parsed, schema(), current.upload_interval);
+
+        if (hasSchemaField(schema(), 'uploadIntervalMs')) {
+          next.upload_interval = toInt(cfg.uploadIntervalMs, current.upload_interval);
+        }
+        next.config = JSON.stringify(cfg);
+        setConfig(cfg);
+      });
+    } else {
+      setSchema([]);
+      setSchemaError('');
+      setConfig(normalizeConfig({}, [], current.upload_interval));
     }
 
     setForm(next);
-    setXunjiErrors({});
+    setConfigErrors({});
   };
 
-  const updateXunJiField = (key, value, fieldType) => {
-    setXunjiErrors((prev) => ({ ...prev, [key]: undefined }));
+  const updateField = (key, value, fieldType) => {
+    setConfigErrors((prev) => ({ ...prev, [key]: undefined }));
 
     let nextValue = value;
     if (fieldType === 'int') nextValue = toInt(value, 0);
     if (fieldType === 'bool') nextValue = toBool(value);
 
-    setXunjiConfig((prev) => {
+    setConfig((prev) => {
       const next = { ...prev, [key]: nextValue };
+      // 同步上传周期
       if (key === 'uploadIntervalMs') {
         const uploadInterval = toInt(next.uploadIntervalMs, 5000);
         setForm((f) => ({ ...f, upload_interval: uploadInterval }));
@@ -339,14 +376,27 @@ export function Northbound() {
     });
   };
 
+  const getTypeLabel = () => {
+    const type = form().type;
+    return type === 'xunji' ? '寻迹' : (type === 'pandax' ? 'PandaX' : (type === 'mqtt' ? 'MQTT' : type.toUpperCase()));
+  };
+
+  const getSchemaTitle = () => {
+    const type = form().type;
+    if (type === 'xunji') return '寻迹 Schema 配置';
+    if (type === 'pandax') return 'PandaX Schema 配置';
+    if (type === 'mqtt') return 'MQTT Schema 配置';
+    return '配置';
+  };
+
   return (
     <div>
       <Card
         title="北向配置列表"
         extra={
           <div class="flex" style="gap:8px; align-items:center;">
-            <Show when={xunjiSchemaError()}>
-              <span style="font-size:12px; color:var(--danger);">XUNJI Schema 异常</span>
+            <Show when={schemaError()}>
+              <span style="font-size:12px; color:var(--danger);">Schema 异常</span>
             </Show>
             <button class="btn" onClick={syncGatewayIdentity} disabled={syncing()}>
               {syncing() ? '同步中...' : '同步网关身份'}
@@ -421,7 +471,7 @@ export function Northbound() {
           <div class="card" style="width:780px; max-width:94vw;">
             <div class="card-header">
               <h3 class="card-title">{editing() ? '编辑北向配置' : '新增北向配置'}</h3>
-              <button class="btn btn-ghost" onClick={() => { setShowModal(false); setEditing(null); setForm(empty); setXunjiErrors({}); }} style="padding:4px 8px;">✕</button>
+              <button class="btn btn-ghost" onClick={resetForm} style="padding:4px 8px;">✕</button>
             </div>
             <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
               <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
@@ -442,38 +492,17 @@ export function Northbound() {
                     value={form().type}
                     onChange={(e) => updateType(e.target.value)}
                   >
-                    <option value="http">HTTP</option>
                     <option value="mqtt">MQTT</option>
+                    <option value="pandax">PandaX</option>
                     <option value="xunji">寻迹</option>
                   </select>
                 </div>
               </div>
 
+              {/* Schema 驱动表单或 JSON 编辑 */}
               <Show
-                when={form().type !== 'xunji'}
-                fallback={(
-                  <div class="form-group">
-                    <label class="form-label">上传间隔 (ms)</label>
-                    <input class="form-input" type="number" value={form().upload_interval} disabled />
-                    <div class="form-hint">XUNJI 模式下由 Schema 字段 `uploadIntervalMs` 驱动，并同步到北向上传间隔。</div>
-                  </div>
-                )}
-              >
-                <div class="form-group">
-                  <label class="form-label">上传间隔 (ms)</label>
-                  <input
-                    class="form-input"
-                    type="number"
-                    value={form().upload_interval}
-                    onInput={(e) => setForm({ ...form(), upload_interval: +e.target.value })}
-                    required
-                  />
-                </div>
-              </Show>
-
-              <Show
-                when={form().type === 'xunji'}
-                fallback={(
+                when={schema().length > 0 && isSchemaDrivenType(form().type)}
+                fallback={
                   <div class="form-group">
                     <label class="form-label">配置 (JSON)</label>
                     <textarea
@@ -481,72 +510,79 @@ export function Northbound() {
                       rows={7}
                       value={form().config}
                       onInput={(e) => setForm({ ...form(), config: e.target.value })}
-                      placeholder='{ "url": "http://...", "method": "POST" }'
+                      placeholder='{ "broker": "mqtt://...", "topic": "/device/data" }'
                       style="font-family:monospace; font-size:13px;"
                     ></textarea>
                   </div>
-                )}
+                }
               >
                 <div class="card" style="margin-top:8px; padding:12px; background:var(--surface-1); border:1px solid var(--border-color);">
-                  <div style="font-weight:600; margin-bottom:8px;">XUNJI Schema 配置（后端下发）</div>
+                  <div style="font-weight:600; margin-bottom:8px;">{getSchemaTitle()}（后端下发）</div>
 
                   <Show
-                    when={xunjiSchema().length > 0}
-                    fallback={(
-                      <div class="form-hint" style="margin-bottom:8px; color:var(--danger);">
-                        <div>{xunjiSchemaLoading() ? 'XUNJI Schema 加载中...' : (xunjiSchemaError() || 'XUNJI Schema 尚未加载')}</div>
-                        <Show when={!xunjiSchemaLoading()}>
-                          <button type="button" class="btn" style="margin-top:8px;" onClick={() => loadXunJiSchema()}>
-                            重试加载 Schema
-                          </button>
-                        </Show>
+                    when={!schemaLoading()}
+                    fallback={
+                      <div class="form-hint" style="margin-bottom:8px;">
+                        <div>Schema 加载中...</div>
                       </div>
-                    )}
+                    }
                   >
-                    <div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px 12px;">
-                      <For each={xunjiSchema()}>{(field) => {
-                        const value = xunjiConfig()[field.key];
-                        const error = xunjiErrors()[field.key];
-                        const isPassword = field.key.toLowerCase().includes('password');
+                    <Show
+                      when={schema().length > 0}
+                      fallback={
+                        <div class="form-hint" style="margin-bottom:8px; color:var(--danger);">
+                          <div>{schemaError() || 'Schema 加载失败'}</div>
+                          <button type="button" class="btn" style="margin-top:8px;" onClick={() => loadSchema(form().type)}>
+                            重试
+                          </button>
+                        </div>
+                      }
+                    >
+                      <div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px 12px;">
+                        <For each={schema()}>{(field) => {
+                          const value = config()[field.key];
+                          const error = configErrors()[field.key];
+                          const isPassword = field.key.toLowerCase().includes('password');
 
-                        return (
-                          <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">
-                              {field.label}
-                              {field.required ? ' *' : ''}
-                            </label>
+                          return (
+                            <div class="form-group" style="margin-bottom:0;">
+                              <label class="form-label">
+                                {field.label}
+                                {field.required ? ' *' : ''}
+                              </label>
 
-                            <Show
-                              when={field.type !== 'bool'}
-                              fallback={(
-                                <select
-                                  class="form-select"
-                                  value={value ? 'true' : 'false'}
-                                  onChange={(e) => updateXunJiField(field.key, e.target.value, field.type)}
-                                >
-                                  <option value="false">false</option>
-                                  <option value="true">true</option>
-                                </select>
-                              )}
-                            >
-                              <input
-                                class="form-input"
-                                type={isPassword ? 'password' : (field.type === 'int' ? 'number' : 'text')}
-                                value={field.type === 'int' ? toInt(value, field.default ?? 0) : (value ?? '')}
-                                onInput={(e) => updateXunJiField(field.key, e.target.value, field.type)}
-                                placeholder={field.default !== '' ? `${field.default}` : ''}
-                                required={field.required}
-                              />
-                            </Show>
+                              <Show
+                                when={field.type !== 'bool'}
+                                fallback={
+                                  <select
+                                    class="form-select"
+                                    value={value ? 'true' : 'false'}
+                                    onChange={(e) => updateField(field.key, e.target.value, field.type)}
+                                  >
+                                    <option value="false">false</option>
+                                    <option value="true">true</option>
+                                  </select>
+                                }
+                              >
+                                <input
+                                  class="form-input"
+                                  type={isPassword ? 'password' : (field.type === 'int' ? 'number' : 'text')}
+                                  value={field.type === 'int' ? toInt(value, field.default ?? 0) : (value ?? '')}
+                                  onInput={(e) => updateField(field.key, e.target.value, field.type)}
+                                  placeholder={field.default !== '' ? `${field.default}` : ''}
+                                  required={field.required}
+                                />
+                              </Show>
 
-                            <div class="form-hint">{field.description}</div>
-                            <Show when={error}>
-                              <div style="color:var(--danger); font-size:12px; margin-top:4px;">{error}</div>
-                            </Show>
-                          </div>
-                        );
-                      }}</For>
-                    </div>
+                              <div class="form-hint">{field.description}</div>
+                              <Show when={error}>
+                                <div style="color:var(--danger); font-size:12px; margin-top:4px;">{error}</div>
+                              </Show>
+                            </div>
+                          );
+                        }}</For>
+                      </div>
+                    </Show>
                   </Show>
 
                   <div class="form-group" style="margin-top:10px;">
@@ -554,7 +590,7 @@ export function Northbound() {
                     <textarea
                       class="form-input"
                       rows={6}
-                      value={JSON.stringify(buildXunJiPayload(), null, 2)}
+                      value={JSON.stringify(buildPayload(), null, 2)}
                       readonly
                       style="font-family:monospace; font-size:12px;"
                     ></textarea>
@@ -563,12 +599,7 @@ export function Northbound() {
               </Show>
 
               <div class="flex" style={{ gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
-                <button
-                  type="button"
-                  class="btn"
-                  onClick={() => { setShowModal(false); setEditing(null); setForm(empty); setXunjiErrors({}); }}
-                  disabled={saving()}
-                >
+                <button type="button" class="btn" onClick={resetForm} disabled={saving()}>
                   取消
                 </button>
                 <button type="submit" class="btn btn-primary" disabled={saving()}>
