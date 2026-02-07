@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -74,27 +73,18 @@ func (h *Handler) syncGatewayIdentityToXunjiNorthbound(productKey, deviceKey str
 }
 
 func buildNorthboundIdentityPatch(current *models.NorthboundConfig, productKey, deviceKey string) (*models.NorthboundConfig, bool, error) {
-	raw := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(current.Config), &raw); err != nil {
-		return nil, false, err
-	}
+	oldPK := strings.TrimSpace(current.ProductKey)
+	oldDK := strings.TrimSpace(current.DeviceKey)
+	newPK := strings.TrimSpace(productKey)
+	newDK := strings.TrimSpace(deviceKey)
 
-	oldPK, _ := raw["productKey"].(string)
-	oldDK, _ := raw["deviceKey"].(string)
-	if strings.TrimSpace(oldPK) == productKey && strings.TrimSpace(oldDK) == deviceKey {
+	if oldPK == newPK && oldDK == newDK {
 		return nil, false, nil
 	}
 
-	raw["productKey"] = productKey
-	raw["deviceKey"] = deviceKey
-
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return nil, false, err
-	}
-
 	next := *current
-	next.Config = string(b)
+	next.ProductKey = newPK
+	next.DeviceKey = newDK
 	return &next, true, nil
 }
 

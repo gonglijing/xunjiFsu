@@ -55,7 +55,8 @@ func Run(cfg *config.Config) error {
 		logger.Warn("Failed to load drivers", "error", err)
 	}
 
-	northboundMgr := northbound.NewNorthboundManager(cfg.NorthboundPluginsDir)
+	// 创建北向管理器（使用内置适配器，不再需要插件目录）
+	northboundMgr := northbound.NewNorthboundManager()
 
 	loadEnabledNorthboundConfigs(northboundMgr)
 

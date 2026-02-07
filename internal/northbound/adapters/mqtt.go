@@ -1,0 +1,505 @@
+package adapters
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+)
+
+// MQTTConfig MQTT配置
+type MQTTConfig struct {
+	Broker         string `json:"broker"`
+	Topic          string `json:"topic"`
+	AlarmTopic     string `json:"alarm_topic"`
+	ClientID       string `json:"client_id"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	QOS            int    `json:"qos"`
+	Retain         bool   `json:"retain"`
+	KeepAlive      int    `json:"keep_alive"`
+	ConnectTimeout int    `json:"connect_timeout"`
+}
+
+// MQTTAdapter MQTT北向适配器
+// 每个 MQTTAdapter 自己管理自己的状态和发送线程
+type MQTTAdapter struct {
+	name       string
+	config     *MQTTConfig
+	broker     string
+	topic      string
+	alarmTopic string
+	clientID   string
+	username   string
+	password   string
+	qos        byte
+	retain     bool
+	timeout    time.Duration
+	keepAlive  time.Duration
+	enabled    bool
+	interval   time.Duration
+	lastSend   time.Time
+
+	// MQTT客户端
+	client mqtt.Client
+
+	// 数据缓冲
+	pendingData []*models.CollectData
+	pendingMu  sync.RWMutex
+
+	// 报警缓冲
+	pendingAlarms []*models.AlarmPayload
+	alarmMu      sync.RWMutex
+
+	// 控制通道
+	stopChan chan struct{}
+	dataChan chan struct{}
+	wg       sync.WaitGroup
+
+	// 状态
+	mu          sync.RWMutex
+	initialized bool
+	connected   bool
+}
+
+// NewMQTTAdapter 创建MQTT适配器
+func NewMQTTAdapter(name string) *MQTTAdapter {
+	return &MQTTAdapter{
+		name:        name,
+		lastSend:    time.Time{},
+		interval:    5 * time.Second, // 默认5秒
+		stopChan:    make(chan struct{}),
+		dataChan:    make(chan struct{}, 1),
+		pendingData: make([]*models.CollectData, 0),
+		pendingAlarms: make([]*models.AlarmPayload, 0),
+	}
+}
+
+// Name 获取名称
+func (a *MQTTAdapter) Name() string {
+	return a.name
+}
+
+// Type 获取类型
+func (a *MQTTAdapter) Type() string {
+	return "mqtt"
+}
+
+// Initialize 初始化
+func (a *MQTTAdapter) Initialize(configStr string) error {
+	cfg := &MQTTConfig{}
+	if err := json.Unmarshal([]byte(configStr), cfg); err != nil {
+		return fmt.Errorf("failed to parse MQTT config: %w", err)
+	}
+
+	if cfg.Broker == "" {
+		return fmt.Errorf("broker is required")
+	}
+	if cfg.Topic == "" {
+		return fmt.Errorf("topic is required")
+	}
+
+	a.mu.Lock()
+	a.config = cfg
+	a.broker = normalizeBroker(cfg.Broker)
+	a.topic = cfg.Topic
+	a.alarmTopic = cfg.AlarmTopic
+	if a.alarmTopic == "" {
+		a.alarmTopic = a.topic + "/alarm"
+	}
+	a.clientID = cfg.ClientID
+	if a.clientID == "" {
+		a.clientID = fmt.Sprintf("gogw-mqtt-%d", time.Now().UnixNano())
+	}
+	a.username = cfg.Username
+	a.password = cfg.Password
+	a.qos = clampQOS(cfg.QOS)
+	a.retain = cfg.Retain
+	if cfg.ConnectTimeout > 0 {
+		a.timeout = time.Duration(cfg.ConnectTimeout) * time.Second
+	} else {
+		a.timeout = 10 * time.Second
+	}
+	if cfg.KeepAlive > 0 {
+		a.keepAlive = time.Duration(cfg.KeepAlive) * time.Second
+	}
+	a.mu.Unlock()
+
+	// 连接MQTT
+	client, err := connectMQTT(a.broker, a.clientID, a.username, a.password, cfg.KeepAlive, cfg.ConnectTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to connect MQTT: %w", err)
+	}
+
+	a.mu.Lock()
+	a.client = client
+	a.initialized = true
+	a.connected = true
+	a.mu.Unlock()
+
+	log.Printf("MQTT adapter initialized: %s (broker=%s, topic=%s)", a.name, a.broker, a.topic)
+	return nil
+}
+
+// Start 启动适配器的后台线程
+func (a *MQTTAdapter) Start() {
+	a.mu.Lock()
+	if a.initialized && !a.enabled {
+		a.enabled = true
+		a.wg.Add(2)
+		go a.sendLoop()
+		go a.alarmLoop()
+		log.Printf("MQTT adapter started: %s", a.name)
+	}
+	a.mu.Unlock()
+}
+
+// Stop 停止适配器的后台线程
+func (a *MQTTAdapter) Stop() {
+	a.mu.Lock()
+	if a.enabled {
+		a.enabled = false
+		close(a.stopChan)
+	}
+	a.mu.Unlock()
+	a.wg.Wait()
+	log.Printf("MQTT adapter stopped: %s", a.name)
+}
+
+// SetInterval 设置发送周期
+func (a *MQTTAdapter) SetInterval(interval time.Duration) {
+	a.mu.Lock()
+	if interval < 500*time.Millisecond {
+		interval = 500 * time.Millisecond
+	}
+	a.interval = interval
+	a.lastSend = time.Time{}
+	a.mu.Unlock()
+}
+
+// IsEnabled 检查是否启用
+func (a *MQTTAdapter) IsEnabled() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.enabled
+}
+
+// IsConnected 检查连接状态
+func (a *MQTTAdapter) IsConnected() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.connected && a.client != nil && a.client.IsConnected()
+}
+
+// Send 发送数据（加入缓冲队列）
+func (a *MQTTAdapter) Send(data *models.CollectData) error {
+	if data == nil {
+		return nil
+	}
+
+	a.pendingMu.Lock()
+	a.pendingData = append(a.pendingData, data)
+	// 限制队列大小
+	if len(a.pendingData) > 1000 {
+		a.pendingData = a.pendingData[1:]
+	}
+	a.pendingMu.Unlock()
+
+	// 触发发送
+	select {
+	case a.dataChan <- struct{}{}:
+	default:
+	}
+
+	return nil
+}
+
+// SendAlarm 发送报警
+func (a *MQTTAdapter) SendAlarm(alarm *models.AlarmPayload) error {
+	if alarm == nil {
+		return nil
+	}
+
+	a.alarmMu.Lock()
+	a.pendingAlarms = append(a.pendingAlarms, alarm)
+	// 限制队列大小
+	if len(a.pendingAlarms) > 100 {
+		a.pendingAlarms = a.pendingAlarms[1:]
+	}
+	a.alarmMu.Unlock()
+
+	return a.flushAlarms()
+}
+
+// Close 关闭
+func (a *MQTTAdapter) Close() error {
+	a.Stop()
+
+	a.mu.Lock()
+	a.initialized = false
+	a.connected = false
+	a.mu.Unlock()
+
+	if a.client != nil && a.client.IsConnected() {
+		a.client.Disconnect(250)
+	}
+	a.client = nil
+
+	return nil
+}
+
+// sendLoop 数据发送循环（独立线程）
+func (a *MQTTAdapter) sendLoop() {
+	defer a.wg.Done()
+
+	ticker := time.NewTicker(a.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-a.stopChan:
+			// 关闭前发送剩余数据
+			a.flushPendingData()
+			return
+		case <-a.dataChan:
+			a.flushPendingData()
+		case <-ticker.C:
+			a.flushPendingData()
+		}
+	}
+}
+
+// alarmLoop 报警发送循环（独立线程）
+func (a *MQTTAdapter) alarmLoop() {
+	defer a.wg.Done()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-a.stopChan:
+			return
+		case <-ticker.C:
+			a.flushAlarms()
+		}
+	}
+}
+
+// flushPendingData 发送待处理数据
+func (a *MQTTAdapter) flushPendingData() {
+	a.pendingMu.Lock()
+	if len(a.pendingData) == 0 {
+		a.pendingMu.Unlock()
+		return
+	}
+	// 复制数据并清空队列
+	batch := make([]*models.CollectData, len(a.pendingData))
+	copy(batch, a.pendingData)
+	a.pendingData = a.pendingData[:0]
+	a.pendingMu.Unlock()
+
+	// 发送每个数据点
+	for _, data := range batch {
+		if err := a.publish(a.topic, data); err != nil {
+			log.Printf("MQTT send data failed: %s, error: %v", a.name, err)
+		}
+	}
+}
+
+// flushAlarms 发送报警
+func (a *MQTTAdapter) flushAlarms() error {
+	a.alarmMu.Lock()
+	if len(a.pendingAlarms) == 0 {
+		a.alarmMu.Unlock()
+		return nil
+	}
+	// 复制报警并清空队列
+	batch := make([]*models.AlarmPayload, len(a.pendingAlarms))
+	copy(batch, a.pendingAlarms)
+	a.pendingAlarms = a.pendingAlarms[:0]
+	a.alarmMu.Unlock()
+
+	for _, alarm := range batch {
+		if err := a.publish(a.alarmTopic, alarm); err != nil {
+			log.Printf("MQTT send alarm failed: %s, error: %v", a.name, err)
+		}
+	}
+
+	return nil
+}
+
+// publish 发布消息
+func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
+	a.mu.RLock()
+	if !a.initialized || !a.enabled {
+		a.mu.RUnlock()
+		return fmt.Errorf("adapter not initialized or disabled")
+	}
+	client := a.client
+	qos := a.qos
+	retain := a.retain
+	timeout := a.timeout
+	a.mu.RUnlock()
+
+	if client == nil {
+		return fmt.Errorf("mqtt client is nil")
+	}
+
+	if !client.IsConnected() {
+		token := client.Connect()
+		if !token.WaitTimeout(timeout) {
+			return fmt.Errorf("mqtt connect timeout")
+		}
+		if err := token.Error(); err != nil {
+			a.mu.Lock()
+			a.connected = false
+			a.mu.Unlock()
+			return err
+		}
+		a.mu.Lock()
+		a.connected = true
+		a.mu.Unlock()
+	}
+
+	var body []byte
+	if data, ok := payload.(*models.CollectData); ok {
+		msg := map[string]interface{}{
+			"device_name": data.DeviceName,
+			"timestamp":   data.Timestamp,
+			"fields":      data.Fields,
+		}
+		body, _ = json.Marshal(msg)
+	} else if alarm, ok := payload.(*models.AlarmPayload); ok {
+		body, _ = json.Marshal(alarm)
+	} else {
+		return fmt.Errorf("unknown payload type")
+	}
+
+	token := client.Publish(topic, qos, retain, body)
+	if !token.WaitTimeout(timeout) {
+		return fmt.Errorf("mqtt publish timeout")
+	}
+	if err := token.Error(); err != nil {
+		a.mu.Lock()
+		a.connected = false
+		a.mu.Unlock()
+		return err
+	}
+
+	a.mu.Lock()
+	a.lastSend = time.Now()
+	a.connected = true
+	a.mu.Unlock()
+
+	return nil
+}
+
+// GetStats 获取适配器统计信息
+func (a *MQTTAdapter) GetStats() map[string]interface{} {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	a.pendingMu.RLock()
+	pendingCount := len(a.pendingData)
+	a.pendingMu.RUnlock()
+
+	a.alarmMu.RLock()
+	alarmCount := len(a.pendingAlarms)
+	a.alarmMu.RUnlock()
+
+	return map[string]interface{}{
+		"name":          a.name,
+		"type":         "mqtt",
+		"enabled":      a.enabled,
+		"initialized":  a.initialized,
+		"connected":    a.connected && a.client != nil && a.client.IsConnected(),
+		"interval_ms":  a.interval.Milliseconds(),
+		"pending_data": pendingCount,
+		"pending_alarm": alarmCount,
+		"broker":       a.broker,
+		"topic":        a.topic,
+	}
+}
+
+// GetLastSendTime 获取最后发送时间
+func (a *MQTTAdapter) GetLastSendTime() time.Time {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.lastSend
+}
+
+// PendingCommandCount 获取待处理命令数量
+func (a *MQTTAdapter) PendingCommandCount() int {
+	return 0
+}
+
+// 连接MQTT（复制自 plugin_north/adapter/helpers.go）
+func connectMQTT(broker, clientID, username, password string, keepAliveSec, timeoutSec int) (mqtt.Client, error) {
+	opts := mqtt.NewClientOptions().AddBroker(broker)
+	opts.SetClientID(clientID)
+	if username != "" {
+		opts.SetUsername(username)
+	}
+	if password != "" {
+		opts.SetPassword(password)
+	}
+	opts.SetAutoReconnect(true)
+	opts.SetConnectRetry(true)
+	opts.SetConnectRetryInterval(2 * time.Second)
+	if keepAliveSec > 0 {
+		opts.SetKeepAlive(time.Duration(keepAliveSec) * time.Second)
+	}
+	if timeoutSec > 0 {
+		opts.SetConnectTimeout(time.Duration(timeoutSec) * time.Second)
+	} else {
+		opts.SetConnectTimeout(10 * time.Second)
+	}
+	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
+		if err != nil {
+			log.Printf("MQTT connection lost: %v", err)
+		}
+	}
+	opts.OnConnect = func(_ mqtt.Client) {
+		log.Printf("MQTT connected: %s", broker)
+	}
+
+	client := mqtt.NewClient(opts)
+	token := client.Connect()
+	timeout := 10 * time.Second
+	if timeoutSec > 0 {
+		timeout = time.Duration(timeoutSec) * time.Second
+	}
+	if !token.WaitTimeout(timeout) {
+		return nil, fmt.Errorf("mqtt connect timeout")
+	}
+	if err := token.Error(); err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+func normalizeBroker(broker string) string {
+	if broker == "" {
+		return ""
+	}
+	if strings.Contains(broker, "://") {
+		return broker
+	}
+	return "tcp://" + broker
+}
+
+func clampQOS(qos int) byte {
+	if qos < 0 {
+		return 0
+	}
+	if qos > 2 {
+		return 2
+	}
+	return byte(qos)
+}

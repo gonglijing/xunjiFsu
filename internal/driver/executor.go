@@ -365,6 +365,57 @@ func (e *DriverExecutor) ExecuteWithContext(ctx context.Context, device *models.
 	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, defaultDriverFunction, driverCtx)
 }
 
+// ExecuteCommand 执行指定函数（用于写入等主动命令）
+func (e *DriverExecutor) ExecuteCommand(device *models.Device, function string, config map[string]string) (*DriverResult, error) {
+	return e.ExecuteCommandWithContext(context.Background(), device, function, config)
+}
+
+// ExecuteCommandWithContext 执行指定函数（支持超时/取消）
+func (e *DriverExecutor) ExecuteCommandWithContext(ctx context.Context, device *models.Device, function string, config map[string]string) (*DriverResult, error) {
+	if device.DriverID == nil {
+		return nil, fmt.Errorf("device %s has no driver", device.Name)
+	}
+	done, err := e.startExecution(device)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+
+	resourceID, resourceType := resolveResource(device)
+	e.ensureResourcePath(resourceID, resourceType, device)
+
+	deviceConfig := buildDeviceConfig(device)
+	for key, value := range config {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		deviceConfig[trimmedKey] = value
+	}
+
+	pluginFunc := strings.TrimSpace(function)
+	if pluginFunc == "" {
+		pluginFunc = defaultDriverFunction
+	}
+
+	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
+
+	unlock := e.lockResource(resourceID)
+	if unlock != nil {
+		defer unlock()
+	}
+
+	if err := e.ensureSerialResource(resourceID, resourceType, device); err != nil {
+		return nil, err
+	}
+
+	if err := e.ensureDriverLoaded(device, resourceID); err != nil {
+		return nil, err
+	}
+
+	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, pluginFunc, driverCtx)
+}
+
 // CollectData 采集数据
 func (e *DriverExecutor) CollectData(device *models.Device) (*models.CollectData, error) {
 	return e.CollectDataWithContext(context.Background(), device)

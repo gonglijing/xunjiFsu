@@ -2,6 +2,8 @@ package database
 
 import (
 	"database/sql"
+	"time"
+
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -10,8 +12,20 @@ import (
 // CreateNorthboundConfig 创建北向配置
 func CreateNorthboundConfig(config *models.NorthboundConfig) (int64, error) {
 	result, err := ParamDB.Exec(
-		"INSERT INTO northbound_configs (name, type, enabled, config, upload_interval) VALUES (?, ?, ?, ?, ?)",
-		config.Name, config.Type, config.Enabled, config.Config, config.UploadInterval,
+		`INSERT INTO northbound_configs (
+			name, type, enabled, upload_interval,
+			server_url, port, path, username, password, client_id,
+			topic, alarm_topic,
+			qos, retain, keep_alive, timeout,
+			product_key, device_key,
+			ext_config
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		config.Name, config.Type, config.Enabled, config.UploadInterval,
+		config.ServerURL, config.Port, config.Path, config.Username, config.Password, config.ClientID,
+		config.Topic, config.AlarmTopic,
+		config.QOS, config.Retain, config.KeepAlive, config.Timeout,
+		config.ProductKey, config.DeviceKey,
+		config.ExtConfig,
 	)
 	if err != nil {
 		return 0, err
@@ -23,10 +37,26 @@ func CreateNorthboundConfig(config *models.NorthboundConfig) (int64, error) {
 func GetNorthboundConfigByID(id int64) (*models.NorthboundConfig, error) {
 	config := &models.NorthboundConfig{}
 	err := ParamDB.QueryRow(
-		"SELECT id, name, type, enabled, config, upload_interval, created_at, updated_at FROM northbound_configs WHERE id = ?",
+		`SELECT id, name, type, enabled, upload_interval,
+			server_url, port, path, username, client_id,
+			topic, alarm_topic,
+			qos, retain, keep_alive, timeout,
+			product_key, device_key,
+			ext_config,
+			connected, last_connected_at,
+			created_at, updated_at
+		FROM northbound_configs WHERE id = ?`,
 		id,
-	).Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
-		&config.CreatedAt, &config.UpdatedAt)
+	).Scan(
+		&config.ID, &config.Name, &config.Type, &config.Enabled, &config.UploadInterval,
+		&config.ServerURL, &config.Port, &config.Path, &config.Username, &config.ClientID,
+		&config.Topic, &config.AlarmTopic,
+		&config.QOS, &config.Retain, &config.KeepAlive, &config.Timeout,
+		&config.ProductKey, &config.DeviceKey,
+		&config.ExtConfig,
+		&config.Connected, &config.LastConnectedAt,
+		&config.CreatedAt, &config.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +66,28 @@ func GetNorthboundConfigByID(id int64) (*models.NorthboundConfig, error) {
 // GetAllNorthboundConfigs 获取所有北向配置
 func GetAllNorthboundConfigs() ([]*models.NorthboundConfig, error) {
 	return queryList[*models.NorthboundConfig](ParamDB,
-		"SELECT id, name, type, enabled, config, upload_interval, created_at, updated_at FROM northbound_configs ORDER BY id",
+		`SELECT id, name, type, enabled, upload_interval,
+			server_url, port, path, username, client_id,
+			topic, alarm_topic,
+			qos, retain, keep_alive, timeout,
+			product_key, device_key,
+			ext_config,
+			connected, last_connected_at,
+			created_at, updated_at
+		FROM northbound_configs ORDER BY id`,
 		nil,
 		func(rows *sql.Rows) (*models.NorthboundConfig, error) {
 			config := &models.NorthboundConfig{}
-			if err := rows.Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
-				&config.CreatedAt, &config.UpdatedAt); err != nil {
+			if err := rows.Scan(
+				&config.ID, &config.Name, &config.Type, &config.Enabled, &config.UploadInterval,
+				&config.ServerURL, &config.Port, &config.Path, &config.Username, &config.ClientID,
+				&config.Topic, &config.AlarmTopic,
+				&config.QOS, &config.Retain, &config.KeepAlive, &config.Timeout,
+				&config.ProductKey, &config.DeviceKey,
+				&config.ExtConfig,
+				&config.Connected, &config.LastConnectedAt,
+				&config.CreatedAt, &config.UpdatedAt,
+			); err != nil {
 				return nil, err
 			}
 			return config, nil
@@ -52,12 +98,28 @@ func GetAllNorthboundConfigs() ([]*models.NorthboundConfig, error) {
 // GetEnabledNorthboundConfigs 获取所有启用的北向配置
 func GetEnabledNorthboundConfigs() ([]*models.NorthboundConfig, error) {
 	return queryList[*models.NorthboundConfig](ParamDB,
-		"SELECT id, name, type, enabled, config, upload_interval, created_at, updated_at FROM northbound_configs WHERE enabled = 1 ORDER BY id",
+		`SELECT id, name, type, enabled, upload_interval,
+			server_url, port, path, username, client_id,
+			topic, alarm_topic,
+			qos, retain, keep_alive, timeout,
+			product_key, device_key,
+			ext_config,
+			connected, last_connected_at,
+			created_at, updated_at
+		FROM northbound_configs WHERE enabled = 1 ORDER BY id`,
 		nil,
 		func(rows *sql.Rows) (*models.NorthboundConfig, error) {
 			config := &models.NorthboundConfig{}
-			if err := rows.Scan(&config.ID, &config.Name, &config.Type, &config.Enabled, &config.Config, &config.UploadInterval,
-				&config.CreatedAt, &config.UpdatedAt); err != nil {
+			if err := rows.Scan(
+				&config.ID, &config.Name, &config.Type, &config.Enabled, &config.UploadInterval,
+				&config.ServerURL, &config.Port, &config.Path, &config.Username, &config.ClientID,
+				&config.Topic, &config.AlarmTopic,
+				&config.QOS, &config.Retain, &config.KeepAlive, &config.Timeout,
+				&config.ProductKey, &config.DeviceKey,
+				&config.ExtConfig,
+				&config.Connected, &config.LastConnectedAt,
+				&config.CreatedAt, &config.UpdatedAt,
+			); err != nil {
 				return nil, err
 			}
 			return config, nil
@@ -68,15 +130,46 @@ func GetEnabledNorthboundConfigs() ([]*models.NorthboundConfig, error) {
 // UpdateNorthboundConfig 更新北向配置
 func UpdateNorthboundConfig(config *models.NorthboundConfig) error {
 	_, err := ParamDB.Exec(
-		"UPDATE northbound_configs SET name = ?, type = ?, enabled = ?, config = ?, upload_interval = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-		config.Name, config.Type, config.Enabled, config.Config, config.UploadInterval, config.ID,
+		`UPDATE northbound_configs SET
+			name = ?, type = ?, enabled = ?, upload_interval = ?,
+			server_url = ?, port = ?, path = ?, username = ?, password = ?, client_id = ?,
+			topic = ?, alarm_topic = ?,
+			qos = ?, retain = ?, keep_alive = ?, timeout = ?,
+			product_key = ?, device_key = ?,
+			ext_config = ?,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`,
+		config.Name, config.Type, config.Enabled, config.UploadInterval,
+		config.ServerURL, config.Port, config.Path, config.Username, config.Password, config.ClientID,
+		config.Topic, config.AlarmTopic,
+		config.QOS, config.Retain, config.KeepAlive, config.Timeout,
+		config.ProductKey, config.DeviceKey,
+		config.ExtConfig,
+		config.ID,
 	)
 	return err
 }
 
 // UpdateNorthboundEnabled 更新北向使能状态
 func UpdateNorthboundEnabled(id int64, enabled int) error {
-	_, err := ParamDB.Exec("UPDATE northbound_configs SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", enabled, id)
+	_, err := ParamDB.Exec(
+		"UPDATE northbound_configs SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		enabled, id,
+	)
+	return err
+}
+
+// UpdateNorthboundConnected 更新北向连接状态
+func UpdateNorthboundConnected(id int64, connected bool) error {
+	var lastConnected interface{}
+	if connected {
+		now := getCurrentTime()
+		lastConnected = &now
+	}
+	_, err := ParamDB.Exec(
+		"UPDATE northbound_configs SET connected = ?, last_connected_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		connected, lastConnected, id,
+	)
 	return err
 }
 
@@ -84,4 +177,9 @@ func UpdateNorthboundEnabled(id int64, enabled int) error {
 func DeleteNorthboundConfig(id int64) error {
 	_, err := ParamDB.Exec("DELETE FROM northbound_configs WHERE id = ?", id)
 	return err
+}
+
+// getCurrentTime 获取当前时间
+func getCurrentTime() time.Time {
+	return time.Now()
 }

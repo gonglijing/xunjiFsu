@@ -2,11 +2,13 @@ package app
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
+	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 )
 
 func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
@@ -37,10 +39,25 @@ func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 }
 
 func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, config *models.NorthboundConfig) error {
-	adapter, err := northbound.NewAdapterFromConfig(northboundMgr.PluginDir(), config)
-	if err != nil {
+	// 从模型字段生成配置JSON
+	configJSON := adapters.BuildConfigFromModel(config)
+
+	// 使用内置适配器
+	adapter := adapters.NewAdapter(config.Type, config.Name)
+	if adapter == nil {
+		return fmt.Errorf("unsupported northbound type: %s", config.Type)
+	}
+
+	if err := adapter.Initialize(configJSON); err != nil {
 		return fmt.Errorf("initialize northbound adapter %s: %w", config.Name, err)
 	}
+
+	// 设置上传周期
+	interval := time.Duration(config.UploadInterval) * time.Millisecond
+	adapter.SetInterval(interval)
+
+	// 注册到管理器
 	northboundMgr.RegisterAdapter(config.Name, adapter)
+
 	return nil
 }

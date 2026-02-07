@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -114,4 +115,196 @@ func inferDeviceResourceType(device *models.Device) string {
 		}
 		return "serial"
 	}
+}
+
+func enrichExecuteIdentity(config map[string]string, device *models.Device) {
+	if config == nil || device == nil {
+		return
+	}
+
+	productKey := strings.TrimSpace(device.ProductKey)
+	deviceKey := strings.TrimSpace(device.DeviceKey)
+	if productKey == "" || deviceKey == "" {
+		gwProductKey, gwDeviceKey := database.GetGatewayIdentity()
+		if productKey == "" {
+			productKey = gwProductKey
+		}
+		if deviceKey == "" {
+			deviceKey = gwDeviceKey
+		}
+	}
+
+	if productKey != "" {
+		config["product_key"] = productKey
+		config["productKey"] = productKey
+	}
+	if deviceKey != "" {
+		config["device_key"] = deviceKey
+		config["deviceKey"] = deviceKey
+	}
+}
+
+func normalizeWriteParams(config map[string]string, params map[string]interface{}) error {
+	if config == nil {
+		return fmt.Errorf("write params are empty")
+	}
+
+	fieldName := firstNonEmpty(
+		config["field_name"],
+		config["fieldName"],
+		config["field"],
+	)
+	fieldName = strings.TrimSpace(fieldName)
+
+	value := strings.TrimSpace(firstNonEmpty(
+		config["value"],
+		config["val"],
+	))
+
+	if fieldName != "" && value == "" {
+		if raw, ok := params[fieldName]; ok {
+			value = stringifyParamValue(raw)
+		}
+	}
+
+	if fieldName == "" || value == "" {
+		candidateField, candidateValue, err := resolveSingleWriteCandidate(params)
+		if err != nil {
+			return err
+		}
+		if fieldName == "" {
+			fieldName = candidateField
+		}
+		if value == "" {
+			value = candidateValue
+		}
+	}
+
+	fieldName = strings.TrimSpace(fieldName)
+	value = strings.TrimSpace(value)
+	if fieldName == "" {
+		return fmt.Errorf("write params missing field_name")
+	}
+	if value == "" {
+		return fmt.Errorf("write params missing value")
+	}
+
+	config["field_name"] = fieldName
+	config["value"] = value
+	delete(config, "field")
+	delete(config, "fieldName")
+	delete(config, "val")
+	return nil
+}
+
+func resolveSingleWriteCandidate(params map[string]interface{}) (field string, value string, err error) {
+	if len(params) == 0 {
+		return "", "", nil
+	}
+
+	if props, ok := extractWriteProperties(params); ok {
+		return pickSingleWriteValue(props)
+	}
+
+	return pickSingleWriteValue(params)
+}
+
+func extractWriteProperties(params map[string]interface{}) (map[string]interface{}, bool) {
+	if properties, ok := mapFromAny(params["properties"]); ok {
+		return properties, true
+	}
+
+	for _, key := range []string{"sub_device", "subDevice"} {
+		sub, ok := mapFromAny(params[key])
+		if !ok {
+			continue
+		}
+		if properties, ok := mapFromAny(sub["properties"]); ok {
+			return properties, true
+		}
+	}
+
+	for _, key := range []string{"sub_devices", "subDevices"} {
+		list, ok := params[key].([]interface{})
+		if !ok || len(list) != 1 {
+			continue
+		}
+		item, ok := mapFromAny(list[0])
+		if !ok {
+			continue
+		}
+		if properties, ok := mapFromAny(item["properties"]); ok {
+			return properties, true
+		}
+	}
+
+	return nil, false
+}
+
+func mapFromAny(value interface{}) (map[string]interface{}, bool) {
+	if value == nil {
+		return nil, false
+	}
+	if out, ok := value.(map[string]interface{}); ok {
+		return out, true
+	}
+	return nil, false
+}
+
+func pickSingleWriteValue(values map[string]interface{}) (field string, value string, err error) {
+	type candidate struct {
+		key   string
+		value string
+	}
+
+	candidates := make([]candidate, 0, len(values))
+	for key, raw := range values {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" || isReservedWriteKey(trimmedKey) {
+			continue
+		}
+		switch raw.(type) {
+		case map[string]interface{}, []interface{}:
+			continue
+		}
+		candidates = append(candidates, candidate{key: trimmedKey, value: stringifyParamValue(raw)})
+	}
+
+	if len(candidates) == 0 {
+		return "", "", nil
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].key < candidates[j].key
+	})
+
+	if len(candidates) > 1 {
+		fields := make([]string, 0, len(candidates))
+		for _, item := range candidates {
+			fields = append(fields, item.key)
+		}
+		return "", "", fmt.Errorf("write params are ambiguous, please provide field_name and value explicitly (fields: %s)", strings.Join(fields, ","))
+	}
+
+	return candidates[0].key, candidates[0].value, nil
+}
+
+func isReservedWriteKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "field_name", "fieldname", "field", "value", "val", "values",
+		"product_key", "productkey", "device_key", "devicekey",
+		"identity", "properties", "sub_device", "subdevice", "sub_devices", "subdevices":
+		return true
+	default:
+		return false
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

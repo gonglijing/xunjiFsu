@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -100,6 +101,22 @@ func (c *Collector) Start() error {
 				return
 			case <-ticker.C:
 				c.SyncDeviceStatus()
+			}
+		}
+	}()
+
+	// 北向下发命令轮询
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-c.stopChan:
+				return
+			case <-ticker.C:
+				c.processNorthboundCommands()
 			}
 		}
 	}()
@@ -513,6 +530,102 @@ func (c *Collector) handleThresholdAndNorthbound(data *models.CollectData) {
 	}
 	// 当前策略：采集后即上传；后续可按设备/北向上传周期优化
 	c.uploadToNorthbound(data)
+}
+
+func (c *Collector) processNorthboundCommands() {
+	if c.northboundMgr == nil {
+		return
+	}
+
+	commands, err := c.northboundMgr.PullCommands(20)
+	if err != nil {
+		log.Printf("pull northbound commands failed: %v", err)
+		return
+	}
+	if len(commands) == 0 {
+		return
+	}
+
+	for _, command := range commands {
+		if command == nil {
+			continue
+		}
+		err := c.executeNorthboundCommand(command)
+		if err != nil {
+			log.Printf("execute northbound command failed: source=%s request_id=%s product_key=%s device_key=%s field=%s error=%v",
+				command.Source, command.RequestID, command.ProductKey, command.DeviceKey, command.FieldName, err)
+		}
+		c.reportCommandResult(command, err)
+	}
+}
+
+func (c *Collector) reportCommandResult(command *models.NorthboundCommand, execErr error) {
+	if c.northboundMgr == nil {
+		return
+	}
+	result := &models.NorthboundCommandResult{
+		RequestID:  command.RequestID,
+		ProductKey: command.ProductKey,
+		DeviceKey:  command.DeviceKey,
+		FieldName:  command.FieldName,
+		Value:      command.Value,
+		Source:     command.Source,
+		Success:    execErr == nil,
+		Code:       200,
+	}
+	if execErr != nil {
+		result.Code = 500
+		result.Message = execErr.Error()
+	}
+	c.northboundMgr.ReportCommandResult(result)
+}
+
+func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) error {
+	productKey := strings.TrimSpace(command.ProductKey)
+	deviceKey := strings.TrimSpace(command.DeviceKey)
+	fieldName := strings.TrimSpace(command.FieldName)
+	value := strings.TrimSpace(command.Value)
+
+	if productKey == "" || deviceKey == "" {
+		return fmt.Errorf("missing product_key/device_key")
+	}
+	if fieldName == "" {
+		return fmt.Errorf("missing field_name")
+	}
+
+	device, err := database.GetDeviceByIdentity(productKey, deviceKey)
+	if err != nil {
+		return fmt.Errorf("device not found by identity")
+	}
+	if device.DriverID == nil {
+		return fmt.Errorf("device has no driver")
+	}
+
+	config := map[string]string{
+		"func_name":      "write",
+		"field_name":     fieldName,
+		"value":          value,
+		"product_key":    productKey,
+		"productKey":     productKey,
+		"device_key":     deviceKey,
+		"deviceKey":      deviceKey,
+		"device_address": device.DeviceAddress,
+	}
+
+	result, err := c.driverExecutor.ExecuteCommand(device, "handle", config)
+	if err != nil {
+		return err
+	}
+	if result != nil && !result.Success {
+		if strings.TrimSpace(result.Error) != "" {
+			return fmt.Errorf("%s", result.Error)
+		}
+		return fmt.Errorf("driver write returned success=false")
+	}
+
+	log.Printf("northbound command executed: source=%s request_id=%s device_id=%d field=%s value=%s",
+		command.Source, command.RequestID, device.ID, fieldName, value)
+	return nil
 }
 
 // ThresholdChecker 阈值检查器

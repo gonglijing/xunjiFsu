@@ -100,10 +100,41 @@ type DeviceDriverMapping struct {
 type NorthboundConfig struct {
 	ID             int64     `json:"id" db:"id"`
 	Name           string    `json:"name" db:"name"`
-	Type           string    `json:"type" db:"type"` // xunji, mqtt, http, etc.
+	Type           string    `json:"type" db:"type"` // xunji, mqtt, http
 	Enabled        int       `json:"enabled" db:"enabled"`
-	Config         string    `json:"config" db:"config"`
+
+	// 基础配置
 	UploadInterval int       `json:"upload_interval" db:"upload_interval"`
+
+	// 连接配置（数据库字段）
+	ServerURL      string    `json:"server_url" db:"server_url"`    // 服务器地址
+	Port           int       `json:"port" db:"port"`                // 端口
+	Path           string    `json:"path" db:"path"`                // 路径（HTTP）
+	Username       string    `json:"username" db:"username"`         // 认证用户名
+	Password       string    `json:"-" db:"password"`                // 认证密码（不返回给前端）
+	ClientID       string    `json:"client_id" db:"client_id"`       // MQTT ClientID
+
+	// 主题配置
+	Topic          string    `json:"topic" db:"topic"`              // 数据主题
+	AlarmTopic     string    `json:"alarm_topic" db:"alarm_topic"`   // 报警主题
+
+	// 协议配置
+	QOS            int       `json:"qos" db:"qos"`                  // MQTT QOS (0-2)
+	Retain         bool      `json:"retain" db:"retain"`            // MQTT Retain
+	KeepAlive      int       `json:"keep_alive" db:"keep_alive"`    // 心跳周期(秒)
+	Timeout        int       `json:"timeout" db:"timeout"`          // 连接超时(秒)
+
+	// XunJi 特定配置
+	ProductKey     string    `json:"product_key" db:"product_key"`  // 产品密钥
+	DeviceKey      string    `json:"device_key" db:"device_key"`    // 设备密钥
+
+	// 高级配置（JSON格式）
+	ExtConfig      string    `json:"ext_config" db:"ext_config"`    // 扩展配置（JSON）
+
+	// 状态字段
+	Connected      bool      `json:"connected" db:"connected"`      // 是否已连接
+	LastConnectedAt *time.Time `json:"last_connected_at" db:"last_connected_at"`
+
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -209,6 +240,29 @@ type NorthboundPayload struct {
 	DeviceName string            `json:"device_name"`
 	Properties map[string]string `json:"properties"`
 	Events     map[string]Event  `json:"events"`
+}
+
+// NorthboundCommand 北向下发命令（用于写入子设备）
+type NorthboundCommand struct {
+	RequestID  string `json:"request_id"`
+	ProductKey string `json:"product_key"`
+	DeviceKey  string `json:"device_key"`
+	FieldName  string `json:"field_name"`
+	Value      string `json:"value"`
+	Source     string `json:"source"`
+}
+
+// NorthboundCommandResult 北向下发命令执行结果
+type NorthboundCommandResult struct {
+	RequestID  string `json:"request_id"`
+	ProductKey string `json:"product_key"`
+	DeviceKey  string `json:"device_key"`
+	FieldName  string `json:"field_name"`
+	Value      string `json:"value"`
+	Source     string `json:"source"`
+	Success    bool   `json:"success"`
+	Code       int    `json:"code"`
+	Message    string `json:"message"`
 }
 
 // Event 事件数据

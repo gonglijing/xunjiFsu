@@ -4,21 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
 
 func TestResolveStorageInterval_DefaultAndCustom(t *testing.T) {
-	// 使用一个非常小的默认值，避免引入真实数据库依赖
-	oldDefault := database.DefaultStorageIntervalSeconds
-	database.DefaultStorageIntervalSeconds = 60
-	defer func() { database.DefaultStorageIntervalSeconds = oldDefault }()
-
-	if got := resolveStorageInterval(0); got != 60*time.Second {
-		t.Fatalf("expected default 60s, got %v", got)
+	// DefaultStorageIntervalSeconds = 300 (const)
+	if got := resolveStorageInterval(0); got != 300*time.Second {
+		t.Fatalf("expected default 300s, got %v", got)
 	}
-	if got := resolveStorageInterval(-10); got != 60*time.Second {
+	if got := resolveStorageInterval(-10); got != 300*time.Second {
 		t.Fatalf("expected negative seconds to use default, got %v", got)
 	}
 	if got := resolveStorageInterval(30); got != 30*time.Second {
@@ -76,23 +71,19 @@ func TestThresholdChecker_Check(t *testing.T) {
 	}
 }
 
-type fakeExecutor struct{}
-
-func (f *fakeExecutor) Execute(device *models.Device) (*driver.DriverResult, error) {
-	return &driver.DriverResult{}, nil
-}
-
 type noOpNorthbound struct{}
 
-func (n *noOpNorthbound) Initialize(config string) error                     { return nil }
-func (n *noOpNorthbound) Send(data *models.CollectData) error               { return nil }
-func (n *noOpNorthbound) SendAlarm(alarm *models.AlarmPayload) error        { return nil }
-func (n *noOpNorthbound) Close() error                                      { return nil }
-func (n *noOpNorthbound) Name() string                                      { return "noop" }
+func (n *noOpNorthbound) Initialize(config string) error                                        { return nil }
+func (n *noOpNorthbound) Send(data *models.CollectData) error                                   { return nil }
+func (n *noOpNorthbound) SendAlarm(alarm *models.AlarmPayload) error                            { return nil }
+func (n *noOpNorthbound) Close() error                                                          { return nil }
+func (n *noOpNorthbound) Name() string                                                          { return "noop" }
+func (n *noOpNorthbound) PullCommands(limit int) ([]*models.NorthboundCommand, error)           { return nil, nil }
+func (n *noOpNorthbound) ReportCommandResult(result *models.NorthboundCommandResult) error      { return nil }
 
 // 仅验证 Collector 的构造和 IsRunning/Stop 逻辑（不启动后台 goroutine）
 func TestCollector_IsRunningAndStop(t *testing.T) {
-	mgr := northbound.NewNorthboundManager("")
+	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
 	if c.IsRunning() {

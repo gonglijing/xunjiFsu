@@ -277,7 +277,7 @@ func TestPredefinedErrors(t *testing.T) {
 func TestIs_AppError(t *testing.T) {
 	target := NewError(ErrCodeNotFound, "not found")
 	otherError := errors.New("some error")
-	nonAppError := NewError(ErrCodeBadRequest, "bad request")
+	_ = NewError(ErrCodeBadRequest, "bad request")
 
 	tests := []struct {
 		name     string

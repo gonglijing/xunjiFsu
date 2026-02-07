@@ -56,6 +56,13 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 	}
 	config["device_address"] = device.DeviceAddress
 	config["func_name"] = configFunc
+	enrichExecuteIdentity(config, device)
+	if configFunc == "write" {
+		if err := normalizeWriteParams(config, req.Params); err != nil {
+			WriteBadRequest(w, err.Error())
+			return
+		}
+	}
 
 	resourceID := int64(0)
 	if device.ResourceID != nil {

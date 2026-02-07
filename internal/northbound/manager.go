@@ -8,67 +8,55 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/circuit"
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 )
 
-// Northbound 北向接口接口
+// Northbound 北向接口接口（用于外部集成）
 type Northbound interface {
-	// Initialize 初始化
-	Initialize(config string) error
-	// Send 发送数据
-	Send(data *models.CollectData) error
-	// SendAlarm 发送报警
-	SendAlarm(alarm *models.AlarmPayload) error
-	// Close 关闭
-	Close() error
-	// Name 获取名称
 	Name() string
+	Send(data *models.CollectData) error
+	SendAlarm(alarm *models.AlarmPayload) error
+	Close() error
 }
 
 // NorthboundManager 北向管理器
+// 简化版：不再使用插件，直接使用内置适配器
+// 每个适配器自己管理自己的状态和发送线程
 type NorthboundManager struct {
-	mu          sync.RWMutex
-	adapters    map[string]Northbound
+	mu       sync.RWMutex
+	adapters map[string]adapters.NorthboundAdapter
+
+	// 以下字段保留用于兼容和状态查询
 	selfManaged map[string]bool
-	uploadTimes map[string]time.Time
-	intervals   map[string]time.Duration
 	enabled     map[string]bool
+	intervals   map[string]time.Duration
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
 	running     bool
-	breakers    map[string]*circuit.CircuitBreaker
-	pending     map[string]*models.CollectData
-	pluginDir   string
+
+	// 熔断器（可选，由适配器自己管理）
+	breakers map[string]*circuit.CircuitBreaker
 }
 
 // DefaultBreakerConfig 默认熔断器配置
 var DefaultBreakerConfig = circuit.Config{
-	FailureThreshold: 5,                // 5次失败后打开熔断
-	FailureWindow:    time.Minute,      // 1分钟窗口
-	SuccessThreshold: 3,                // 半开状态下需要3次成功
-	RecoveryTimeout:  30 * time.Second, // 30秒后尝试恢复
-	RequestTimeout:   10 * time.Second, // 单次请求超时
+	FailureThreshold:  5,                // 5次失败后打开熔断
+	FailureWindow:     time.Minute,       // 1分钟窗口
+	SuccessThreshold:  3,                  // 半开状态下需要3次成功
+	RecoveryTimeout:   30 * time.Second,  // 30秒后尝试恢复
+	RequestTimeout:   10 * time.Second,  // 单次请求超时
 }
 
-// NewNorthboundManager 创建北向管理器
-func NewNorthboundManager(pluginDir string) *NorthboundManager {
+// NewNorthboundManager 创建北向管理器（简化版，不再需要 pluginDir）
+func NewNorthboundManager() *NorthboundManager {
 	return &NorthboundManager{
-		adapters:    make(map[string]Northbound),
+		adapters:    make(map[string]adapters.NorthboundAdapter),
 		selfManaged: make(map[string]bool),
-		uploadTimes: make(map[string]time.Time),
-		intervals:   make(map[string]time.Duration),
 		enabled:     make(map[string]bool),
+		intervals:   make(map[string]time.Duration),
 		stopChan:    make(chan struct{}),
 		breakers:    make(map[string]*circuit.CircuitBreaker),
-		pending:     make(map[string]*models.CollectData),
-		pluginDir:   pluginDir,
 	}
-}
-
-// PluginDir returns the configured northbound plugin directory.
-func (m *NorthboundManager) PluginDir() string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.pluginDir
 }
 
 // Start 启动管理器
@@ -82,11 +70,7 @@ func (m *NorthboundManager) Start() {
 	m.stopChan = make(chan struct{})
 	m.mu.Unlock()
 
-	// 启动上传循环
-	m.wg.Add(1)
-	go m.flushLoop()
-
-	log.Println("Northbound manager started")
+	log.Println("Northbound manager started (built-in adapters)")
 }
 
 // Stop 停止管理器
@@ -99,55 +83,58 @@ func (m *NorthboundManager) Stop() {
 	m.running = false
 	close(m.stopChan)
 	m.mu.Unlock()
+
+	// 停止所有适配器
+	m.mu.Lock()
+	for _, adapter := range m.adapters {
+		adapter.Stop()
+	}
+	m.mu.Unlock()
+
 	m.wg.Wait()
 	log.Println("Northbound manager stopped")
 }
 
 // RegisterAdapter 注册适配器
-func (m *NorthboundManager) RegisterAdapter(name string, adapter Northbound) {
+func (m *NorthboundManager) RegisterAdapter(name string, adapter adapters.NorthboundAdapter) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	if old, exists := m.adapters[name]; exists {
-		_ = old.Close()
+		old.Stop()
+		old.Close()
 	}
-	if breaker, exists := m.breakers[name]; exists {
-		breaker.Reset()
-	}
+
 	m.adapters[name] = adapter
-	m.selfManaged[name] = detectSelfManaged(adapter)
-	m.uploadTimes[name] = time.Time{}
-	m.intervals[name] = 0
+	m.selfManaged[name] = true // 内置适配器都是 self-managed
 	m.enabled[name] = true
-	// 为每个适配器创建熔断器
-	cfg := DefaultBreakerConfig
-	m.breakers[name] = circuit.NewCircuitBreaker(&cfg)
-	log.Printf("Northbound adapter registered: %s (with circuit breaker)", name)
+
+	log.Printf("Northbound adapter registered: %s (built-in)", name)
 }
 
 // UnregisterAdapter 注销适配器
 func (m *NorthboundManager) UnregisterAdapter(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	if adapter, exists := m.adapters[name]; exists {
-		_ = adapter.Close()
+		adapter.Stop()
+		adapter.Close()
 	}
 	delete(m.adapters, name)
 	delete(m.selfManaged, name)
-	delete(m.uploadTimes, name)
-	delete(m.intervals, name)
 	delete(m.enabled, name)
-	delete(m.pending, name)
-	// 清理熔断器
-	if breaker, exists := m.breakers[name]; exists {
-		breaker.Reset()
-		delete(m.breakers, name)
-	}
+	delete(m.intervals, name)
+	delete(m.breakers, name)
+
+	log.Printf("Northbound adapter unregistered: %s", name)
 }
 
 // GetAdapter 获取适配器
-func (m *NorthboundManager) GetAdapter(name string) (Northbound, error) {
+func (m *NorthboundManager) GetAdapter(name string) (adapters.NorthboundAdapter, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
 	adapter, exists := m.adapters[name]
 	if !exists {
 		return nil, fmt.Errorf("adapter %s not found", name)
@@ -155,36 +142,33 @@ func (m *NorthboundManager) GetAdapter(name string) (Northbound, error) {
 	return adapter, nil
 }
 
-// GetAdapterCount 获取适配器数量
-
-// SetInterval 设置上传周期
+// SetInterval 设置上传周期（委托给适配器）
 func (m *NorthboundManager) SetInterval(name string, interval time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.selfManaged[name] {
-		m.intervals[name] = interval
-		delete(m.uploadTimes, name)
-		return
-	}
-	if interval < 500*time.Millisecond {
-		interval = 500 * time.Millisecond
+
+	if adapter, exists := m.adapters[name]; exists {
+		adapter.SetInterval(interval)
 	}
 	m.intervals[name] = interval
-	// 重置上次发送时间，确保新周期立即生效
-	delete(m.uploadTimes, name)
 }
 
 // SetEnabled 设置北向启停
 func (m *NorthboundManager) SetEnabled(name string, enabled bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.enabled[name] = enabled
-	if !enabled {
-		delete(m.uploadTimes, name)
-		delete(m.pending, name)
+
+	if adapter, exists := m.adapters[name]; exists {
+		if enabled {
+			adapter.Start()
+		} else {
+			adapter.Stop()
+		}
 	}
+	m.enabled[name] = enabled
 }
 
+// GetAdapterCount 获取适配器数量
 func (m *NorthboundManager) GetAdapterCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -217,18 +201,31 @@ func (m *NorthboundManager) GetInterval(name string) time.Duration {
 func (m *NorthboundManager) GetLastUploadTime(name string) time.Time {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.uploadTimes[name]
+
+	if adapter, exists := m.adapters[name]; exists {
+		return adapter.GetLastSendTime()
+	}
+	return time.Time{}
 }
 
-// HasPending 返回是否存在待发送数据
+// HasPending 返回是否存在待发送数据（检查适配器状态）
 func (m *NorthboundManager) HasPending(name string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	_, ok := m.pending[name]
-	return ok
+
+	if adapter, exists := m.adapters[name]; exists {
+		stats := adapter.GetStats()
+		if pending, ok := stats["pending_data"].(int); ok && pending > 0 {
+			return true
+		}
+		if pending, ok := stats["pending_alarm"].(int); ok && pending > 0 {
+			return true
+		}
+	}
+	return false
 }
 
-// ListRuntimeNames 返回当前北向运行时所有名称（配置、适配器、缓冲、熔断器）
+// ListRuntimeNames 返回当前北向运行时所有名称
 func (m *NorthboundManager) ListRuntimeNames() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -243,13 +240,7 @@ func (m *NorthboundManager) ListRuntimeNames() []string {
 	for name := range m.enabled {
 		seen[name] = struct{}{}
 	}
-	for name := range m.pending {
-		seen[name] = struct{}{}
-	}
 	for name := range m.breakers {
-		seen[name] = struct{}{}
-	}
-	for name := range m.uploadTimes {
 		seen[name] = struct{}{}
 	}
 	for name := range m.selfManaged {
@@ -270,19 +261,37 @@ func (m *NorthboundManager) RemoveAdapter(name string) {
 
 // SendData 发送数据到所有启用的北向
 func (m *NorthboundManager) SendData(data *models.CollectData) {
-	m.mu.Lock()
-	for name := range m.adapters {
-		m.pending[name] = data
+	m.mu.RLock()
+	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
+	names := make([]string, 0, len(m.adapters))
+	enabled := make(map[string]bool, len(m.adapters))
+
+	for name, adapter := range m.adapters {
+		adapters = append(adapters, adapter)
+		names = append(names, name)
+		enabled[name] = m.enabled[name]
 	}
-	m.mu.Unlock()
+	m.mu.RUnlock()
+
+	for i, adapter := range adapters {
+		name := names[i]
+		if !enabled[name] {
+			continue
+		}
+		// 内置适配器自己管理发送，不需要通过熔断器
+		if err := adapter.Send(data); err != nil {
+			log.Printf("Failed to send data to %s: %v", name, err)
+		}
+	}
 }
 
 // SendAlarm 发送报警到所有启用的北向
 func (m *NorthboundManager) SendAlarm(alarm *models.AlarmPayload) {
 	m.mu.RLock()
-	adapters := make([]Northbound, 0, len(m.adapters))
+	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
 	names := make([]string, 0, len(m.adapters))
 	enabled := make(map[string]bool, len(m.adapters))
+
 	for name, adapter := range m.adapters {
 		adapters = append(adapters, adapter)
 		names = append(names, name)
@@ -295,164 +304,120 @@ func (m *NorthboundManager) SendAlarm(alarm *models.AlarmPayload) {
 		if !enabled[name] {
 			continue
 		}
-		err := m.executeWithBreaker(name, func() error {
-			return adapter.SendAlarm(alarm)
-		})
-		if err != nil {
-			if _, ok := err.(*circuit.CircuitOpenError); ok {
-				log.Printf("Circuit breaker OPEN for %s, skipping alarm send", name)
-			} else {
-				log.Printf("Failed to send alarm to %s: %v", name, err)
-			}
+		if err := adapter.SendAlarm(alarm); err != nil {
+			log.Printf("Failed to send alarm to %s: %v", name, err)
 		}
 	}
 }
 
-// executeWithBreaker 使用熔断器执行函数
-func (m *NorthboundManager) executeWithBreaker(name string, fn func() error) error {
-	m.mu.RLock()
-	breaker, exists := m.breakers[name]
-	m.mu.RUnlock()
-
-	if !exists {
-		return fn()
+// PullCommands 从所有启用北向拉取待执行命令
+func (m *NorthboundManager) PullCommands(limit int) ([]*models.NorthboundCommand, error) {
+	if limit <= 0 {
+		limit = 50
 	}
 
-	return breaker.Execute(fn)
+	m.mu.RLock()
+	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
+	names := make([]string, 0, len(m.adapters))
+	enabled := make(map[string]bool, len(m.adapters))
+
+	for name, adapter := range m.adapters {
+		adapters = append(adapters, adapter)
+		names = append(names, name)
+		enabled[name] = m.enabled[name]
+	}
+	m.mu.RUnlock()
+
+	commands := make([]*models.NorthboundCommand, 0, limit)
+
+	for idx, adapter := range adapters {
+		name := names[idx]
+		if !enabled[name] {
+			continue
+		}
+
+		// 检查适配器是否支持命令下发
+		cmdAdapter, ok := adapter.(interface{ PullCommands(int) ([]*models.NorthboundCommand, error) })
+		if !ok {
+			continue
+		}
+
+		remaining := limit - len(commands)
+		if remaining <= 0 {
+			break
+		}
+
+		pulled, err := cmdAdapter.PullCommands(remaining)
+		if err != nil {
+			log.Printf("Failed to pull commands from %s: %v", name, err)
+			continue
+		}
+		if len(pulled) == 0 {
+			continue
+		}
+		commands = append(commands, pulled...)
+	}
+
+	return commands, nil
 }
 
-// GetBreakerState 获取熔断器状态
+// ReportCommandResult 将执行结果回传给各启用北向
+func (m *NorthboundManager) ReportCommandResult(result *models.NorthboundCommandResult) {
+	if result == nil {
+		return
+	}
+
+	m.mu.RLock()
+	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
+	names := make([]string, 0, len(m.adapters))
+	enabled := make(map[string]bool, len(m.adapters))
+
+	for name, adapter := range m.adapters {
+		adapters = append(adapters, adapter)
+		names = append(names, name)
+		enabled[name] = m.enabled[name]
+	}
+	m.mu.RUnlock()
+
+	for idx, adapter := range adapters {
+		name := names[idx]
+		if !enabled[name] {
+			continue
+		}
+
+		// 检查适配器是否支持命令下发
+		cmdAdapter, ok := adapter.(interface{ ReportCommandResult(*models.NorthboundCommandResult) error })
+		if !ok {
+			continue
+		}
+
+		if err := cmdAdapter.ReportCommandResult(result); err != nil {
+			log.Printf("Failed to report command result to %s: %v", name, err)
+		}
+	}
+}
+
+// GetBreakerState 获取熔断器状态（兼容接口）
 func (m *NorthboundManager) GetBreakerState(name string) circuit.CircuitState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if breaker, exists := m.breakers[name]; exists {
-		return breaker.State() // State现在是方法调用
+		return breaker.State()
 	}
 	return circuit.Closed
 }
 
-func shouldSendAt(interval time.Duration, last time.Time) bool {
-	if interval <= 0 {
-		return true
-	}
-	if last.IsZero() {
-		return true
-	}
-	return time.Since(last) >= interval
-}
-
-func (m *NorthboundManager) shouldSend(name string) bool {
+// GetStats 获取所有适配器的状态统计
+func (m *NorthboundManager) GetStats() map[string]map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return shouldSendAt(m.intervals[name], m.uploadTimes[name])
-}
 
-func (m *NorthboundManager) markSent(name string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.uploadTimes[name] = time.Now()
-}
-
-func (m *NorthboundManager) uploadToAdapters(data *models.CollectData) {
-	m.mu.RLock()
-	adapters := make([]Northbound, 0, len(m.adapters))
-	names := make([]string, 0, len(m.adapters))
-	enabled := make(map[string]bool, len(m.adapters))
+	result := make(map[string]map[string]interface{})
 	for name, adapter := range m.adapters {
-		adapters = append(adapters, adapter)
-		names = append(names, name)
-		enabled[name] = m.enabled[name]
+		stats := adapter.GetStats()
+		stats["manager_enabled"] = m.enabled[name]
+		stats["manager_interval_ms"] = m.intervals[name].Milliseconds()
+		result[name] = stats
 	}
-	m.mu.RUnlock()
-
-	for i, adapter := range adapters {
-		name := names[i]
-		if !enabled[name] {
-			continue
-		}
-		if !m.shouldSend(name) {
-			continue
-		}
-		err := m.executeWithBreaker(name, func() error { return adapter.Send(data) })
-		if err != nil {
-			if _, ok := err.(*circuit.CircuitOpenError); ok {
-				log.Printf("Circuit breaker OPEN for %s, skipping data send", name)
-			} else {
-				log.Printf("Failed to send data to %s: %v", name, err)
-			}
-		} else {
-			m.markSent(name)
-		}
-	}
-}
-
-// flushLoop 周期性检查待发送数据，按各自上传周期发送
-func (m *NorthboundManager) flushLoop() {
-	defer m.wg.Done()
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-m.stopChan:
-			return
-		case <-ticker.C:
-			m.flushPending()
-		}
-	}
-}
-
-// flushPending 将待发数据推送到各适配器（符合发送周期才发送）
-func (m *NorthboundManager) flushPending() {
-	m.mu.RLock()
-	// 复制一份，避免长时间持锁
-	pendingCopy := make(map[string]*models.CollectData, len(m.pending))
-	for name, data := range m.pending {
-		pendingCopy[name] = data
-	}
-	adapters := make(map[string]Northbound, len(m.adapters))
-	enabled := make(map[string]bool, len(m.adapters))
-	intervals := make(map[string]time.Duration, len(m.intervals))
-	uploadTimes := make(map[string]time.Time, len(m.uploadTimes))
-	for name, ad := range m.adapters {
-		adapters[name] = ad
-		enabled[name] = m.enabled[name]
-		intervals[name] = m.intervals[name]
-		uploadTimes[name] = m.uploadTimes[name]
-	}
-	m.mu.RUnlock()
-
-	for name, data := range pendingCopy {
-		if data == nil {
-			continue
-		}
-		if !enabled[name] {
-			continue
-		}
-		if !shouldSendAt(intervals[name], uploadTimes[name]) {
-			continue
-		}
-		adapter, ok := adapters[name]
-		if !ok {
-			continue
-		}
-		err := m.executeWithBreaker(name, func() error { return adapter.Send(data) })
-		if err != nil {
-			if _, ok := err.(*circuit.CircuitOpenError); ok {
-				log.Printf("Circuit breaker OPEN for %s, skipping data send", name)
-			} else {
-				log.Printf("Failed to send data to %s: %v", name, err)
-			}
-			continue
-		}
-		m.markSent(name)
-		// 清空已发送的待发数据
-		m.mu.Lock()
-		delete(m.pending, name)
-		m.mu.Unlock()
-	}
-}
-
-func detectSelfManaged(adapter Northbound) bool {
-	_ = adapter
-	return false
+	return result
 }

@@ -1,0 +1,413 @@
+[INFO] 2026-02-06T21:01:00+08:00 Initializing param database (persistent mode)...
+2026/02/06 21:01:00 Param database initialized (max_open=25, max_idle=10)
+[INFO] 2026-02-06T21:01:00+08:00 Initializing data database (memory mode + batch sync)...
+[INFO] 2026-02-06T21:01:00+08:00 Initializing param database schema...
+[INFO] 2026-02-06T21:01:00+08:00 Initializing resource table...
+[INFO] 2026-02-06T21:01:00+08:00 Initializing gateway config table...
+[INFO] 2026-02-06T21:01:00+08:00 Initializing storage policy table...
+[INFO] 2026-02-06T21:01:00+08:00 Initializing device table...
+[INFO] 2026-02-06T21:01:00+08:00 Initializing data database schema...
+2026/02/06 21:01:00 Warning: failed to create data indexes: failed to create index: SQL logic error: no such table: main.alarm_logs (1)
+[INFO] 2026-02-06T21:01:00+08:00 Initializing default data...
+2026/02/06 21:01:00 Created default admin user
+[INFO] 2026-02-06T21:01:00+08:00 Starting data sync task...
+[INFO] 2026-02-06T21:01:00+08:00 Starting retention cleanup task...
+[INFO] 2026-02-06T21:01:00+08:00 Starting threshold cache...
+2026/02/06 21:01:00 Threshold cache started
+2026/02/06 21:01:00 Data sync started (interval: 5m0s, batch_trigger: 1000)
+2026/02/06 21:01:00 Retention cleanup started (interval: 6h0m0s)
+[INFO] 2026-02-06T21:01:00+08:00 Drivers loaded {"count":0}
+[INFO] 2026-02-06T21:01:00+08:00 Loading enabled northbound configs...
+[INFO] 2026-02-06T21:01:00+08:00 Loaded enabled northbound configs {"count":0}
+2026/02/06 21:01:00 Northbound manager started
+2026/02/06 21:01:00 Loaded 0 enabled devices for collection
+2026/02/06 21:01:00 Collector started
+[INFO] 2026-02-06T21:01:00+08:00 Starting HTTP {"addr":":8088"}
+127.0.0.1 - - [06/Feb/2026:21:01:32 +0800] "GET /drivers HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:32 +0800] "GET /static/style.css HTTP/1.1" 200 23806
+127.0.0.1 - - [06/Feb/2026:21:01:32 +0800] "GET /static/dist/main.js HTTP/1.1" 200 87813
+127.0.0.1 - - [06/Feb/2026:21:01:32 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:01:32 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:01:32 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:35 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:35 +0800] "GET /static/dist/main.js HTTP/1.1" 304 0
+127.0.0.1 - - [06/Feb/2026:21:01:35 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:48 +0800] "GET / HTTP/1.1" 303 33
+127.0.0.1 - - [06/Feb/2026:21:01:48 +0800] "GET /favicon.ico HTTP/1.1" 303 33
+127.0.0.1 - - [06/Feb/2026:21:01:50 +0800] "GET /login HTTP/1.1" 200 232
+127.0.0.1 - - [06/Feb/2026:21:01:50 +0800] "GET /static/style.css HTTP/1.1" 200 23806
+127.0.0.1 - - [06/Feb/2026:21:01:50 +0800] "GET /static/dist/main.js HTTP/1.1" 200 87813
+127.0.0.1 - - [06/Feb/2026:21:01:50 +0800] "GET /favicon.ico HTTP/1.1" 303 33
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "POST /login HTTP/1.1" 200 191
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:01:51 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:54 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [06/Feb/2026:21:01:54 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:01:54 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [06/Feb/2026:21:01:54 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:01:54 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:01:54 +0800] "GET /api/devices HTTP/1.1" 200 29
+2026/02/06 21:02:00 Threshold cache refreshed, 0 devices
+127.0.0.1 - - [06/Feb/2026:21:02:06 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:06 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:06 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:07 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:07 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:07 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:07 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [06/Feb/2026:21:02:07 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:07 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [06/Feb/2026:21:02:08 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:08 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:08 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:09 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:09 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:09 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:10 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:12 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [06/Feb/2026:21:02:12 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:12 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:13 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:13 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:13 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:14 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:14 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:14 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:14 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:14 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /api/northbound/status HTTP/1.1" 200 27
+127.0.0.1 - - [06/Feb/2026:21:02:15 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:16 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [06/Feb/2026:21:02:16 +0800] "GET /api/storage HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:16 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:17 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:17 +0800] "GET /api/thresholds HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:17 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:17 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:18 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:18 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [06/Feb/2026:21:02:18 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [06/Feb/2026:21:02:18 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:18 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:18 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:19 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:19 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:19 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:20 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:20 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:20 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:21 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:23 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [06/Feb/2026:21:02:23 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [06/Feb/2026:21:02:23 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+[INFO] 2026-02-07T02:37:31+08:00 Initializing param database (persistent mode)...
+2026/02/07 02:37:31 Param database initialized (max_open=25, max_idle=10)
+[INFO] 2026-02-07T02:37:31+08:00 Initializing data database (memory mode + batch sync)...
+[INFO] 2026-02-07T02:37:31+08:00 Initializing param database schema...
+[INFO] 2026-02-07T02:37:31+08:00 Initializing resource table...
+[INFO] 2026-02-07T02:37:31+08:00 Initializing gateway config table...
+[INFO] 2026-02-07T02:37:31+08:00 Initializing storage policy table...
+[INFO] 2026-02-07T02:37:31+08:00 Initializing device table...
+[INFO] 2026-02-07T02:37:31+08:00 Initializing data database schema...
+2026/02/07 02:37:31 Warning: failed to create data indexes: failed to create index: SQL logic error: no such table: main.alarm_logs (1)
+[INFO] 2026-02-07T02:37:31+08:00 Initializing default data...
+[INFO] 2026-02-07T02:37:31+08:00 Starting data sync task...
+[INFO] 2026-02-07T02:37:31+08:00 Starting retention cleanup task...
+[INFO] 2026-02-07T02:37:31+08:00 Starting threshold cache...
+2026/02/07 02:37:31 Threshold cache started
+2026/02/07 02:37:31 Data sync started (interval: 5m0s, batch_trigger: 1000)
+2026/02/07 02:37:31 Retention cleanup started (interval: 6h0m0s)
+[INFO] 2026-02-07T02:37:31+08:00 Drivers loaded {"count":0}
+[INFO] 2026-02-07T02:37:31+08:00 Loading enabled northbound configs...
+[INFO] 2026-02-07T02:37:31+08:00 Loaded enabled northbound configs {"count":0}
+2026/02/07 02:37:31 Northbound manager started
+2026/02/07 02:37:31 Loaded 0 enabled devices for collection
+2026/02/07 02:37:31 Collector started
+[INFO] 2026-02-07T02:37:31+08:00 Starting HTTP {"addr":":8088"}
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /static/style.css HTTP/1.1" 304 0
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /static/dist/main.js HTTP/1.1" 200 94378
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:37:40 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:37:43 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:37:44 +0800] "POST /login HTTP/1.1" 200 191
+127.0.0.1 - - [07/Feb/2026:02:37:44 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:37:44 +0800] "GET /static/dist/main.js HTTP/1.1" 304 0
+127.0.0.1 - - [07/Feb/2026:02:37:44 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:37:58 +0800] "GET / HTTP/1.1" 303 33
+127.0.0.1 - - [07/Feb/2026:02:37:58 +0800] "GET /favicon.ico HTTP/1.1" 303 33
+127.0.0.1 - - [07/Feb/2026:02:38:00 +0800] "GET /login HTTP/1.1" 200 232
+127.0.0.1 - - [07/Feb/2026:02:38:00 +0800] "GET /static/style.css HTTP/1.1" 200 23806
+127.0.0.1 - - [07/Feb/2026:02:38:00 +0800] "GET /static/dist/main.js HTTP/1.1" 200 94378
+127.0.0.1 - - [07/Feb/2026:02:38:00 +0800] "GET /favicon.ico HTTP/1.1" 303 33
+127.0.0.1 - - [07/Feb/2026:02:38:01 +0800] "POST /login HTTP/1.1" 200 191
+127.0.0.1 - - [07/Feb/2026:02:38:01 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:02 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:06 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:07 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:10 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:10 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:10 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:10 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:10 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:11 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:11 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:11 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:12 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:12 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:12 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:02:38:12 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:12 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:02:38:12 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:19 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:02:38:19 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [07/Feb/2026:02:38:19 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:21 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:21 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [07/Feb/2026:02:38:21 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:22 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:22 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:22 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:22 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:22 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:26 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:26 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:26 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:27 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:27 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:27 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:27 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:27 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:28 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:38:28 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:38:28 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:30 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:38:30 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [07/Feb/2026:02:38:30 +0800] "GET /api/northbound/status HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:02:38:30 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:02:38:30 +0800] "GET /api/northbound/schema?type=xunji HTTP/1.1" 200 2765
+2026/02/07 02:38:31 Threshold cache refreshed, 0 devices
+2026/02/07 02:39:31 Threshold cache refreshed, 0 devices
+127.0.0.1 - - [07/Feb/2026:02:39:49 +0800] "GET /api/storage HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:49 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:49 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:50 +0800] "GET /api/thresholds HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:50 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:50 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:50 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /api/storage HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /api/northbound/schema?type=xunji HTTP/1.1" 200 2765
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:51 +0800] "GET /api/northbound/status HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:02:39:52 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:52 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:52 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:53 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:55 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:55 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:02:39:55 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:57 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:02:39:57 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:02:39:57 +0800] "GET /api/storage HTTP/1.1" 200 29
+[INFO] 2026-02-07T03:25:53+08:00 Initializing param database (persistent mode)...
+2026/02/07 03:25:53 Param database initialized (max_open=25, max_idle=10)
+[INFO] 2026-02-07T03:25:53+08:00 Initializing data database (memory mode + batch sync)...
+[INFO] 2026-02-07T03:25:53+08:00 Initializing param database schema...
+[INFO] 2026-02-07T03:25:53+08:00 Initializing resource table...
+[INFO] 2026-02-07T03:25:53+08:00 Initializing gateway config table...
+[INFO] 2026-02-07T03:25:53+08:00 Initializing storage policy table...
+[INFO] 2026-02-07T03:25:53+08:00 Initializing device table...
+[INFO] 2026-02-07T03:25:53+08:00 Initializing data database schema...
+2026/02/07 03:25:53 Warning: failed to create data indexes: failed to create index: SQL logic error: no such table: main.alarm_logs (1)
+[INFO] 2026-02-07T03:25:53+08:00 Initializing default data...
+[INFO] 2026-02-07T03:25:53+08:00 Starting data sync task...
+[INFO] 2026-02-07T03:25:53+08:00 Starting retention cleanup task...
+[INFO] 2026-02-07T03:25:53+08:00 Starting threshold cache...
+2026/02/07 03:25:53 Retention cleanup started (interval: 6h0m0s)
+2026/02/07 03:25:53 Data sync started (interval: 5m0s, batch_trigger: 1000)
+2026/02/07 03:25:53 Threshold cache started
+[INFO] 2026-02-07T03:25:53+08:00 Drivers loaded {"count":0}
+[INFO] 2026-02-07T03:25:53+08:00 Loading enabled northbound configs...
+[INFO] 2026-02-07T03:25:53+08:00 Loaded enabled northbound configs {"count":0}
+2026/02/07 03:25:53 Northbound manager started
+2026/02/07 03:25:53 Loaded 0 enabled devices for collection
+2026/02/07 03:25:53 Collector started
+[INFO] 2026-02-07T03:25:53+08:00 Starting HTTP {"addr":":8088"}
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /static/style.css HTTP/1.1" 304 0
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /static/dist/main.js HTTP/1.1" 200 94378
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:00 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:04 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:05 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:05 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "POST /login HTTP/1.1" 200 191
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET / HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /static/style.css HTTP/1.1" 200 23806
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /static/dist/main.js HTTP/1.1" 200 94378
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /metrics HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:14 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:18 +0800] "GET /api/data HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:19 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:03:26:19 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [07/Feb/2026:03:26:19 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:20 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:20 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:20 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:22 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:22 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:22 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:22 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:22 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:23 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:23 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:23 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:25 +0800] "GET /api/northbound/schema?type=xunji HTTP/1.1" 200 2765
+127.0.0.1 - - [07/Feb/2026:03:26:25 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [07/Feb/2026:03:26:25 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:03:26:25 +0800] "GET /api/northbound/status HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:03:26:25 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:26 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:26 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:26 +0800] "GET /api/status HTTP/1.1" 200 233
+127.0.0.1 - - [07/Feb/2026:03:26:28 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:28 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:28 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:28 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:28 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:29 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:29 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:29 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:34 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:03:26:34 +0800] "GET /api/northbound/schema?type=xunji HTTP/1.1" 200 2765
+127.0.0.1 - - [07/Feb/2026:03:26:34 +0800] "GET /api/northbound/status HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:03:26:34 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:34 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:35 +0800] "GET /api/storage HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:35 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:35 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:36 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:36 +0800] "GET /api/thresholds HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:37 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:36 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:38 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:38 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:38 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:39 +0800] "GET /api/drivers HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:39 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:39 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:39 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:39 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:40 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:40 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:40 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:41 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:03:26:41 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:41 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:42 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:03:26:42 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:42 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:42 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:42 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:03:26:42 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:43 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:43 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:43 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+127.0.0.1 - - [07/Feb/2026:03:26:44 +0800] "GET /api/resources HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:44 +0800] "GET /api/devices HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:26:44 +0800] "GET /api/gateway/config HTTP/1.1" 200 137
+127.0.0.1 - - [07/Feb/2026:03:26:44 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:26:44 +0800] "GET /api/northbound HTTP/1.1" 200 27
+127.0.0.1 - - [07/Feb/2026:03:26:44 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+2026/02/07 03:26:53 Threshold cache refreshed, 0 devices
+127.0.0.1 - - [07/Feb/2026:03:27:06 +0800] "GET /api/alarms HTTP/1.1" 200 29
+127.0.0.1 - - [07/Feb/2026:03:27:06 +0800] "GET /api/status HTTP/1.1" 200 234
+127.0.0.1 - - [07/Feb/2026:03:27:06 +0800] "GET /favicon.ico HTTP/1.1" 200 231
+2026/02/07 03:27:53 Threshold cache refreshed, 0 devices
+2026/02/07 03:28:53 Threshold cache refreshed, 0 devices
+2026/02/07 03:29:53 Threshold cache refreshed, 0 devices
+2026/02/07 03:30:53 Syncing data to disk...
+2026/02/07 03:30:53 Threshold cache refreshed, 0 devices
+[INFO] 2026-02-07T03:54:03+08:00 Initializing param database (persistent mode)...
+2026/02/07 03:54:03 Param database initialized (max_open=25, max_idle=10)
+[INFO] 2026-02-07T03:54:03+08:00 Initializing data database (memory mode + batch sync)...
+[INFO] 2026-02-07T03:54:03+08:00 Initializing param database schema...
+[INFO] 2026-02-07T03:54:03+08:00 Initializing resource table...
+[INFO] 2026-02-07T03:54:03+08:00 Initializing gateway config table...
+[INFO] 2026-02-07T03:54:03+08:00 Initializing storage policy table...
+[INFO] 2026-02-07T03:54:03+08:00 Initializing device table...
+[INFO] 2026-02-07T03:54:03+08:00 Initializing data database schema...
+2026/02/07 03:54:03 Warning: failed to create data indexes: failed to create index: SQL logic error: no such table: main.alarm_logs (1)
+[INFO] 2026-02-07T03:54:03+08:00 Initializing default data...
+[INFO] 2026-02-07T03:54:03+08:00 Starting data sync task...
+[INFO] 2026-02-07T03:54:03+08:00 Starting retention cleanup task...
+[INFO] 2026-02-07T03:54:03+08:00 Starting threshold cache...
+2026/02/07 03:54:03 Threshold cache started
+2026/02/07 03:54:03 Data sync started (interval: 5m0s, batch_trigger: 1000)
+2026/02/07 03:54:03 Retention cleanup started (interval: 6h0m0s)
+[INFO] 2026-02-07T03:54:03+08:00 Drivers loaded {"count":0}
+[INFO] 2026-02-07T03:54:03+08:00 Loading enabled northbound configs...
+[INFO] 2026-02-07T03:54:03+08:00 Loaded enabled northbound configs {"count":0}
+2026/02/07 03:54:03 Northbound manager started
+2026/02/07 03:54:03 Loaded 0 enabled devices for collection
+2026/02/07 03:54:03 Collector started
+[INFO] 2026-02-07T03:54:03+08:00 Starting HTTP {"addr":":8088"}
+2026/02/07 03:54:05 [graceful] Received shutdown signal, starting graceful shutdown...
+2026/02/07 03:54:05 [graceful] Shutting down HTTP server...
+2026/02/07 03:54:05 [graceful] Executing shutdown function 1/6...
+[INFO] 2026-02-07T03:54:05+08:00 Stopping collector...
