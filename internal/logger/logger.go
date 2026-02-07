@@ -108,7 +108,7 @@ func (l *StructuredLogger) Fatal(msg string, err error) {
 		entry.Error = err.Error()
 	}
 	l.output(entry)
-	os.Exit(1)
+	exitFunc(1)
 }
 
 // log 内部日志方法
@@ -150,7 +150,11 @@ func (l *StructuredLogger) output(entry *LogEntry) {
 			data, _ := json.Marshal(entry.Fields)
 			fields = " " + string(data)
 		}
-		l.logger.Printf("[%s] %s %s%s\n", entry.Level, entry.Timestamp, entry.Message, fields)
+		errInfo := ""
+		if entry.Error != "" {
+			errInfo = " error=" + entry.Error
+		}
+		l.logger.Printf("[%s] %s %s%s%s\n", entry.Level, entry.Timestamp, entry.Message, errInfo, fields)
 	}
 }
 
@@ -181,6 +185,7 @@ type LogEntry struct {
 // 全局logger
 var global *StructuredLogger
 var globalOutput io.Writer = os.Stdout
+var exitFunc = os.Exit
 
 func init() {
 	global = NewStructuredLogger(INFO, "gogw", false)
@@ -245,7 +250,7 @@ func Fatal(msg string, err error) {
 		entry.Error = err.Error()
 	}
 	global.output(entry)
-	os.Exit(1)
+	exitFunc(1)
 }
 
 // Printf 格式化日志

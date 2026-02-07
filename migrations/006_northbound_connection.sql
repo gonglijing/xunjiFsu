@@ -15,7 +15,7 @@ DROP TABLE IF EXISTS northbound_configs;
 CREATE TABLE IF NOT EXISTS northbound_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('xunji', 'pandax', 'mqtt', 'http')),
+    type TEXT NOT NULL CHECK(type IN ('xunji', 'pandax', 'ithings', 'mqtt', 'http')),
     enabled INTEGER DEFAULT 1,
     upload_interval INTEGER DEFAULT 10000,
 
@@ -71,12 +71,14 @@ SELECT
         WHEN type = 'http' THEN json_extract(config, '$.url')
         WHEN type = 'mqtt' THEN json_extract(config, '$.broker')
         WHEN type = 'xunji' THEN json_extract(config, '$.serverUrl')
+        WHEN type = 'ithings' THEN json_extract(config, '$.serverUrl')
         ELSE NULL
     END,
     CASE
         WHEN type = 'http' THEN COALESCE(json_extract(config, '$.port'), 80)
         WHEN type = 'mqtt' THEN COALESCE(json_extract(config, '$.port'), 1883)
         WHEN type = 'xunji' THEN COALESCE(json_extract(config, '$.port'), 1883)
+        WHEN type = 'ithings' THEN COALESCE(json_extract(config, '$.port'), 1883)
         ELSE NULL
     END,
     COALESCE(json_extract(config, '$.username'), ''),

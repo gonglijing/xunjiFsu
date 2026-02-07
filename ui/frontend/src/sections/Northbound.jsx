@@ -69,8 +69,12 @@ function isPandaXType(nbType) {
   return nbType === 'pandax';
 }
 
+function isIThingsType(nbType) {
+  return nbType === 'ithings';
+}
+
 function isSchemaDrivenType(nbType) {
-  return isXunJiType(nbType) || isPandaXType(nbType);
+  return isXunJiType(nbType) || isPandaXType(nbType) || isIThingsType(nbType);
 }
 
 function safeParseJSON(value, fallback = {}) {
@@ -221,12 +225,21 @@ export function Northbound() {
       }
       payload.config = JSON.stringify(cfg);
 
-      if (isPandaXType(payload.type)) {
+      if (isPandaXType(payload.type) || isIThingsType(payload.type)) {
         if (payload.server_url === undefined || !`${payload.server_url || ''}`.trim()) {
           payload.server_url = cfg.serverUrl || cfg.broker || '';
         }
         if (payload.username === undefined || !`${payload.username || ''}`.trim()) {
           payload.username = cfg.username || '';
+        }
+      }
+
+      if (isIThingsType(payload.type)) {
+        if (payload.product_key === undefined || !`${payload.product_key || ''}`.trim()) {
+          payload.product_key = cfg.productKey || cfg.productID || '';
+        }
+        if (payload.device_key === undefined || !`${payload.device_key || ''}`.trim()) {
+          payload.device_key = cfg.deviceKey || cfg.deviceName || '';
         }
       }
     } else {
@@ -378,13 +391,14 @@ export function Northbound() {
 
   const getTypeLabel = () => {
     const type = form().type;
-    return type === 'xunji' ? '寻迹' : (type === 'pandax' ? 'PandaX' : (type === 'mqtt' ? 'MQTT' : type.toUpperCase()));
+    return type === 'xunji' ? '寻迹' : (type === 'pandax' ? 'PandaX' : (type === 'ithings' ? 'iThings' : (type === 'mqtt' ? 'MQTT' : type.toUpperCase())));
   };
 
   const getSchemaTitle = () => {
     const type = form().type;
     if (type === 'xunji') return '寻迹 Schema 配置';
     if (type === 'pandax') return 'PandaX Schema 配置';
+    if (type === 'ithings') return 'iThings Schema 配置';
     if (type === 'mqtt') return 'MQTT Schema 配置';
     return '配置';
   };
@@ -494,6 +508,7 @@ export function Northbound() {
                   >
                     <option value="mqtt">MQTT</option>
                     <option value="pandax">PandaX</option>
+                    <option value="ithings">iThings</option>
                     <option value="xunji">寻迹</option>
                   </select>
                 </div>

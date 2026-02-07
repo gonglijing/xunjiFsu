@@ -7,7 +7,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/database"
 )
 
-// SyncGatewayIdentityToNorthbound 将网关身份同步到 xunji/pandax 北向配置
+// SyncGatewayIdentityToNorthbound 将网关身份同步到 xunji/pandax/ithings 北向配置
 func (h *Handler) SyncGatewayIdentityToNorthbound(w http.ResponseWriter, r *http.Request) {
 	gw, err := database.GetGatewayConfig()
 	if err != nil {
@@ -22,7 +22,7 @@ func (h *Handler) SyncGatewayIdentityToNorthbound(w http.ResponseWriter, r *http
 		return
 	}
 
-	updated, skipped, failed := h.syncGatewayIdentityToXunjiNorthbound(productKey, deviceKey)
+	updated, skipped, failed := h.syncGatewayIdentityToNorthboundTypes(productKey, deviceKey)
 	if systemErr, ok := failed["_system"]; ok {
 		WriteServerError(w, systemErr)
 		return

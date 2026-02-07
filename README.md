@@ -281,6 +281,7 @@ XunJi:
 - `grpcAddress` 可显式指定；若为空，插件与主程序会按 `productKey + deviceKey` 计算同一默认地址。
 - `uploadIntervalMs` 为插件侧 MQTT 上报周期，报警批量参数由插件侧管理。
 - XUNJI 配置参数采用类似 Terraform SDK Schema 的定义方式（必填/可选/默认值/类型校验）。
+- 对接细节与上下行报文示例见：`doc/xunji.md`。
 
 ### 开发模式
 

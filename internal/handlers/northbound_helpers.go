@@ -87,7 +87,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		switch config.Type {
 		case "http":
 			config.Port = 80
-		case "mqtt", "xunji", "pandax":
+		case "mqtt", "xunji", "pandax", "ithings":
 			config.Port = 1883
 		}
 	}
@@ -114,7 +114,7 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 	}
 
 	// 验证类型
-	validTypes := []string{"mqtt", "pandax", "xunji"}
+	validTypes := []string{"mqtt", "pandax", "ithings", "xunji"}
 	isValid := false
 	for _, t := range validTypes {
 		if strings.ToLower(config.Type) == t {
@@ -124,7 +124,7 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 		}
 	}
 	if !isValid {
-		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, xunji", config.Type)
+		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, ithings, xunji", config.Type)
 	}
 
 	// 如果有 config JSON 字段，验证 schema
@@ -159,6 +159,19 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 		}
 		if config.Username == "" && config.Config == "" {
 			return fmt.Errorf("username or config is required for PandaX type")
+		}
+	case "ithings":
+		if config.ServerURL == "" && config.Config == "" {
+			return fmt.Errorf("server_url or config is required for iThings type")
+		}
+		if config.Username == "" && config.Config == "" {
+			return fmt.Errorf("username or config is required for iThings type")
+		}
+		if config.ProductKey == "" && config.Config == "" {
+			return fmt.Errorf("product_key or config is required for iThings type")
+		}
+		if config.DeviceKey == "" && config.Config == "" {
+			return fmt.Errorf("device_key or config is required for iThings type")
 		}
 	}
 
@@ -196,7 +209,7 @@ func enrichNorthboundConfigWithGatewayIdentity(config *models.NorthboundConfig) 
 	if config == nil {
 		return nil
 	}
-	if strings.ToLower(config.Type) != "xunji" && strings.ToLower(config.Type) != "pandax" {
+	if strings.ToLower(config.Type) != "xunji" && strings.ToLower(config.Type) != "pandax" && strings.ToLower(config.Type) != "ithings" {
 		return nil
 	}
 

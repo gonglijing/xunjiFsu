@@ -53,7 +53,7 @@ func TestGracefulShutdown_AddAndRunFuncs(t *testing.T) {
 func TestGracefulShutdown_HTTPServerShutdown(t *testing.T) {
 	g := NewGracefulShutdown(2 * time.Second)
 	fs := &fakeServer{}
-	g.SetHTTPServer(&fs.Server)
+	g.SetHTTPShutdowner(fs)
 
 	g.Shutdown()
 
@@ -75,4 +75,3 @@ func TestGracefulShutdown_WithTimeout(t *testing.T) {
 		t.Fatalf("deadline already passed")
 	}
 }
-

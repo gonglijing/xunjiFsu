@@ -211,6 +211,38 @@ func (b *NorthboundConfigBuilder) Build() string {
 		if _, ok := b.config["uploadIntervalMs"]; !ok {
 			b.config["uploadIntervalMs"] = 5000
 		}
+	case "ithings":
+		if _, ok := b.config["serverUrl"]; !ok {
+			if v, exists := b.config["broker"]; exists {
+				b.config["serverUrl"] = v
+			} else {
+				b.config["serverUrl"] = ""
+			}
+		}
+		if _, ok := b.config["username"]; !ok {
+			b.config["username"] = ""
+		}
+		if _, ok := b.config["productKey"]; !ok {
+			b.config["productKey"] = ""
+		}
+		if _, ok := b.config["deviceKey"]; !ok {
+			b.config["deviceKey"] = ""
+		}
+		if _, ok := b.config["gatewayMode"]; !ok {
+			b.config["gatewayMode"] = true
+		}
+		if _, ok := b.config["qos"]; !ok {
+			b.config["qos"] = 0
+		}
+		if _, ok := b.config["keepAlive"]; !ok {
+			b.config["keepAlive"] = 60
+		}
+		if _, ok := b.config["connectTimeout"]; !ok {
+			b.config["connectTimeout"] = 10
+		}
+		if _, ok := b.config["uploadIntervalMs"]; !ok {
+			b.config["uploadIntervalMs"] = 5000
+		}
 	}
 
 	data, _ := json.Marshal(b.config)
@@ -267,6 +299,25 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(serverURL)
 		builder.SetClientID(cfg.ClientID)
+		if cfg.Username != "" {
+			builder.SetUsername(cfg.Username)
+		}
+		if cfg.Password != "" {
+			builder.SetPassword(cfg.Password)
+		}
+		builder.SetQOS(cfg.QOS)
+		builder.SetRetain(cfg.Retain)
+		builder.SetKeepAlive(cfg.KeepAlive)
+		builder.SetTimeout(cfg.Timeout)
+		builder.SetUploadIntervalMs(cfg.UploadInterval)
+		builder.SetExtConfig(cfg.ExtConfig)
+
+	case "ithings":
+		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
+		builder.SetBrokerURL(serverURL)
+		builder.SetClientID(cfg.ClientID)
+		builder.SetProductKey(cfg.ProductKey)
+		builder.SetDeviceKey(cfg.DeviceKey)
 		if cfg.Username != "" {
 			builder.SetUsername(cfg.Username)
 		}
@@ -385,6 +436,21 @@ func GetSupportedTypes() map[string][]string {
 			"timeout: 连接超时秒数",
 			"upload_interval: 上传周期毫秒数",
 		},
+		"ithings": {
+			"server_url: iThings Broker 地址",
+			"port: 端口 (默认1883)",
+			"username: MQTT 用户名",
+			"password: MQTT 密码",
+			"product_key: 网关产品ID",
+			"device_key: 网关设备名",
+			"gateway_mode: 仅支持 true（网关+子设备）",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
+		},
 	}
 }
 
@@ -420,6 +486,38 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 		}
 		if username, ok := config["username"].(string); !ok || strings.TrimSpace(username) == "" {
 			return fmt.Errorf("username is required for PandaX adapter")
+		}
+		if v, ok := config["gatewayMode"]; ok {
+			switch value := v.(type) {
+			case bool:
+				if !value {
+					return fmt.Errorf("gatewayMode must be true for PandaX adapter")
+				}
+			case string:
+				text := strings.TrimSpace(strings.ToLower(value))
+				if text == "false" || text == "0" || text == "no" {
+					return fmt.Errorf("gatewayMode must be true for PandaX adapter")
+				}
+			}
+		}
+	case "ithings":
+		serverURL, _ := config["serverUrl"].(string)
+		if strings.TrimSpace(serverURL) == "" {
+			if broker, ok := config["broker"].(string); ok {
+				serverURL = broker
+			}
+		}
+		if strings.TrimSpace(serverURL) == "" {
+			return fmt.Errorf("serverUrl is required for iThings adapter")
+		}
+		if username, ok := config["username"].(string); !ok || strings.TrimSpace(username) == "" {
+			return fmt.Errorf("username is required for iThings adapter")
+		}
+		if productKey, ok := config["productKey"].(string); !ok || strings.TrimSpace(productKey) == "" {
+			return fmt.Errorf("productKey is required for iThings adapter")
+		}
+		if deviceKey, ok := config["deviceKey"].(string); !ok || strings.TrimSpace(deviceKey) == "" {
+			return fmt.Errorf("deviceKey is required for iThings adapter")
 		}
 	default:
 		return fmt.Errorf("unknown northbound type: %s", northboundType)

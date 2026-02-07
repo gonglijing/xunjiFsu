@@ -33,7 +33,7 @@ func TestSupportedTypes(t *testing.T) {
 	types := append([]string(nil), SupportedNorthboundSchemaTypes...)
 	sort.Strings(types)
 
-	expected := map[string]bool{"mqtt": true, "pandax": true, "xunji": true}
+	expected := map[string]bool{"ithings": true, "mqtt": true, "pandax": true, "xunji": true}
 	if len(types) != len(expected) {
 		t.Fatalf("unexpected supported types len, got: %v", types)
 	}
@@ -51,5 +51,15 @@ func TestPandaXConfigSchemaSupported(t *testing.T) {
 	}
 	if len(fields) == 0 {
 		t.Fatalf("expected non-empty pandax schema")
+	}
+}
+
+func TestIThingsConfigSchemaSupported(t *testing.T) {
+	fields, ok := FieldsByType("ithings")
+	if !ok {
+		t.Fatalf("expected ithings schema supported")
+	}
+	if len(fields) == 0 {
+		t.Fatalf("expected non-empty ithings schema")
 	}
 }

@@ -51,25 +51,25 @@ type XunJiConfig struct {
 }
 
 const (
-	defaultReportInterval     = 5 * time.Second
-	defaultAlarmInterval      = 2 * time.Second
-	defaultAlarmBatch         = 20
-	defaultAlarmQueue         = 1000
-	defaultRealtimeQueue      = 1000
+	defaultReportInterval = 5 * time.Second
+	defaultAlarmInterval  = 2 * time.Second
+	defaultAlarmBatch     = 20
+	defaultAlarmQueue     = 1000
+	defaultRealtimeQueue  = 1000
 )
 
 // XunJiAdapter 循迹北向适配器
 // 每个 XunJiAdapter 自己管理自己的状态和发送线程
 type XunJiAdapter struct {
-	name       string
-	config     *XunJiConfig
-	client     mqtt.Client
-	topic      string
-	alarmTopic string
-	qos        byte
-	retain     bool
-	timeout    time.Duration
-	enabled    bool
+	name        string
+	config      *XunJiConfig
+	client      mqtt.Client
+	topic       string
+	alarmTopic  string
+	qos         byte
+	retain      bool
+	timeout     time.Duration
+	enabled     bool
 	reportEvery time.Duration
 	alarmEvery  time.Duration
 	alarmBatch  int
@@ -78,16 +78,16 @@ type XunJiAdapter struct {
 	commandCap  int
 
 	// 数据缓冲
-	latestData   []*models.CollectData
-	dataMu      sync.RWMutex
+	latestData []*models.CollectData
+	dataMu     sync.RWMutex
 
 	// 报警缓冲
-	alarmQueue   []*models.AlarmPayload
-	alarmMu      sync.RWMutex
+	alarmQueue []*models.AlarmPayload
+	alarmMu    sync.RWMutex
 
 	// 命令队列
 	commandQueue []*models.NorthboundCommand
-	commandMu   sync.RWMutex
+	commandMu    sync.RWMutex
 
 	// 控制通道
 	flushNow chan struct{}
@@ -95,7 +95,7 @@ type XunJiAdapter struct {
 	wg       sync.WaitGroup
 
 	// gRPC 服务
-	grpcAddress   string
+	grpcAddress  string
 	grpcListener net.Listener
 	grpcServer   *grpc.Server
 
@@ -109,11 +109,11 @@ type XunJiAdapter struct {
 // NewXunJiAdapter 创建循迹适配器
 func NewXunJiAdapter(name string) *XunJiAdapter {
 	return &XunJiAdapter{
-		name:       name,
-		stopChan:   make(chan struct{}),
-		flushNow:   make(chan struct{}, 1),
-		latestData: make([]*models.CollectData, 0),
-		alarmQueue: make([]*models.AlarmPayload, 0),
+		name:         name,
+		stopChan:     make(chan struct{}),
+		flushNow:     make(chan struct{}, 1),
+		latestData:   make([]*models.CollectData, 0),
+		alarmQueue:   make([]*models.AlarmPayload, 0),
 		commandQueue: make([]*models.NorthboundCommand, 0),
 	}
 }
@@ -393,8 +393,8 @@ func (a *XunJiAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 		return nil
 	}
 
-	pk := pickFirstNonEmpty(result.ProductKey, strings.TrimSpace(cfg.ProductKey))
-	dk := pickFirstNonEmpty(result.DeviceKey, strings.TrimSpace(cfg.DeviceKey))
+	pk := pickFirstNonEmpty(strings.TrimSpace(cfg.ProductKey), result.ProductKey)
+	dk := pickFirstNonEmpty(strings.TrimSpace(cfg.DeviceKey), result.DeviceKey)
 	if pk == "" || dk == "" {
 		return nil
 	}
@@ -720,14 +720,16 @@ func (a *XunJiAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
 	}
 
 	var req struct {
-		Id     string                 `json:"id"`
-		Params map[string]interface{} `json:"params"`
+		Id       string                 `json:"id"`
+		Params   map[string]interface{} `json:"params"`
+		Identity map[string]interface{} `json:"identity"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
 		return
 	}
 
-	a.enqueueCommandFromPropertySet(pk, dk, req.Id, req.Params)
+	identityPK, identityDK := parseIdentityMap(req.Identity)
+	a.enqueueCommandFromPropertySet(pk, dk, req.Id, req.Params, identityPK, identityDK)
 
 	resp := map[string]interface{}{
 		"code":    200,
@@ -752,15 +754,17 @@ func (a *XunJiAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 	}
 
 	var req struct {
-		Id     string                 `json:"id"`
-		Params map[string]interface{} `json:"params"`
+		Id       string                 `json:"id"`
+		Params   map[string]interface{} `json:"params"`
+		Identity map[string]interface{} `json:"identity"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
 		return
 	}
 
+	identityPK, identityDK := parseIdentityMap(req.Identity)
 	if len(req.Params) > 0 {
-		a.enqueueCommandFromPropertySet(pk, dk, req.Id, req.Params)
+		a.enqueueCommandFromPropertySet(pk, dk, req.Id, req.Params, identityPK, identityDK)
 	}
 
 	resp := map[string]interface{}{
@@ -796,14 +800,14 @@ func (a *XunJiAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
 	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/config/push/reply", pk, dk), respBody)
 }
 
-func (a *XunJiAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}) {
+func (a *XunJiAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}, rootIdentityPK, rootIdentityDK string) {
 	properties, identityPK, identityDK := extractCommandProperties(params)
 	if len(properties) == 0 {
 		return
 	}
 
-	pk := pickFirstNonEmpty(identityPK, defaultPK)
-	dk := pickFirstNonEmpty(identityDK, defaultDK)
+	pk := pickFirstNonEmpty(rootIdentityPK, identityPK, defaultPK)
+	dk := pickFirstNonEmpty(rootIdentityDK, identityDK, defaultDK)
 	if pk == "" || dk == "" {
 		return
 	}
@@ -923,6 +927,12 @@ func (a *XunJiAdapter) prependAlarms(alarms []*models.AlarmPayload) {
 // GetStats 获取适配器统计信息
 func (a *XunJiAdapter) GetStats() map[string]interface{} {
 	a.mu.RLock()
+	productKey := ""
+	deviceKey := ""
+	if a.config != nil {
+		productKey = strings.TrimSpace(a.config.ProductKey)
+		deviceKey = strings.TrimSpace(a.config.DeviceKey)
+	}
 	defer a.mu.RUnlock()
 
 	a.dataMu.RLock()
@@ -938,7 +948,7 @@ func (a *XunJiAdapter) GetStats() map[string]interface{} {
 	a.commandMu.RUnlock()
 
 	return map[string]interface{}{
-		"name":           a.name,
+		"name":          a.name,
 		"type":          "xunji",
 		"enabled":       a.enabled,
 		"initialized":   a.initialized,
@@ -947,8 +957,8 @@ func (a *XunJiAdapter) GetStats() map[string]interface{} {
 		"pending_data":  dataCount,
 		"pending_alarm": alarmCount,
 		"pending_cmd":   commandCount,
-		"product_key":   a.config.ProductKey,
-		"device_key":    a.config.DeviceKey,
+		"product_key":   productKey,
+		"device_key":    deviceKey,
 	}
 }
 
@@ -1181,7 +1191,49 @@ func extractCommandProperties(params map[string]interface{}) (map[string]interfa
 		}
 	}
 
+	// xunji 南向下发常见格式：params 直接是属性键值
+	directProperties := make(map[string]interface{})
+	for key, raw := range params {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" || isReservedCommandKey(trimmedKey) {
+			continue
+		}
+		switch raw.(type) {
+		case map[string]interface{}, []interface{}:
+			continue
+		}
+		directProperties[trimmedKey] = raw
+	}
+	if len(directProperties) > 0 {
+		return directProperties, identityPK, identityDK
+	}
+
 	return nil, identityPK, identityDK
+}
+
+func parseIdentityMap(identity map[string]interface{}) (string, string) {
+	if identity == nil {
+		return "", ""
+	}
+	productKey, deviceKey := "", ""
+	if value, ok := identity["productKey"].(string); ok {
+		productKey = strings.TrimSpace(value)
+	}
+	if value, ok := identity["deviceKey"].(string); ok {
+		deviceKey = strings.TrimSpace(value)
+	}
+	return productKey, deviceKey
+}
+
+func isReservedCommandKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "id", "method", "version", "params",
+		"identity", "properties", "events",
+		"sub_device", "subdevice", "sub_devices", "subdevices":
+		return true
+	default:
+		return false
+	}
 }
 
 func mapFromAny(value interface{}) (map[string]interface{}, bool) {

@@ -548,15 +548,11 @@ func (a *PandaXAdapter) flushAlarmBatch() error {
 
 func (a *PandaXAdapter) buildRealtimePublish(data *models.CollectData) (string, []byte) {
 	if data == nil {
-		return a.telemetryTopic, []byte("{}")
+		return a.gatewayTelemetryTopic, []byte("{}")
 	}
 
 	a.mu.RLock()
-	cfg := a.config
-	topic := a.telemetryTopic
-	if cfg != nil && cfg.GatewayMode {
-		topic = a.gatewayTelemetryTopic
-	}
+	topic := a.gatewayTelemetryTopic
 	a.mu.RUnlock()
 
 	values := make(map[string]interface{}, len(data.Fields))
@@ -569,21 +565,12 @@ func (a *PandaXAdapter) buildRealtimePublish(data *models.CollectData) (string, 
 		ts = time.Now().UnixMilli()
 	}
 
-	if cfg != nil && cfg.GatewayMode {
-		subToken := a.resolveSubDeviceToken(data)
-		payload := map[string]interface{}{
-			subToken: map[string]interface{}{
-				"ts":     ts,
-				"values": values,
-			},
-		}
-		body, _ := json.Marshal(payload)
-		return topic, body
-	}
-
+	subToken := a.resolveSubDeviceToken(data)
 	payload := map[string]interface{}{
-		"ts":     ts,
-		"values": values,
+		subToken: map[string]interface{}{
+			"ts":     ts,
+			"values": values,
+		},
 	}
 	body, _ := json.Marshal(payload)
 	return topic, body
@@ -1017,6 +1004,9 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 	}
 	if cfg.Username == "" {
 		return nil, fmt.Errorf("username is required (device token)")
+	}
+	if !cfg.GatewayMode {
+		return nil, fmt.Errorf("PandaX adapter only supports gatewayMode=true")
 	}
 	if cfg.QOS < 0 || cfg.QOS > 2 {
 		return nil, fmt.Errorf("qos must be between 0 and 2")

@@ -15,10 +15,14 @@ import (
 type GracefulShutdown struct {
 	timeout       time.Duration
 	shutdownFuncs []func(ctx context.Context) error
-	httpServer    *http.Server
+	httpServer    httpShutdowner
 	notifyChan    chan os.Signal
 	once          sync.Once
 	wg            sync.WaitGroup
+}
+
+type httpShutdowner interface {
+	Shutdown(ctx context.Context) error
 }
 
 // ShutdownFunc 关闭函数类型
@@ -45,6 +49,11 @@ func (g *GracefulShutdown) AddShutdownFuncInterface(f func(ctx context.Context) 
 
 // SetHTTPServer 设置HTTP服务器
 func (g *GracefulShutdown) SetHTTPServer(srv *http.Server) {
+	g.httpServer = srv
+}
+
+// SetHTTPShutdowner 设置支持 Shutdown 的HTTP服务（便于测试注入）
+func (g *GracefulShutdown) SetHTTPShutdowner(srv httpShutdowner) {
 	g.httpServer = srv
 }
 

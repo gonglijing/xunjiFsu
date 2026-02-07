@@ -10,7 +10,7 @@ var PandaXConfigSchema = []Field{
 	{Key: "retain", Label: "Retain", Type: FieldTypeBool, Optional: true, Default: false, Description: "MQTT retain 标记"},
 	{Key: "keepAlive", Label: "KeepAlive(秒)", Type: FieldTypeInt, Optional: true, Default: 60, Description: "MQTT keep alive"},
 	{Key: "connectTimeout", Label: "连接超时(秒)", Type: FieldTypeInt, Optional: true, Default: 10, Description: "MQTT 连接超时"},
-	{Key: "gatewayMode", Label: "网关模式", Type: FieldTypeBool, Optional: true, Default: true, Description: "开启后按 v1/gateway/* 上报"},
+	{Key: "gatewayMode", Label: "网关模式", Type: FieldTypeBool, Optional: true, Default: true, Description: "仅支持 true（网关+子设备）"},
 	{Key: "subDeviceTokenMode", Label: "子设备 Token 规则", Type: FieldTypeString, Optional: true, Default: "deviceName", Description: "deviceName/deviceKey/product_deviceKey"},
 	{Key: "gatewayTelemetryTopic", Label: "网关遥测 Topic", Type: FieldTypeString, Optional: true, Default: "v1/gateway/telemetry", Description: "默认 PandaX 网关遥测主题"},
 	{Key: "gatewayAttributesTopic", Label: "网关属性 Topic", Type: FieldTypeString, Optional: true, Default: "v1/gateway/attributes", Description: "默认 PandaX 网关属性主题"},

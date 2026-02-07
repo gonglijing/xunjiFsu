@@ -56,6 +56,8 @@ func FieldsByType(nbType string) ([]Field, bool) {
 		return cloneFields(MQTTConfigSchema), true
 	case "pandax":
 		return cloneFields(PandaXConfigSchema), true
+	case "ithings":
+		return cloneFields(IThingsConfigSchema), true
 	default:
 		return nil, false
 	}

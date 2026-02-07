@@ -38,8 +38,8 @@
 
 FSU 中 `pandax` 适配器的默认行为如下：
 
-1. **实时数据上报**
-   - 默认 `gatewayMode=true`：发送到 `v1/gateway/telemetry`
+1. **实时数据上报（仅网关模式）**
+   - `gatewayMode` 仅支持 `true`，发送到 `v1/gateway/telemetry`
    - payload 结构：
 
 ```json
@@ -54,29 +54,15 @@ FSU 中 `pandax` 适配器的默认行为如下：
 }
 ```
 
-2. **直连模式上报**（`gatewayMode=false`）
-   - 发送到 `v1/devices/me/telemetry`
-   - payload 结构：
-
-```json
-{
-  "ts": 1738999999000,
-  "values": {
-    "temperature": 26.5,
-    "humidity": 51.2
-  }
-}
-```
-
-3. **报警上报**
+2. **报警上报**
    - 默认 Topic：`v1/devices/event/alarm`
    - 可通过 `alarmTopic` 或 `eventTopicPrefix + alarmIdentifier` 调整。
 
-4. **命令下发接收**
+3. **命令下发接收**
    - 订阅：`v1/devices/me/rpc/request` 和 `v1/devices/me/rpc/request/+`
    - 从请求中解析写入命令，进入 FSU 北向命令队列。
 
-5. **命令执行结果回传**
+4. **命令执行结果回传**
    - 发布到：`v1/devices/me/rpc/response`
 
 ---
@@ -118,8 +104,6 @@ FSU 中 `pandax` 适配器的默认行为如下：
   "subDeviceTokenMode": "deviceName",
   "gatewayTelemetryTopic": "v1/gateway/telemetry",
   "gatewayAttributesTopic": "v1/gateway/attributes",
-  "telemetryTopic": "v1/devices/me/telemetry",
-  "attributesTopic": "v1/devices/me/attributes",
   "eventTopicPrefix": "v1/devices/event",
   "alarmIdentifier": "alarm",
   "rpcRequestTopic": "v1/devices/me/rpc/request",
@@ -209,3 +193,5 @@ Topic：`v1/devices/me/rpc/response`
 5. **子设备 token 不符合平台期望**
    - 调整 `subDeviceTokenMode`：`deviceName` / `deviceKey` / `product_deviceKey` / `product_deviceName`。
 
+
+---

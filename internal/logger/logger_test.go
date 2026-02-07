@@ -30,7 +30,7 @@ func TestParseLevel(t *testing.T) {
 		{"fatal", FATAL},
 		{"FATAL", FATAL},
 		{"unknown", INFO}, // 默认值
-		{"", INFO},       // 默认值
+		{"", INFO},        // 默认值
 	}
 
 	for _, tt := range tests {
@@ -68,7 +68,7 @@ func TestLevelNames(t *testing.T) {
 func TestLevelNames_Unknown(t *testing.T) {
 	unknown := LogLevel(100)
 	result := LevelNames[unknown]
-	if result != "FATAL" {
+	if result != "" {
 		t.Errorf("Unknown level returned %s, want empty string", result)
 	}
 }
@@ -207,17 +207,29 @@ func TestStructuredLogger_Fatal(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewStructuredLogger(INFO, "test", false)
 	logger.logger.SetOutput(&buf)
+	originalExit := exitFunc
+	defer func() { exitFunc = originalExit }()
 
-	// 注意：Fatal 会调用 os.Exit(1)，所以需要特殊处理
-	// 这里我们只测试输出，不实际退出
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Fatal did not panic/exit")
-		}
-	}()
+	exitCalled := false
+	exitCode := 0
+	exitFunc = func(code int) {
+		exitCalled = true
+		exitCode = code
+	}
 
 	testErr := os.ErrPermission
 	logger.Fatal("fatal message", testErr)
+
+	if !exitCalled {
+		t.Fatal("expected exit function to be called")
+	}
+	if exitCode != 1 {
+		t.Fatalf("exit code = %d, want 1", exitCode)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "fatal message") {
+		t.Errorf("Fatal output = %s, want to contain 'fatal message'", output)
+	}
 }
 
 func TestParseKeyValues(t *testing.T) {
@@ -328,6 +340,11 @@ func TestSetJSONOutput(t *testing.T) {
 }
 
 func TestSetOutput(t *testing.T) {
+	originalOutput := Output()
+	t.Cleanup(func() {
+		SetOutput(originalOutput)
+	})
+
 	var buf bytes.Buffer
 	SetOutput(&buf)
 
@@ -337,7 +354,8 @@ func TestSetOutput(t *testing.T) {
 }
 
 func TestOutput(t *testing.T) {
-	// 默认输出应该是 os.Stdout
+	SetOutput(os.Stdout)
+
 	output := Output()
 	if output != os.Stdout {
 		t.Errorf("Output() = %v, want os.Stdout", output)
@@ -345,8 +363,16 @@ func TestOutput(t *testing.T) {
 }
 
 func TestGlobalFunctions(t *testing.T) {
+	originalOutput := Output()
+	originalLevel := global.level
+	t.Cleanup(func() {
+		SetOutput(originalOutput)
+		SetLevel(originalLevel)
+	})
+
 	var buf bytes.Buffer
 	SetOutput(&buf)
+	SetLevel(DEBUG)
 
 	Debug("debug msg")
 	if !strings.Contains(buf.String(), "debug msg") {
@@ -373,6 +399,11 @@ func TestGlobalFunctions(t *testing.T) {
 }
 
 func TestPrintf(t *testing.T) {
+	originalOutput := Output()
+	t.Cleanup(func() {
+		SetOutput(originalOutput)
+	})
+
 	var buf bytes.Buffer
 	SetOutput(&buf)
 
@@ -385,6 +416,11 @@ func TestPrintf(t *testing.T) {
 }
 
 func TestPrintln(t *testing.T) {
+	originalOutput := Output()
+	t.Cleanup(func() {
+		SetOutput(originalOutput)
+	})
+
 	var buf bytes.Buffer
 	SetOutput(&buf)
 

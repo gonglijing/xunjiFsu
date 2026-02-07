@@ -108,21 +108,30 @@ func WrapError(err error, code ErrorCode, message string) *AppError {
 
 // 预定义错误
 var (
-	ErrNotFound       = NewError(ErrCodeNotFound, "Resource not found")
-	ErrUnauthorized   = NewError(ErrCodeUnauthorized, "Unauthorized")
-	ErrForbidden      = NewError(ErrCodeForbidden, "Forbidden")
-	ErrBadRequest     = NewError(ErrCodeBadRequest, "Bad request")
-	ErrInternalError  = NewError(ErrCodeInternalError, "Internal server error")
-	ErrDatabaseError  = NewError(ErrCodeDatabaseError, "Database error")
-	ErrTimeout        = NewError(ErrCodeTimeout, "Operation timeout")
-	ErrRateLimited    = NewError(ErrCodeRateLimited, "Rate limited")
+	ErrNotFound      = NewError(ErrCodeNotFound, "Resource not found")
+	ErrUnauthorized  = NewError(ErrCodeUnauthorized, "Unauthorized")
+	ErrForbidden     = NewError(ErrCodeForbidden, "Forbidden")
+	ErrBadRequest    = NewError(ErrCodeBadRequest, "Bad request")
+	ErrInternalError = NewError(ErrCodeInternalError, "Internal server error")
+	ErrDatabaseError = NewError(ErrCodeDatabaseError, "Database error")
+	ErrTimeout       = NewError(ErrCodeTimeout, "Operation timeout")
+	ErrRateLimited   = NewError(ErrCodeRateLimited, "Rate limited")
 )
 
 // Is 检查错误是否为指定类型
 func Is(err error, target *AppError) bool {
-	var appErr *AppError
-	if errors.As(err, &appErr) {
-		return appErr.Code == target.Code
+	if err == nil || target == nil {
+		return false
+	}
+
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		appErr, ok := current.(*AppError)
+		if !ok || appErr == nil {
+			continue
+		}
+		if appErr.Code == target.Code {
+			return true
+		}
 	}
 	return false
 }

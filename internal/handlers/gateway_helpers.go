@@ -35,7 +35,7 @@ func toDatabaseGatewayConfig(cfg *models.GatewayConfig) *database.GatewayConfig 
 	}
 }
 
-func (h *Handler) syncGatewayIdentityToXunjiNorthbound(productKey, deviceKey string) ([]string, []string, map[string]string) {
+func (h *Handler) syncGatewayIdentityToNorthboundTypes(productKey, deviceKey string) ([]string, []string, map[string]string) {
 	configs, err := database.GetAllNorthboundConfigs()
 	if err != nil {
 		return nil, nil, map[string]string{"_system": err.Error()}
@@ -47,7 +47,7 @@ func (h *Handler) syncGatewayIdentityToXunjiNorthbound(productKey, deviceKey str
 
 	for _, cfg := range configs {
 		nbType := strings.ToLower(strings.TrimSpace(cfg.Type))
-		if cfg == nil || (nbType != "xunji" && nbType != "pandax") {
+		if cfg == nil || (nbType != "xunji" && nbType != "pandax" && nbType != "ithings") {
 			continue
 		}
 

@@ -1,6 +1,11 @@
 package pwdutil
 
-import "golang.org/x/crypto/bcrypt"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+
+	"golang.org/x/crypto/bcrypt"
+)
 
 const (
 	// Cost 密码哈希成本（值越大越安全，但速度越慢）
@@ -9,15 +14,29 @@ const (
 	Cost = 12
 )
 
-// Hash 生成密码哈希
-func Hash(password string) string {
-	// bcrypt 只使用前 72 字节，超过部分会被忽略，这里显式截断避免 panic
-	pwBytes := []byte(password)
-	if len(pwBytes) > 72 {
-		pwBytes = pwBytes[:72]
+func normalizePassword(password string) []byte {
+	passwordBytes := []byte(password)
+	if len(passwordBytes) <= 72 {
+		return passwordBytes
 	}
 
-	hash, err := bcrypt.GenerateFromPassword(pwBytes, Cost)
+	// bcrypt 仅使用前 72 字节，超长密码先做一次稳定哈希，
+	// 避免不同长密码因前缀相同产生碰撞。
+	digest := sha256.Sum256(passwordBytes)
+	return []byte("sha256:" + hex.EncodeToString(digest[:]))
+}
+
+func legacyTruncatedPassword(password string) []byte {
+	passwordBytes := []byte(password)
+	if len(passwordBytes) > 72 {
+		return passwordBytes[:72]
+	}
+	return passwordBytes
+}
+
+// Hash 生成密码哈希
+func Hash(password string) string {
+	hash, err := bcrypt.GenerateFromPassword(normalizePassword(password), Cost)
 	if err != nil {
 		panic(err)
 	}
@@ -26,14 +45,16 @@ func Hash(password string) string {
 
 // Compare 比较密码和哈希
 func Compare(password, hash string) bool {
-	// 与 Hash 保持一致，对密码进行相同的截断处理
-	pwBytes := []byte(password)
-	if len(pwBytes) > 72 {
-		pwBytes = pwBytes[:72]
+	if bcrypt.CompareHashAndPassword([]byte(hash), normalizePassword(password)) == nil {
+		return true
 	}
 
-	err := bcrypt.CompareHashAndPassword([]byte(hash), pwBytes)
-	return err == nil
+	// 兼容历史版本：旧逻辑会截断前 72 字节。
+	if len([]byte(password)) > 72 {
+		return bcrypt.CompareHashAndPassword([]byte(hash), legacyTruncatedPassword(password)) == nil
+	}
+
+	return false
 }
 
 // NeedsRehash 检查密码哈希是否需要重新生成
