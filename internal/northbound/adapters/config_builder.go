@@ -3,7 +3,6 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -337,30 +336,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 
 // buildBrokerURL 构建完整的Broker URL
 func buildBrokerURL(serverURL string, port int) string {
-	if serverURL == "" {
-		return ""
-	}
-
-	// 如果已经是完整URL，直接返回
-	if len(serverURL) >= 6 && serverURL[:6] == "tcp://" {
-		return serverURL
-	}
-	if len(serverURL) >= 5 && serverURL[:5] == "mqtt://" {
-		return serverURL
-	}
-	if len(serverURL) >= 8 && serverURL[:8] == "ssl://" {
-		return serverURL
-	}
-
-	// 添加协议前缀
-	result := "tcp://" + serverURL
-
-	// 添加端口
-	if port > 0 {
-		result += ":" + strconv.Itoa(port)
-	}
-
-	return result
+	return normalizeServerURLWithPort(serverURL, "tcp", port)
 }
 
 // ParseConnectionInfo 解析连接信息（用于显示）
