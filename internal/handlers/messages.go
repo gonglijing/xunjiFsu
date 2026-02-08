@@ -95,4 +95,180 @@ var (
 		Code:    "E_NORTHBOUND_RELOAD_FAILED",
 		Message: "北向重载失败",
 	}
+	apiErrListNorthboundConfigsFailed = APIErrorDef{
+		Code:    "E_LIST_NORTHBOUND_CONFIGS_FAILED",
+		Message: "获取北向配置失败",
+	}
+	apiErrCreateNorthboundConfigFailed = APIErrorDef{
+		Code:    "E_CREATE_NORTHBOUND_CONFIG_FAILED",
+		Message: "创建北向配置失败",
+	}
+	apiErrUpdateNorthboundConfigFailed = APIErrorDef{
+		Code:    "E_UPDATE_NORTHBOUND_CONFIG_FAILED",
+		Message: "更新北向配置失败",
+	}
+	apiErrDeleteNorthboundConfigFailed = APIErrorDef{
+		Code:    "E_DELETE_NORTHBOUND_CONFIG_FAILED",
+		Message: "删除北向配置失败",
+	}
+	apiErrToggleNorthboundFailed = APIErrorDef{
+		Code:    "E_TOGGLE_NORTHBOUND_FAILED",
+		Message: "切换北向状态失败",
+	}
+	apiErrListNorthboundStatusFailed = APIErrorDef{
+		Code:    "E_LIST_NORTHBOUND_STATUS_FAILED",
+		Message: "获取北向运行态失败",
+	}
+	apiErrListResourcesFailed = APIErrorDef{
+		Code:    "E_LIST_RESOURCES_FAILED",
+		Message: "获取资源列表失败",
+	}
+	apiErrCreateResourceFailed = APIErrorDef{
+		Code:    "E_CREATE_RESOURCE_FAILED",
+		Message: "创建资源失败",
+	}
+	apiErrUpdateResourceFailed = APIErrorDef{
+		Code:    "E_UPDATE_RESOURCE_FAILED",
+		Message: "更新资源失败",
+	}
+	apiErrDeleteResourceFailed = APIErrorDef{
+		Code:    "E_DELETE_RESOURCE_FAILED",
+		Message: "删除资源失败",
+	}
+	apiErrToggleResourceFailed = APIErrorDef{
+		Code:    "E_TOGGLE_RESOURCE_FAILED",
+		Message: "切换资源状态失败",
+	}
+	apiErrListUsersFailed = APIErrorDef{
+		Code:    "E_LIST_USERS_FAILED",
+		Message: "获取用户列表失败",
+	}
+	apiErrCreateUserFailed = APIErrorDef{
+		Code:    "E_CREATE_USER_FAILED",
+		Message: "创建用户失败",
+	}
+	apiErrUpdateUserFailed = APIErrorDef{
+		Code:    "E_UPDATE_USER_FAILED",
+		Message: "更新用户失败",
+	}
+	apiErrDeleteUserFailed = APIErrorDef{
+		Code:    "E_DELETE_USER_FAILED",
+		Message: "删除用户失败",
+	}
+	apiErrGetGatewayConfigFailed = APIErrorDef{
+		Code:    "E_GET_GATEWAY_CONFIG_FAILED",
+		Message: "获取网关配置失败",
+	}
+	apiErrUpdateGatewayConfigFailed = APIErrorDef{
+		Code:    "E_UPDATE_GATEWAY_CONFIG_FAILED",
+		Message: "更新网关配置失败",
+	}
+	apiErrListStorageConfigsFailed = APIErrorDef{
+		Code:    "E_LIST_STORAGE_CONFIGS_FAILED",
+		Message: "获取存储策略失败",
+	}
+	apiErrCreateStorageConfigFailed = APIErrorDef{
+		Code:    "E_CREATE_STORAGE_CONFIG_FAILED",
+		Message: "创建存储策略失败",
+	}
+	apiErrUpdateStorageConfigFailed = APIErrorDef{
+		Code:    "E_UPDATE_STORAGE_CONFIG_FAILED",
+		Message: "更新存储策略失败",
+	}
+	apiErrDeleteStorageConfigFailed = APIErrorDef{
+		Code:    "E_DELETE_STORAGE_CONFIG_FAILED",
+		Message: "删除存储策略失败",
+	}
+	apiErrCleanupDataFailed = APIErrorDef{
+		Code:    "E_CLEANUP_DATA_FAILED",
+		Message: "数据清理失败",
+	}
+	apiErrCleanupByPolicyFailed = APIErrorDef{
+		Code:    "E_CLEANUP_BY_POLICY_FAILED",
+		Message: "按策略清理失败",
+	}
+	apiErrListDevicesFailed = APIErrorDef{
+		Code:    "E_LIST_DEVICES_FAILED",
+		Message: "获取设备列表失败",
+	}
+	apiErrCreateDeviceFailed = APIErrorDef{
+		Code:    "E_CREATE_DEVICE_FAILED",
+		Message: "创建设备失败",
+	}
+	apiErrUpdateDeviceFailed = APIErrorDef{
+		Code:    "E_UPDATE_DEVICE_FAILED",
+		Message: "更新设备失败",
+	}
+	apiErrDeleteDeviceFailed = APIErrorDef{
+		Code:    "E_DELETE_DEVICE_FAILED",
+		Message: "删除设备失败",
+	}
+	apiErrToggleDeviceFailed = APIErrorDef{
+		Code:    "E_TOGGLE_DEVICE_FAILED",
+		Message: "切换设备状态失败",
+	}
+	apiErrListAlarmLogsFailed = APIErrorDef{
+		Code:    "E_LIST_ALARM_LOGS_FAILED",
+		Message: "获取报警日志失败",
+	}
+	apiErrAcknowledgeAlarmFailed = APIErrorDef{
+		Code:    "E_ACKNOWLEDGE_ALARM_FAILED",
+		Message: "确认报警失败",
+	}
+	apiErrListDataCacheFailed = APIErrorDef{
+		Code:    "E_LIST_DATA_CACHE_FAILED",
+		Message: "获取数据缓存失败",
+	}
+	apiErrGetDeviceDataCacheFailed = APIErrorDef{
+		Code:    "E_GET_DEVICE_DATA_CACHE_FAILED",
+		Message: "获取设备缓存失败",
+	}
+	apiErrQueryHistoryDataFailed = APIErrorDef{
+		Code:    "E_QUERY_HISTORY_DATA_FAILED",
+		Message: "查询历史数据失败",
+	}
+	apiErrListThresholdsFailed = APIErrorDef{
+		Code:    "E_LIST_THRESHOLDS_FAILED",
+		Message: "获取阈值列表失败",
+	}
+	apiErrCreateThresholdFailed = APIErrorDef{
+		Code:    "E_CREATE_THRESHOLD_FAILED",
+		Message: "创建阈值失败",
+	}
+	apiErrUpdateThresholdFailed = APIErrorDef{
+		Code:    "E_UPDATE_THRESHOLD_FAILED",
+		Message: "更新阈值失败",
+	}
+	apiErrDeleteThresholdFailed = APIErrorDef{
+		Code:    "E_DELETE_THRESHOLD_FAILED",
+		Message: "删除阈值失败",
+	}
+	apiErrListDriversFailed = APIErrorDef{
+		Code:    "E_LIST_DRIVERS_FAILED",
+		Message: "获取驱动列表失败",
+	}
+	apiErrCreateDriverFailed = APIErrorDef{
+		Code:    "E_CREATE_DRIVER_FAILED",
+		Message: "创建驱动失败",
+	}
+	apiErrLoadDriverFailed = APIErrorDef{
+		Code:    "E_LOAD_DRIVER_FAILED",
+		Message: "加载驱动失败",
+	}
+	apiErrUpdateDriverFailed = APIErrorDef{
+		Code:    "E_UPDATE_DRIVER_FAILED",
+		Message: "更新驱动失败",
+	}
+	apiErrReloadDriverFailed = APIErrorDef{
+		Code:    "E_RELOAD_DRIVER_FAILED",
+		Message: "重载驱动失败",
+	}
+	apiErrGetDriverRuntimeFailed = APIErrorDef{
+		Code:    "E_GET_DRIVER_RUNTIME_FAILED",
+		Message: "获取驱动运行态失败",
+	}
+	apiErrSyncGatewayIdentityFailed = APIErrorDef{
+		Code:    "E_SYNC_GATEWAY_IDENTITY_FAILED",
+		Message: "同步网关身份失败",
+	}
 )

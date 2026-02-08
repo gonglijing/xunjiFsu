@@ -11,7 +11,7 @@ import (
 func (h *Handler) GetResources(w http.ResponseWriter, r *http.Request) {
 	resources, err := database.ListResources()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListResourcesFailed, err)
 		return
 	}
 	WriteSuccess(w, resources)
@@ -25,7 +25,7 @@ func (h *Handler) CreateResource(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := database.AddResource(&resource)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateResourceFailed, err)
 		return
 	}
 	resource.ID = id
@@ -44,7 +44,7 @@ func (h *Handler) UpdateResource(w http.ResponseWriter, r *http.Request) {
 	}
 	resource.ID = id
 	if err := database.UpdateResource(&resource); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateResourceFailed, err)
 		return
 	}
 	WriteSuccess(w, resource)
@@ -57,7 +57,7 @@ func (h *Handler) DeleteResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := database.DeleteResource(id); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrDeleteResourceFailed, err)
 		return
 	}
 	WriteDeleted(w)
@@ -79,7 +79,7 @@ func (h *Handler) ToggleResource(w http.ResponseWriter, r *http.Request) {
 		newState = 1
 	}
 	if err := database.ToggleResource(id, newState); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrToggleResourceFailed, err)
 		return
 	}
 	res.Enabled = newState

@@ -10,7 +10,7 @@ import (
 func (h *Handler) GetDataCache(w http.ResponseWriter, r *http.Request) {
 	cache, err := database.GetAllDataCache()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListDataCacheFailed, err)
 		return
 	}
 	WriteSuccess(w, cache)
@@ -23,7 +23,7 @@ func (h *Handler) GetDataCacheByDeviceID(w http.ResponseWriter, r *http.Request)
 	}
 	cache, err := database.GetDataCacheByDeviceID(id)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrGetDeviceDataCacheFailed, err)
 		return
 	}
 	WriteSuccess(w, cache)
@@ -38,7 +38,7 @@ func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
 
 	points, err := queryDataPoints(query)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrQueryHistoryDataFailed, err)
 		return
 	}
 

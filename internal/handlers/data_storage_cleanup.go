@@ -10,7 +10,7 @@ import (
 func (h *Handler) GetStorageConfigs(w http.ResponseWriter, r *http.Request) {
 	configs, err := database.GetAllStorageConfigs()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListStorageConfigsFailed, err)
 		return
 	}
 	WriteSuccess(w, configs)
@@ -23,7 +23,7 @@ func (h *Handler) CreateStorageConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := database.CreateStorageConfig(&config)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateStorageConfigFailed, err)
 		return
 	}
 	config.ID = id
@@ -41,7 +41,7 @@ func (h *Handler) UpdateStorageConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	config.ID = id
 	if err := database.UpdateStorageConfig(&config); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateStorageConfigFailed, err)
 		return
 	}
 	WriteSuccess(w, config)
@@ -53,7 +53,7 @@ func (h *Handler) DeleteStorageConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := database.DeleteStorageConfig(id); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrDeleteStorageConfigFailed, err)
 		return
 	}
 	WriteDeleted(w)
@@ -69,7 +69,7 @@ func (h *Handler) CleanupData(w http.ResponseWriter, r *http.Request) {
 	}
 	count, err := database.CleanupData(req.Before)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCleanupDataFailed, err)
 		return
 	}
 	WriteSuccess(w, map[string]interface{}{
@@ -82,7 +82,7 @@ func (h *Handler) CleanupData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CleanupDataByPolicy(w http.ResponseWriter, r *http.Request) {
 	count, err := database.CleanupOldDataByConfig()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCleanupByPolicyFailed, err)
 		return
 	}
 	WriteSuccess(w, map[string]interface{}{

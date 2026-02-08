@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 func (h *Handler) SyncGatewayIdentityToNorthbound(w http.ResponseWriter, r *http.Request) {
 	gw, err := database.GetGatewayConfig()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrGetGatewayConfigFailed, err)
 		return
 	}
 
@@ -24,7 +25,7 @@ func (h *Handler) SyncGatewayIdentityToNorthbound(w http.ResponseWriter, r *http
 
 	updated, skipped, failed := h.syncGatewayIdentityToNorthboundTypes(productKey, deviceKey)
 	if systemErr, ok := failed["_system"]; ok {
-		WriteServerError(w, systemErr)
+		writeServerErrorWithLog(w, apiErrSyncGatewayIdentityFailed, errors.New(systemErr))
 		return
 	}
 

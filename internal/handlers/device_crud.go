@@ -12,7 +12,7 @@ import (
 func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := database.GetAllDevices()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListDevicesFailed, err)
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 
 	id, err := database.CreateDevice(&device)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateDeviceFailed, err)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	device.ID = id
 	if err := database.UpdateDevice(&device); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateDeviceFailed, err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.DeleteDevice(id); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrDeleteDeviceFailed, err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.UpdateDeviceEnabled(id, nextState); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrToggleDeviceFailed, err)
 		return
 	}
 

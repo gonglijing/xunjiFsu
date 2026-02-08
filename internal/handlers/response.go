@@ -34,6 +34,13 @@ type APIErrorDef struct {
 	Message string
 }
 
+const (
+	defaultBadRequestCode   = "E_BAD_REQUEST"
+	defaultUnauthorizedCode = "E_UNAUTHORIZED"
+	defaultNotFoundCode     = "E_NOT_FOUND"
+	defaultServerErrorCode  = "E_SERVER_ERROR"
+)
+
 // APIResponse 统一 API 响应格式
 type APIResponse struct {
 	Success bool        `json:"success"`
@@ -92,7 +99,7 @@ func WriteErrorDef(w http.ResponseWriter, status int, def APIErrorDef) {
 
 // WriteBadRequest 400 错误
 func WriteBadRequest(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusBadRequest, message)
+	WriteBadRequestCode(w, defaultBadRequestCode, message)
 }
 
 func WriteBadRequestDef(w http.ResponseWriter, def APIErrorDef) {
@@ -105,12 +112,12 @@ func WriteBadRequestCode(w http.ResponseWriter, code, message string) {
 
 // WriteUnauthorized 401 错误
 func WriteUnauthorized(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusUnauthorized, message)
+	WriteErrorCode(w, http.StatusUnauthorized, defaultUnauthorizedCode, message)
 }
 
 // WriteNotFound 404 错误
 func WriteNotFound(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusNotFound, message)
+	WriteErrorCode(w, http.StatusNotFound, defaultNotFoundCode, message)
 }
 
 func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
@@ -119,7 +126,7 @@ func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
 
 // WriteServerError 500 错误
 func WriteServerError(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusInternalServerError, message)
+	WriteServerErrorCode(w, defaultServerErrorCode, message)
 }
 
 func WriteServerErrorDef(w http.ResponseWriter, def APIErrorDef) {

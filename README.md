@@ -136,7 +136,10 @@ gogw/
 ├── ui/
 │   ├── frontend/               # SolidJS 前端
 │   │   ├── src/
-│   │   │   ├── api.js          # HTTP 客户端 + hooks
+│   │   │   ├── api.js          # HTTP 客户端基础能力（鉴权/错误处理）
+│   │   │   ├── api/            # 领域 API 封装
+│   │   │   │   ├── services.js # 统一 API 聚合入口（default export）
+│   │   │   │   └── *.js        # devices/storage/northbound/...
 │   │   │   ├── router.jsx      # 路由管理
 │   │   │   ├── main.jsx        # 入口文件
 │   │   │   ├── App.jsx         # 根组件
@@ -292,6 +295,14 @@ make run
 # 前端开发服务器（热重载）
 make ui-dev
 ```
+
+### 前端 API 调用约定
+
+- 页面/区块统一通过 `ui/frontend/src/api/services.js`（`default export`）访问后端接口。
+- 业务代码使用 `api.<domain>.<method>()`（例如 `api.devices.listDevices()`），避免直接在页面里拼 `/api/...`。
+- 统一错误处理、鉴权和响应解析由 `ui/frontend/src/api.js` 负责；领域文件仅封装路径与参数。
+- 新增接口时，优先在 `ui/frontend/src/api/<domain>.js` 增加方法，再在页面中调用。
+
 
 ### 跨平台编译
 

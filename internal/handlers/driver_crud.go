@@ -12,7 +12,7 @@ import (
 func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 	drivers, err := database.GetAllDrivers()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListDriversFailed, err)
 		return
 	}
 	for _, d := range drivers {
@@ -42,7 +42,7 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 	id, err := database.CreateDriver(&driver)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateDriverFailed, err)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 	if driver.Enabled == 1 {
 		if err := h.driverManager.LoadDriverFromModel(&driver, 0); err != nil {
-			WriteServerError(w, "driver loaded failed: "+err.Error())
+			writeServerErrorWithLog(w, apiErrLoadDriverFailed, err)
 			return
 		}
 	}
@@ -81,13 +81,13 @@ func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
 	}
 	loadAndSyncDriverVersion(h, &driver)
 	if err := database.UpdateDriver(&driver); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateDriverFailed, err)
 		return
 	}
 
 	if driver.Enabled == 1 {
 		if err := h.driverManager.LoadDriverFromModel(&driver, 0); err != nil {
-			WriteServerError(w, "driver reloaded failed: "+err.Error())
+			writeServerErrorWithLog(w, apiErrReloadDriverFailed, err)
 			return
 		}
 	} else {

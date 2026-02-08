@@ -13,7 +13,7 @@ import (
 func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := database.GetAllUsers()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListUsersFailed, err)
 		return
 	}
 
@@ -34,7 +34,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	id, err := database.CreateUser(&user)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateUserFailed, err)
 		return
 	}
 
@@ -57,7 +57,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	user.ID = id
 	if err := database.UpdateUser(&user); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateUserFailed, err)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.DeleteUser(id); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrDeleteUserFailed, err)
 		return
 	}
 

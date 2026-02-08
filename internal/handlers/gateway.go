@@ -11,7 +11,7 @@ import (
 func (h *Handler) GetGatewayConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := database.GetGatewayConfig()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrGetGatewayConfigFailed, err)
 		return
 	}
 	WriteSuccess(w, cfg)
@@ -26,13 +26,13 @@ func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
 	normalizeGatewayConfigInput(&cfg)
 
 	if err := database.UpdateGatewayConfig(toDatabaseGatewayConfig(&cfg)); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateGatewayConfigFailed, err)
 		return
 	}
 
 	updatedCfg, err := database.GetGatewayConfig()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrGetGatewayConfigFailed, err)
 		return
 	}
 

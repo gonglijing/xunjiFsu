@@ -12,7 +12,7 @@ import (
 func (h *Handler) GetNorthboundConfigs(w http.ResponseWriter, r *http.Request) {
 	configs, err := database.GetAllNorthboundConfigs()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListNorthboundConfigsFailed, err)
 		return
 	}
 
@@ -53,7 +53,7 @@ func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	id, err := database.CreateNorthboundConfig(&config)
 	if err != nil {
 		h.northboundMgr.RemoveAdapter(config.Name)
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateNorthboundConfigFailed, err)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		if oldConfig != nil {
 			_ = h.rebuildNorthboundRuntime(oldConfig)
 		}
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateNorthboundConfigFailed, err)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (h *Handler) DeleteNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := database.DeleteNorthboundConfig(id); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrDeleteNorthboundConfigFailed, err)
 		return
 	}
 

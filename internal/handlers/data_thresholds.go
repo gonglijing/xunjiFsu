@@ -11,7 +11,7 @@ import (
 func (h *Handler) GetThresholds(w http.ResponseWriter, r *http.Request) {
 	thresholds, err := database.GetAllThresholds()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListThresholdsFailed, err)
 		return
 	}
 	WriteSuccess(w, thresholds)
@@ -24,7 +24,7 @@ func (h *Handler) CreateThreshold(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := database.CreateThreshold(&threshold)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrCreateThresholdFailed, err)
 		return
 	}
 	threshold.ID = id
@@ -42,7 +42,7 @@ func (h *Handler) UpdateThreshold(w http.ResponseWriter, r *http.Request) {
 	}
 	threshold.ID = id
 	if err := database.UpdateThreshold(&threshold); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrUpdateThresholdFailed, err)
 		return
 	}
 	WriteSuccess(w, threshold)
@@ -54,7 +54,7 @@ func (h *Handler) DeleteThreshold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := database.DeleteThreshold(id); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrDeleteThresholdFailed, err)
 		return
 	}
 	WriteDeleted(w)

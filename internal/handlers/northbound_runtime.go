@@ -30,7 +30,7 @@ func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := database.UpdateNorthboundEnabled(id, nextState); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrToggleNorthboundFailed, err)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *Handler) ReloadNorthboundConfig(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 	configs, err := database.GetAllNorthboundConfigs()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListNorthboundStatusFailed, err)
 		return
 	}
 

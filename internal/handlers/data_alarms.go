@@ -10,7 +10,7 @@ import (
 func (h *Handler) GetAlarmLogs(w http.ResponseWriter, r *http.Request) {
 	logs, err := database.GetRecentAlarmLogs(100)
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListAlarmLogsFailed, err)
 		return
 	}
 	WriteSuccess(w, logs)
@@ -22,7 +22,7 @@ func (h *Handler) AcknowledgeAlarm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := database.AcknowledgeAlarmLog(id, "admin"); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrAcknowledgeAlarmFailed, err)
 		return
 	}
 	WriteSuccess(w, map[string]string{"status": "acknowledged"})

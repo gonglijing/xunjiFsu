@@ -29,7 +29,7 @@ func (h *Handler) ReloadDriver(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.driverManager.LoadDriverFromModel(drv, 0); err != nil {
-		WriteServerError(w, "reload driver failed: "+err.Error())
+		writeServerErrorWithLog(w, apiErrReloadDriverFailed, err)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *Handler) GetDriverRuntime(w http.ResponseWriter, r *http.Request) {
 			WriteNotFoundDef(w, apiErrDriverNotFound)
 			return
 		}
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrGetDriverRuntimeFailed, err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *Handler) GetDriverRuntime(w http.ResponseWriter, r *http.Request) {
 			WriteSuccess(w, map[string]interface{}{"id": id, "loaded": false})
 			return
 		}
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrGetDriverRuntimeFailed, err)
 		return
 	}
 

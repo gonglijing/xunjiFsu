@@ -241,6 +241,74 @@ func TestWriteBadRequestCode(t *testing.T) {
 	}
 }
 
+func TestWriteBadRequest_DefaultCode(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	WriteBadRequest(w, "bad request")
+
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusBadRequest)
+	}
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != defaultBadRequestCode {
+		t.Fatalf("code = %q, want %q", parsed.Code, defaultBadRequestCode)
+	}
+}
+
+func TestWriteNotFound_DefaultCode(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	WriteNotFound(w, "not found")
+
+	if w.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusNotFound)
+	}
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != defaultNotFoundCode {
+		t.Fatalf("code = %q, want %q", parsed.Code, defaultNotFoundCode)
+	}
+}
+
+func TestWriteUnauthorized_DefaultCode(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	WriteUnauthorized(w, "unauthorized")
+
+	if w.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusUnauthorized)
+	}
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != defaultUnauthorizedCode {
+		t.Fatalf("code = %q, want %q", parsed.Code, defaultUnauthorizedCode)
+	}
+}
+
+func TestWriteServerError_DefaultCode(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	WriteServerError(w, "server error")
+
+	if w.Result().StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusInternalServerError)
+	}
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != defaultServerErrorCode {
+		t.Fatalf("code = %q, want %q", parsed.Code, defaultServerErrorCode)
+	}
+}
+
 func TestWriteDeleted(t *testing.T) {
 	w := httptest.NewRecorder()
 
