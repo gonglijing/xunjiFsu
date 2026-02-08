@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -46,8 +47,7 @@ func (h *Handler) syncGatewayIdentityToNorthboundTypes(productKey, deviceKey str
 	failed := make(map[string]string)
 
 	for _, cfg := range configs {
-		nbType := strings.ToLower(strings.TrimSpace(cfg.Type))
-		if cfg == nil || !isGatewayIdentityNorthboundType(nbType) {
+		if !shouldSyncGatewayIdentity(cfg) {
 			continue
 		}
 
@@ -71,6 +71,35 @@ func (h *Handler) syncGatewayIdentityToNorthboundTypes(productKey, deviceKey str
 	sort.Strings(updated)
 	sort.Strings(skipped)
 	return updated, skipped, failed
+}
+
+func shouldSyncGatewayIdentity(cfg *models.NorthboundConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	nbType := strings.ToLower(strings.TrimSpace(cfg.Type))
+	return isGatewayIdentityNorthboundType(nbType)
+}
+
+func loadGatewayConfigOrWriteServerError(w http.ResponseWriter) (*database.GatewayConfig, bool) {
+	cfg, err := database.GetGatewayConfig()
+	if err != nil {
+		writeServerErrorWithLog(w, apiErrGetGatewayConfigFailed, err)
+		return nil, false
+	}
+	return cfg, true
+}
+
+func extractGatewayIdentity(cfg *database.GatewayConfig) (string, string, bool) {
+	if cfg == nil {
+		return "", "", false
+	}
+	productKey := strings.TrimSpace(cfg.ProductKey)
+	deviceKey := strings.TrimSpace(cfg.DeviceKey)
+	if productKey == "" || deviceKey == "" {
+		return "", "", false
+	}
+	return productKey, deviceKey, true
 }
 
 func buildNorthboundIdentityPatch(current *models.NorthboundConfig, productKey, deviceKey string) (*models.NorthboundConfig, bool, error) {

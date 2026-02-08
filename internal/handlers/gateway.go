@@ -9,9 +9,8 @@ import (
 
 // GetGatewayConfig 获取网关配置
 func (h *Handler) GetGatewayConfig(w http.ResponseWriter, r *http.Request) {
-	cfg, err := database.GetGatewayConfig()
-	if err != nil {
-		writeServerErrorWithLog(w, apiErrGetGatewayConfigFailed, err)
+	cfg, ok := loadGatewayConfigOrWriteServerError(w)
+	if !ok {
 		return
 	}
 	WriteSuccess(w, cfg)
@@ -30,9 +29,8 @@ func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedCfg, err := database.GetGatewayConfig()
-	if err != nil {
-		writeServerErrorWithLog(w, apiErrGetGatewayConfigFailed, err)
+	updatedCfg, ok := loadGatewayConfigOrWriteServerError(w)
+	if !ok {
 		return
 	}
 
