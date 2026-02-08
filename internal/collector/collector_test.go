@@ -203,3 +203,92 @@ func TestParseFloatFieldValue(t *testing.T) {
 		t.Fatalf("invalid float should return false")
 	}
 }
+
+func TestNormalizeNorthboundCommand(t *testing.T) {
+	if _, err := normalizeNorthboundCommand(nil); err == nil {
+		t.Fatalf("nil command should return error")
+	}
+
+	if _, err := normalizeNorthboundCommand(&models.NorthboundCommand{}); err == nil {
+		t.Fatalf("missing identity should return error")
+	}
+
+	if _, err := normalizeNorthboundCommand(&models.NorthboundCommand{ProductKey: "p", DeviceKey: "d"}); err == nil {
+		t.Fatalf("missing field should return error")
+	}
+
+	normalizedCommand, err := normalizeNorthboundCommand(&models.NorthboundCommand{
+		RequestID:  "  r1 ",
+		ProductKey: "  p1 ",
+		DeviceKey:  " d1 ",
+		FieldName:  " status ",
+		Value:      " 1 ",
+		Source:     " cloud ",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if normalizedCommand.ProductKey != "p1" || normalizedCommand.DeviceKey != "d1" || normalizedCommand.FieldName != "status" || normalizedCommand.Value != "1" || normalizedCommand.Source != "cloud" || normalizedCommand.RequestID != "r1" {
+		t.Fatalf("normalize failed: %+v", normalizedCommand)
+	}
+}
+
+func TestBuildNorthboundCommandConfig(t *testing.T) {
+	command := &models.NorthboundCommand{
+		ProductKey: "pk",
+		DeviceKey:  "dk",
+		FieldName:  "switch",
+		Value:      "on",
+	}
+	device := &models.Device{DeviceAddress: "addr-1"}
+
+	config := buildNorthboundCommandConfig(command, device)
+	if config == nil {
+		t.Fatalf("config should not be nil")
+	}
+	if config["func_name"] != "write" || config["field_name"] != "switch" || config["value"] != "on" {
+		t.Fatalf("config core fields mismatch: %+v", config)
+	}
+	if config["product_key"] != "pk" || config["productKey"] != "pk" || config["device_key"] != "dk" || config["deviceKey"] != "dk" {
+		t.Fatalf("config identity fields mismatch: %+v", config)
+	}
+	if config["device_address"] != "addr-1" {
+		t.Fatalf("config address mismatch: %+v", config)
+	}
+
+	if buildNorthboundCommandConfig(nil, device) != nil {
+		t.Fatalf("nil command should return nil config")
+	}
+	if buildNorthboundCommandConfig(command, nil) != nil {
+		t.Fatalf("nil device should return nil config")
+	}
+}
+
+func TestBuildNorthboundCommandResult(t *testing.T) {
+	command := &models.NorthboundCommand{
+		RequestID:  "r1",
+		ProductKey: "pk",
+		DeviceKey:  "dk",
+		FieldName:  "f",
+		Value:      "v",
+		Source:     "s",
+	}
+
+	successResult := buildNorthboundCommandResult(command, nil)
+	if successResult == nil || !successResult.Success || successResult.Code != 200 {
+		t.Fatalf("success result mismatch: %+v", successResult)
+	}
+
+	failResult := buildNorthboundCommandResult(command, assertErr("x"))
+	if failResult == nil || failResult.Success || failResult.Code != 500 || failResult.Message != "x" {
+		t.Fatalf("fail result mismatch: %+v", failResult)
+	}
+
+	if buildNorthboundCommandResult(nil, nil) != nil {
+		t.Fatalf("nil command should return nil")
+	}
+}
+
+type assertErr string
+
+func (e assertErr) Error() string { return string(e) }

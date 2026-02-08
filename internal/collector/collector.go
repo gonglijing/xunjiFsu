@@ -650,9 +650,19 @@ func (c *Collector) processNorthboundCommands() {
 }
 
 func (c *Collector) reportCommandResult(command *models.NorthboundCommand, execErr error) {
-	if c.northboundMgr == nil {
+	if c.northboundMgr == nil || command == nil {
 		return
 	}
+
+	result := buildNorthboundCommandResult(command, execErr)
+	c.northboundMgr.ReportCommandResult(result)
+}
+
+func buildNorthboundCommandResult(command *models.NorthboundCommand, execErr error) *models.NorthboundCommandResult {
+	if command == nil {
+		return nil
+	}
+
 	result := &models.NorthboundCommandResult{
 		RequestID:  command.RequestID,
 		ProductKey: command.ProductKey,
@@ -667,40 +677,29 @@ func (c *Collector) reportCommandResult(command *models.NorthboundCommand, execE
 		result.Code = 500
 		result.Message = execErr.Error()
 	}
-	c.northboundMgr.ReportCommandResult(result)
+
+	return result
 }
 
 func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) error {
-	productKey := strings.TrimSpace(command.ProductKey)
-	deviceKey := strings.TrimSpace(command.DeviceKey)
-	fieldName := strings.TrimSpace(command.FieldName)
-	value := strings.TrimSpace(command.Value)
-
-	if productKey == "" || deviceKey == "" {
-		return fmt.Errorf("missing product_key/device_key")
-	}
-	if fieldName == "" {
-		return fmt.Errorf("missing field_name")
+	if c.driverExecutor == nil {
+		return fmt.Errorf("driver executor is nil")
 	}
 
-	device, err := database.GetDeviceByIdentity(productKey, deviceKey)
+	normalizedCommand, err := normalizeNorthboundCommand(command)
 	if err != nil {
+		return err
+	}
+
+	device, err := database.GetDeviceByIdentity(normalizedCommand.ProductKey, normalizedCommand.DeviceKey)
+	if err != nil || device == nil {
 		return fmt.Errorf("device not found by identity")
 	}
 	if device.DriverID == nil {
 		return fmt.Errorf("device has no driver")
 	}
 
-	config := map[string]string{
-		"func_name":      "write",
-		"field_name":     fieldName,
-		"value":          value,
-		"product_key":    productKey,
-		"productKey":     productKey,
-		"device_key":     deviceKey,
-		"deviceKey":      deviceKey,
-		"device_address": device.DeviceAddress,
-	}
+	config := buildNorthboundCommandConfig(normalizedCommand, device)
 
 	result, err := c.driverExecutor.ExecuteCommand(device, "handle", config)
 	if err != nil {
@@ -714,8 +713,49 @@ func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) 
 	}
 
 	log.Printf("northbound command executed: source=%s request_id=%s device_id=%d field=%s value=%s",
-		command.Source, command.RequestID, device.ID, fieldName, value)
+		normalizedCommand.Source, normalizedCommand.RequestID, device.ID, normalizedCommand.FieldName, normalizedCommand.Value)
 	return nil
+}
+
+func normalizeNorthboundCommand(command *models.NorthboundCommand) (*models.NorthboundCommand, error) {
+	if command == nil {
+		return nil, fmt.Errorf("northbound command is nil")
+	}
+
+	normalizedCommand := &models.NorthboundCommand{
+		RequestID:  strings.TrimSpace(command.RequestID),
+		ProductKey: strings.TrimSpace(command.ProductKey),
+		DeviceKey:  strings.TrimSpace(command.DeviceKey),
+		FieldName:  strings.TrimSpace(command.FieldName),
+		Value:      strings.TrimSpace(command.Value),
+		Source:     strings.TrimSpace(command.Source),
+	}
+
+	if normalizedCommand.ProductKey == "" || normalizedCommand.DeviceKey == "" {
+		return nil, fmt.Errorf("missing product_key/device_key")
+	}
+	if normalizedCommand.FieldName == "" {
+		return nil, fmt.Errorf("missing field_name")
+	}
+
+	return normalizedCommand, nil
+}
+
+func buildNorthboundCommandConfig(command *models.NorthboundCommand, device *models.Device) map[string]string {
+	if command == nil || device == nil {
+		return nil
+	}
+
+	return map[string]string{
+		"func_name":      "write",
+		"field_name":     command.FieldName,
+		"value":          command.Value,
+		"product_key":    command.ProductKey,
+		"productKey":     command.ProductKey,
+		"device_key":     command.DeviceKey,
+		"deviceKey":      command.DeviceKey,
+		"device_address": device.DeviceAddress,
+	}
 }
 
 // ThresholdChecker 阈值检查器
