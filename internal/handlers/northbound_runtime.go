@@ -12,15 +12,14 @@ import (
 
 // ToggleNorthboundEnable 切换北向使能状态
 func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	config, err := database.GetNorthboundConfigByID(id)
 	if err != nil {
-		WriteNotFound(w, "Northbound config not found")
+		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 
@@ -51,15 +50,14 @@ func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request)
 
 // ReloadNorthboundConfig 重载单个北向运行时
 func (h *Handler) ReloadNorthboundConfig(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	config, err := database.GetNorthboundConfigByID(id)
 	if err != nil {
-		WriteNotFound(w, "Northbound config not found")
+		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 

@@ -14,6 +14,11 @@ type PaginationParams struct {
 	Offset   int // 计算出的偏移量
 }
 
+type paginationWindow struct {
+	start int
+	end   int
+}
+
 // GetPagination 从请求获取分页参数
 func GetPagination(r *http.Request, defaultPageSize int) PaginationParams {
 	page := 1
@@ -58,7 +63,7 @@ type PaginatedResponse struct {
 
 // NewPaginatedResponse 创建分页响应
 func NewPaginatedResponse(items interface{}, params PaginationParams, totalItems int) PaginatedResponse {
-	totalPages := (totalItems + params.PageSize - 1) / params.PageSize
+	totalPages := calculateTotalPages(totalItems, params.PageSize)
 
 	return PaginatedResponse{
 		Items:      items,
@@ -69,6 +74,30 @@ func NewPaginatedResponse(items interface{}, params PaginationParams, totalItems
 		HasNext:    params.Page < totalPages,
 		HasPrev:    params.Page > 1,
 	}
+}
+
+func calculateTotalPages(totalItems, pageSize int) int {
+	if totalItems <= 0 || pageSize <= 0 {
+		return 0
+	}
+	return (totalItems + pageSize - 1) / pageSize
+}
+
+func buildPaginationWindow(params PaginationParams, totalItems int) paginationWindow {
+	start := params.Offset
+	if start < 0 {
+		start = 0
+	}
+	if start > totalItems {
+		start = totalItems
+	}
+
+	end := start + params.PageSize
+	if end > totalItems {
+		end = totalItems
+	}
+
+	return paginationWindow{start: start, end: end}
 }
 
 // GetPaginatedDevices 获取分页设备列表
@@ -83,32 +112,16 @@ func GetPaginatedDevices(w http.ResponseWriter, r *http.Request) {
 
 	// 计算分页
 	totalItems := len(devices)
-	totalPages := (totalItems + params.PageSize - 1) / params.PageSize
-
-	start := params.Offset
-	end := start + params.PageSize
-	if end > totalItems {
-		end = totalItems
-	}
+	window := buildPaginationWindow(params, totalItems)
 
 	var paginatedItems []interface{}
-	if start < totalItems {
-		for _, d := range devices[start:end] {
+	if window.start < window.end {
+		for _, d := range devices[window.start:window.end] {
 			paginatedItems = append(paginatedItems, d)
 		}
 	}
 
-	response := PaginatedResponse{
-		Items:      paginatedItems,
-		Page:       params.Page,
-		PageSize:   params.PageSize,
-		TotalItems: totalItems,
-		TotalPages: totalPages,
-		HasNext:    params.Page < totalPages,
-		HasPrev:    params.Page > 1,
-	}
-
-	WriteSuccess(w, response)
+	WriteSuccess(w, NewPaginatedResponse(paginatedItems, params, totalItems))
 }
 
 // GetPaginatedDataPoints 获取分页历史数据
@@ -120,7 +133,7 @@ func GetPaginatedDataPoints(w http.ResponseWriter, r *http.Request) {
 	if deviceIDStr != "" {
 		parsed, err := strconv.ParseInt(deviceIDStr, 10, 64)
 		if err != nil {
-			WriteBadRequest(w, "Invalid device_id")
+			WriteBadRequestDef(w, apiErrInvalidDeviceID)
 			return
 		}
 		deviceID = parsed
@@ -142,9 +155,9 @@ func GetPaginatedDataPoints(w http.ResponseWriter, r *http.Request) {
 
 	// 简单返回，不计算总数
 	WriteSuccess(w, map[string]interface{}{
-		"items":    points,
-		"page":     params.Page,
+		"items":     points,
+		"page":      params.Page,
 		"page_size": params.PageSize,
-		"has_next": len(points) == params.PageSize,
+		"has_next":  len(points) == params.PageSize,
 	})
 }

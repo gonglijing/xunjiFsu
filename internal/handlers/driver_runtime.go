@@ -11,21 +11,20 @@ import (
 
 // ReloadDriver 重载驱动
 func (h *Handler) ReloadDriver(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	drv, err := database.GetDriverByID(id)
 	if err != nil {
-		WriteNotFound(w, "Driver not found")
+		WriteNotFoundDef(w, apiErrDriverNotFound)
 		return
 	}
 
 	path := h.driverFilePath(drv.Name, drv.FilePath)
 	if _, err := os.Stat(path); err != nil {
-		WriteBadRequest(w, "driver wasm file not found")
+		WriteBadRequest(w, errDriverWasmFileNotFoundMessage)
 		return
 	}
 
@@ -40,16 +39,15 @@ func (h *Handler) ReloadDriver(w http.ResponseWriter, r *http.Request) {
 
 // GetDriverRuntime 获取驱动运行态
 func (h *Handler) GetDriverRuntime(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
-	_, err = database.GetDriverByID(id)
+	_, err := database.GetDriverByID(id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			WriteNotFound(w, "Driver not found")
+			WriteNotFoundDef(w, apiErrDriverNotFound)
 			return
 		}
 		WriteServerError(w, err.Error())

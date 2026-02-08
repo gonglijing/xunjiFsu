@@ -47,7 +47,7 @@ func (h *Handler) syncGatewayIdentityToNorthboundTypes(productKey, deviceKey str
 
 	for _, cfg := range configs {
 		nbType := strings.ToLower(strings.TrimSpace(cfg.Type))
-		if cfg == nil || (nbType != "xunji" && nbType != "pandax" && nbType != "ithings") {
+		if cfg == nil || !isGatewayIdentityNorthboundType(nbType) {
 			continue
 		}
 

@@ -27,8 +27,7 @@ func (h *Handler) GetNorthboundConfigs(w http.ResponseWriter, r *http.Request) {
 // CreateNorthboundConfig 创建北向配置
 func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request) {
 	var config models.NorthboundConfig
-	if err := ParseRequest(r, &config); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &config) {
 		return
 	}
 	normalizeNorthboundConfig(&config)
@@ -64,20 +63,18 @@ func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 
 // UpdateNorthboundConfig 更新北向配置
 func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 	oldConfig, err := database.GetNorthboundConfigByID(id)
 	if err != nil {
-		WriteNotFound(w, "Northbound config not found")
+		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 
 	var config models.NorthboundConfig
-	if err := ParseRequest(r, &config); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &config) {
 		return
 	}
 	normalizeNorthboundConfig(&config)
@@ -117,9 +114,8 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 
 // DeleteNorthboundConfig 删除北向配置
 func (h *Handler) DeleteNorthboundConfig(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
@@ -133,5 +129,5 @@ func (h *Handler) DeleteNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	WriteSuccess(w, nil)
+	WriteDeleted(w)
 }

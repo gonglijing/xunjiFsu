@@ -9,11 +9,37 @@ import (
 	"github.com/gorilla/mux"
 )
 
+var stringOnlyFormFields = map[string]struct{}{
+	"device_address": {},
+	"name":           {},
+	"description":    {},
+	"serial_port":    {},
+	"ip_address":     {},
+	"protocol":       {},
+	"parity":         {},
+	"interface_type": {},
+}
+
+var formDefaultValues = map[string]interface{}{
+	"parity":         "N",
+	"interface_type": "network",
+	"protocol":       "tcp",
+	"baud_rate":      9600,
+	"data_bits":      8,
+	"stop_bits":      1,
+}
+
+type APIErrorDef struct {
+	Code    string
+	Message string
+}
+
 // APIResponse 统一 API 响应格式
 type APIResponse struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
+	Code    string      `json:"code,omitempty"`
 	Message string      `json:"message,omitempty"`
 }
 
@@ -40,17 +66,36 @@ func WriteCreated(w http.ResponseWriter, data interface{}) {
 	})
 }
 
+// WriteDeleted 删除成功响应
+func WriteDeleted(w http.ResponseWriter) {
+	WriteSuccess(w, nil)
+}
+
 // WriteError 错误响应
 func WriteError(w http.ResponseWriter, status int, message string) {
+	WriteErrorCode(w, status, "", message)
+}
+
+// WriteErrorCode 带错误码的错误响应
+func WriteErrorCode(w http.ResponseWriter, status int, code, message string) {
 	WriteJSON(w, status, APIResponse{
 		Success: false,
 		Error:   message,
+		Code:    code,
 	})
+}
+
+func WriteErrorDef(w http.ResponseWriter, status int, def APIErrorDef) {
+	WriteErrorCode(w, status, def.Code, def.Message)
 }
 
 // WriteBadRequest 400 错误
 func WriteBadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
+}
+
+func WriteBadRequestDef(w http.ResponseWriter, def APIErrorDef) {
+	WriteErrorDef(w, http.StatusBadRequest, def)
 }
 
 // WriteUnauthorized 401 错误
@@ -61,6 +106,10 @@ func WriteUnauthorized(w http.ResponseWriter, message string) {
 // WriteNotFound 404 错误
 func WriteNotFound(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusNotFound, message)
+}
+
+func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
+	WriteErrorDef(w, http.StatusNotFound, def)
 }
 
 // WriteServerError 500 错误
@@ -82,51 +131,11 @@ func ParseRequest(r *http.Request, v interface{}) error {
 	formData := make(map[string]interface{})
 	for key, values := range r.Form {
 		if len(values) > 0 {
-			value := values[0]
-			if key == "device_address" || key == "name" || key == "description" ||
-				key == "serial_port" || key == "ip_address" || key == "protocol" ||
-				key == "parity" || key == "interface_type" {
-				formData[key] = value
-				continue
-			}
-			if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
-				formData[key] = intVal
-				continue
-			}
-			if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
-				formData[key] = floatVal
-				continue
-			}
-			if value == "1" || value == "true" {
-				formData[key] = true
-				continue
-			}
-			if value == "0" || value == "false" {
-				formData[key] = false
-				continue
-			}
-			formData[key] = value
+			formData[key] = parseFormValue(key, values[0])
 		}
 	}
 
-	if _, exists := formData["parity"]; !exists {
-		formData["parity"] = "N"
-	}
-	if _, exists := formData["interface_type"]; !exists {
-		formData["interface_type"] = "network"
-	}
-	if _, exists := formData["protocol"]; !exists {
-		formData["protocol"] = "tcp"
-	}
-	if _, exists := formData["baud_rate"]; !exists {
-		formData["baud_rate"] = 9600
-	}
-	if _, exists := formData["data_bits"]; !exists {
-		formData["data_bits"] = 8
-	}
-	if _, exists := formData["stop_bits"]; !exists {
-		formData["stop_bits"] = 1
-	}
+	applyFormDefaults(formData)
 
 	jsonData, err := json.Marshal(formData)
 	if err != nil {
@@ -143,4 +152,72 @@ func ParseID(r *http.Request) (int64, error) {
 		return 0, err
 	}
 	return id, nil
+}
+
+func parseIDOrWriteBadRequest(w http.ResponseWriter, r *http.Request, message string) (int64, bool) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequest(w, message)
+		return 0, false
+	}
+	return id, true
+}
+
+func parseIDOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequestDef(w, apiErrInvalidID)
+		return 0, false
+	}
+	return id, true
+}
+
+func parseRequestOrWriteBadRequest(w http.ResponseWriter, r *http.Request, payload interface{}, message string) bool {
+	if err := ParseRequest(r, payload); err != nil {
+		WriteBadRequest(w, message)
+		return false
+	}
+	return true
+}
+
+func parseRequestOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request, payload interface{}) bool {
+	if err := ParseRequest(r, payload); err != nil {
+		WriteBadRequestDef(w, apiErrInvalidRequestBody)
+		return false
+	}
+	return true
+}
+
+func parseFormValue(key, value string) interface{} {
+	if isStringOnlyFormField(key) {
+		return value
+	}
+
+	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return intVal
+	}
+	if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+		return floatVal
+	}
+	if value == "1" || value == "true" {
+		return true
+	}
+	if value == "0" || value == "false" {
+		return false
+	}
+
+	return value
+}
+
+func isStringOnlyFormField(key string) bool {
+	_, ok := stringOnlyFormFields[key]
+	return ok
+}
+
+func applyFormDefaults(formData map[string]interface{}) {
+	for key, defaultValue := range formDefaultValues {
+		if _, exists := formData[key]; !exists {
+			formData[key] = defaultValue
+		}
+	}
 }

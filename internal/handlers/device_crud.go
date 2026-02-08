@@ -55,11 +55,11 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 	var device models.Device
 	if err := ParseRequest(r, &device); err != nil {
-		WriteBadRequest(w, "Invalid request body: "+err.Error())
+		WriteBadRequest(w, errInvalidRequestBodyWithDetailPrefix+err.Error())
 		return
 	}
 	if err := normalizeDeviceInput(&device); err != nil {
-		WriteBadRequest(w, "device name is required")
+		WriteBadRequest(w, errDeviceNameRequiredMessage)
 		return
 	}
 
@@ -75,23 +75,22 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 
 // UpdateDevice 更新设备
 func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 	if _, err := database.GetDeviceByID(id); err != nil {
-		WriteNotFound(w, "Device not found")
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
 		return
 	}
 
 	var device models.Device
 	if err := ParseRequest(r, &device); err != nil {
-		WriteBadRequest(w, "Invalid request body: "+err.Error())
+		WriteBadRequest(w, errInvalidRequestBodyWithDetailPrefix+err.Error())
 		return
 	}
 	if err := normalizeDeviceInput(&device); err != nil {
-		WriteBadRequest(w, "device name is required")
+		WriteBadRequest(w, errDeviceNameRequiredMessage)
 		return
 	}
 
@@ -106,13 +105,12 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 // DeleteDevice 删除设备
 func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 	if _, err := database.GetDeviceByID(id); err != nil {
-		WriteNotFound(w, "Device not found")
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
 		return
 	}
 
@@ -121,20 +119,19 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	WriteDeleted(w)
 }
 
 // ToggleDeviceEnable 切换设备使能状态
 func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	device, err := database.GetDeviceByID(id)
 	if err != nil {
-		WriteNotFound(w, "Device not found")
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
 		return
 	}
 

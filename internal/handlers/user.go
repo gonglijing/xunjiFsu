@@ -28,8 +28,7 @@ func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 // CreateUser 创建用户
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var user models.User
-	if err := ParseRequest(r, &user); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &user) {
 		return
 	}
 
@@ -46,15 +45,13 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser 更新用户
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	var user models.User
-	if err := ParseRequest(r, &user); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &user) {
 		return
 	}
 
@@ -70,9 +67,8 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser 删除用户
 func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
@@ -81,5 +77,5 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteSuccess(w, nil)
+	WriteDeleted(w)
 }

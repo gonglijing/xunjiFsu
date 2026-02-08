@@ -27,7 +27,7 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".wasm") {
-		WriteBadRequest(w, "Only .wasm files are allowed")
+		WriteBadRequest(w, errOnlyWasmFilesAllowedMessage)
 		return
 	}
 
@@ -73,14 +73,13 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 
 // DownloadDriver 下载驱动文件
 func (h *Handler) DownloadDriver(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 	driver, err := database.GetDriverByID(id)
 	if err != nil {
-		WriteNotFound(w, "Driver not found")
+		WriteNotFoundDef(w, apiErrDriverNotFound)
 		return
 	}
 	filePath := h.driverFilePath(driver.Name, driver.FilePath)

@@ -11,9 +11,8 @@ import (
 )
 
 func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
@@ -21,8 +20,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 		Function string                 `json:"function"`
 		Params   map[string]interface{} `json:"params"`
 	}
-	if err := ParseRequest(r, &req); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &req) {
 		return
 	}
 
@@ -30,17 +28,17 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 
 	device, err := database.GetDeviceByID(id)
 	if err != nil {
-		WriteNotFound(w, "Device not found")
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
 		return
 	}
 	if device.DriverID == nil {
-		WriteBadRequest(w, "Device has no driver")
+		WriteBadRequest(w, errDeviceHasNoDriverMessage)
 		return
 	}
 
 	driverModel, err := database.GetDriverByID(*device.DriverID)
 	if err != nil {
-		WriteServerError(w, "driver not found")
+		WriteServerError(w, errDriverLookupFailedMessage)
 		return
 	}
 	if !h.driverManager.IsLoaded(*device.DriverID) {
@@ -80,7 +78,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 	result, err := h.driverManager.ExecuteDriver(*device.DriverID, pluginFunc, ctx)
 	if err != nil {
 		if errors.Is(err, driver.ErrDriverNotFound) {
-			WriteBadRequest(w, "driver is not loaded")
+			WriteBadRequest(w, errDriverNotLoadedMessage)
 			return
 		}
 		WriteServerError(w, fmt.Sprintf("Failed to execute %s: %v", requestFunc, err))
@@ -92,15 +90,14 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 
 // GetDeviceWritables 返回设备驱动声明的可写寄存器元数据（来自 Driver.ConfigSchema.writable）
 func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	device, err := database.GetDeviceByID(id)
 	if err != nil {
-		WriteNotFound(w, "Device not found")
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
 		return
 	}
 	if device.DriverID == nil {
@@ -110,7 +107,7 @@ func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
 
 	driverModel, err := database.GetDriverByID(*device.DriverID)
 	if err != nil {
-		WriteServerError(w, "driver not found")
+		WriteServerError(w, errDriverLookupFailedMessage)
 		return
 	}
 
@@ -119,7 +116,7 @@ func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
 	}
 	if driverModel.ConfigSchema != "" {
 		if err := json.Unmarshal([]byte(driverModel.ConfigSchema), &cfg); err != nil {
-			WriteBadRequest(w, "driver config_schema is invalid JSON")
+			WriteBadRequest(w, errDriverConfigSchemaInvalidJSONError)
 			return
 		}
 	}

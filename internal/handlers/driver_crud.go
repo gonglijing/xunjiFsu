@@ -24,18 +24,17 @@ func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 // CreateDriver 创建驱动（手动录入元数据 + 已有文件）
 func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	var driver models.Driver
-	if err := ParseRequest(r, &driver); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &driver) {
 		return
 	}
 
 	if err := normalizeDriverInput(h, &driver); err != nil {
-		WriteBadRequest(w, "driver name is required")
+		WriteBadRequest(w, errDriverNameRequiredMessage)
 		return
 	}
 
 	if _, err := os.Stat(driver.FilePath); err != nil {
-		WriteBadRequest(w, "driver wasm file not found")
+		WriteBadRequest(w, errDriverWasmFileNotFoundMessage)
 		return
 	}
 
@@ -61,25 +60,23 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 // UpdateDriver 更新驱动
 func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	var driver models.Driver
-	if err := ParseRequest(r, &driver); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &driver) {
 		return
 	}
 
 	driver.ID = id
 	if err := normalizeDriverInput(h, &driver); err != nil {
-		WriteBadRequest(w, "driver name is required")
+		WriteBadRequest(w, errDriverNameRequiredMessage)
 		return
 	}
 	if _, err := os.Stat(driver.FilePath); err != nil {
-		WriteBadRequest(w, "driver wasm file not found")
+		WriteBadRequest(w, errDriverWasmFileNotFoundMessage)
 		return
 	}
 	loadAndSyncDriverVersion(h, &driver)
@@ -102,14 +99,13 @@ func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
 
 // DeleteDriver 删除驱动（按ID，同时删除文件）
 func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 	drv, err := database.GetDriverByID(id)
 	if err != nil {
-		WriteNotFound(w, "Driver not found")
+		WriteNotFoundDef(w, apiErrDriverNotFound)
 		return
 	}
 	_ = database.DeleteDriver(id)
@@ -118,5 +114,5 @@ func (h *Handler) DeleteDriver(w http.ResponseWriter, r *http.Request) {
 	path := h.driverFilePath(drv.Name, drv.FilePath)
 	_ = os.Remove(path)
 
-	w.WriteHeader(http.StatusNoContent)
+	WriteDeleted(w)
 }

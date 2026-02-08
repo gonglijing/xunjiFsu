@@ -13,6 +13,60 @@ import (
 	northboundschema "github.com/gonglijing/xunjiFsu/internal/northbound/schema"
 )
 
+const (
+	northboundTypeMQTT    = "mqtt"
+	northboundTypePandaX  = "pandax"
+	northboundTypeIThings = "ithings"
+	northboundTypeXunJi   = "xunji"
+)
+
+type requiredFieldRule struct {
+	fieldName string
+	present   func(*models.NorthboundConfig) bool
+}
+
+var supportedNorthboundTypes = []string{
+	northboundTypeMQTT,
+	northboundTypePandaX,
+	northboundTypeIThings,
+	northboundTypeXunJi,
+}
+
+var northboundTypeDisplayName = map[string]string{
+	northboundTypeMQTT:    "MQTT",
+	northboundTypePandaX:  "PandaX",
+	northboundTypeIThings: "iThings",
+	northboundTypeXunJi:   "XunJi",
+}
+
+var gatewayIdentityNorthboundTypes = map[string]struct{}{
+	northboundTypeXunJi:   {},
+	northboundTypePandaX:  {},
+	northboundTypeIThings: {},
+}
+
+var northboundRequiredFieldRules = map[string][]requiredFieldRule{
+	northboundTypeMQTT: {
+		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
+		{fieldName: "topic", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Topic) != "" }},
+	},
+	northboundTypeXunJi: {
+		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
+		{fieldName: "product_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ProductKey) != "" }},
+		{fieldName: "device_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.DeviceKey) != "" }},
+	},
+	northboundTypePandaX: {
+		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
+		{fieldName: "username", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Username) != "" }},
+	},
+	northboundTypeIThings: {
+		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
+		{fieldName: "username", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Username) != "" }},
+		{fieldName: "product_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ProductKey) != "" }},
+		{fieldName: "device_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.DeviceKey) != "" }},
+	},
+}
+
 type northboundRuntimeView struct {
 	Registered     bool   `json:"registered"`
 	Enabled        bool   `json:"enabled"`
@@ -87,7 +141,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		switch config.Type {
 		case "http":
 			config.Port = 80
-		case "mqtt", "xunji", "pandax", "ithings":
+		case northboundTypeMQTT, northboundTypeXunJi, northboundTypePandaX, northboundTypeIThings:
 			config.Port = 1883
 		}
 	}
@@ -113,65 +167,61 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 		return fmt.Errorf("type is required")
 	}
 
-	// 验证类型
-	validTypes := []string{"mqtt", "pandax", "ithings", "xunji"}
-	isValid := false
-	for _, t := range validTypes {
-		if strings.ToLower(config.Type) == t {
-			isValid = true
-			config.Type = t
-			break
-		}
-	}
-	if !isValid {
+	config.Type = strings.ToLower(config.Type)
+	if !isSupportedNorthboundType(config.Type) {
 		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, ithings, xunji", config.Type)
 	}
 
 	// 如果有 config JSON 字段，验证 schema
-	if config.Config != "" && config.Config != "{}" {
+	if hasSchemaConfig(config) {
 		if err := validateConfigBySchema(config.Type, config.Config); err != nil {
 			return err
 		}
 	}
 
-	// 根据类型验证必填字段
-	switch config.Type {
-	case "mqtt":
-		if config.ServerURL == "" && config.Config == "" {
-			return fmt.Errorf("server_url or config is required for MQTT type")
+	if err := validateRequiredFields(config); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isSupportedNorthboundType(nbType string) bool {
+	for _, candidate := range supportedNorthboundTypes {
+		if nbType == candidate {
+			return true
 		}
-		if config.Topic == "" && config.Config == "" {
-			return fmt.Errorf("topic or config is required for MQTT type")
-		}
-	case "xunji":
-		if config.ServerURL == "" && config.Config == "" {
-			return fmt.Errorf("server_url or config is required for XunJi type")
-		}
-		if config.ProductKey == "" && config.Config == "" {
-			return fmt.Errorf("product_key or config is required for XunJi type")
-		}
-		if config.DeviceKey == "" && config.Config == "" {
-			return fmt.Errorf("device_key or config is required for XunJi type")
-		}
-	case "pandax":
-		if config.ServerURL == "" && config.Config == "" {
-			return fmt.Errorf("server_url or config is required for PandaX type")
-		}
-		if config.Username == "" && config.Config == "" {
-			return fmt.Errorf("username or config is required for PandaX type")
-		}
-	case "ithings":
-		if config.ServerURL == "" && config.Config == "" {
-			return fmt.Errorf("server_url or config is required for iThings type")
-		}
-		if config.Username == "" && config.Config == "" {
-			return fmt.Errorf("username or config is required for iThings type")
-		}
-		if config.ProductKey == "" && config.Config == "" {
-			return fmt.Errorf("product_key or config is required for iThings type")
-		}
-		if config.DeviceKey == "" && config.Config == "" {
-			return fmt.Errorf("device_key or config is required for iThings type")
+	}
+	return false
+}
+
+func isGatewayIdentityNorthboundType(nbType string) bool {
+	_, ok := gatewayIdentityNorthboundTypes[strings.ToLower(strings.TrimSpace(nbType))]
+	return ok
+}
+
+func hasSchemaConfig(config *models.NorthboundConfig) bool {
+	if config == nil {
+		return false
+	}
+	trimmed := strings.TrimSpace(config.Config)
+	return trimmed != "" && trimmed != "{}"
+}
+
+func validateRequiredFields(config *models.NorthboundConfig) error {
+	if config == nil || hasSchemaConfig(config) {
+		return nil
+	}
+
+	rules, ok := northboundRequiredFieldRules[config.Type]
+	if !ok {
+		return nil
+	}
+
+	typeName := northboundTypeDisplayName[config.Type]
+	for _, rule := range rules {
+		if !rule.present(config) {
+			return fmt.Errorf("%s or config is required for %s type", rule.fieldName, typeName)
 		}
 	}
 
@@ -209,13 +259,14 @@ func enrichNorthboundConfigWithGatewayIdentity(config *models.NorthboundConfig) 
 	if config == nil {
 		return nil
 	}
-	if strings.ToLower(config.Type) != "xunji" && strings.ToLower(config.Type) != "pandax" && strings.ToLower(config.Type) != "ithings" {
+	if !isGatewayIdentityNorthboundType(config.Type) {
 		return nil
 	}
+	gatewayProductKey, gatewayDeviceKey := database.GetGatewayIdentity()
 
 	// 解析或创建 config JSON
 	var cfg map[string]interface{}
-	if config.Config != "" && config.Config != "{}" {
+	if hasSchemaConfig(config) {
 		if err := json.Unmarshal([]byte(config.Config), &cfg); err != nil {
 			// 如果解析失败，创建一个新的
 			cfg = make(map[string]interface{})
@@ -231,9 +282,8 @@ func enrichNorthboundConfigWithGatewayIdentity(config *models.NorthboundConfig) 
 
 	// 如果 product_key 为空，从网关配置获取
 	if config.ProductKey == "" {
-		gwPK, _ := database.GetGatewayIdentity()
-		if gwPK != "" {
-			cfg[pkField] = gwPK
+		if gatewayProductKey != "" {
+			cfg[pkField] = gatewayProductKey
 			updated = true
 		}
 	} else {
@@ -243,9 +293,8 @@ func enrichNorthboundConfigWithGatewayIdentity(config *models.NorthboundConfig) 
 
 	// 如果 device_key 为空，从网关配置获取
 	if config.DeviceKey == "" {
-		_, gwDK := database.GetGatewayIdentity()
-		if gwDK != "" {
-			cfg[dkField] = gwDK
+		if gatewayDeviceKey != "" {
+			cfg[dkField] = gatewayDeviceKey
 			updated = true
 		}
 	} else {
@@ -390,15 +439,14 @@ func (h *Handler) GetNorthboundSupportedTypes(w http.ResponseWriter, r *http.Req
 
 // GetNorthboundConnectionInfo 获取单个北向的连接信息
 func (h *Handler) GetNorthboundConnectionInfo(w http.ResponseWriter, r *http.Request) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, "Invalid ID")
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
 		return
 	}
 
 	config, err := database.GetNorthboundConfigByID(id)
 	if err != nil {
-		WriteNotFound(w, "Northbound config not found")
+		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 

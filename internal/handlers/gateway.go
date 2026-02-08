@@ -20,8 +20,7 @@ func (h *Handler) GetGatewayConfig(w http.ResponseWriter, r *http.Request) {
 // UpdateGatewayConfig 更新网关配置
 func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
 	var cfg models.GatewayConfig
-	if err := ParseRequest(r, &cfg); err != nil {
-		WriteBadRequest(w, "invalid body")
+	if !parseRequestOrWriteBadRequestDefault(w, r, &cfg) {
 		return
 	}
 	normalizeGatewayConfigInput(&cfg)

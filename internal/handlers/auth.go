@@ -52,7 +52,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := ParseRequest(r, &req); err != nil {
-		WriteBadRequest(w, "Invalid request body")
+		WriteBadRequestDef(w, apiErrInvalidRequestBody)
 		return
 	}
 
@@ -67,5 +67,5 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteSuccess(w, nil)
+	WriteDeleted(w)
 }
