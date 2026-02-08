@@ -302,6 +302,7 @@ make ui-dev
 - 业务代码使用 `api.<domain>.<method>()`（例如 `api.devices.listDevices()`），避免直接在页面里拼 `/api/...`。
 - 统一错误处理、鉴权和响应解析由 `ui/frontend/src/api.js` 负责；领域文件仅封装路径与参数。
 - 错误码到用户提示文案映射集中在 `ui/frontend/src/api/errorMessages.js`，并按通用/设备/驱动/资源/网关/北向/存储分组维护。
+- 当前前端错误码映射已覆盖后端 `internal/handlers/messages.go` 中定义的业务错误码。
 - 页面 `toast` 错误提示可通过 `ui/frontend/src/utils/errors.js` 的 `showErrorToast(toast, err, fallback)` 统一调用。
 - Dashboard/设备/驱动/北向/资源/阈值/告警/实时等页面已统一按该约定处理错误提示。
 - `ui/frontend/src/api/errorMessages.test.js` 提供错误码映射的纯函数测试（可用 `npm --prefix ui/frontend run test` 执行）。
