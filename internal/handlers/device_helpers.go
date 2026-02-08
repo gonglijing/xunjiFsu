@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -307,4 +308,44 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func buildExecuteDriverConfig(params map[string]interface{}, device *models.Device, configFunc string) (map[string]string, error) {
+	config := make(map[string]string, len(params)+2)
+	for key, value := range params {
+		config[key] = stringifyParamValue(value)
+	}
+	if device != nil {
+		config["device_address"] = device.DeviceAddress
+	}
+	config["func_name"] = configFunc
+	enrichExecuteIdentity(config, device)
+
+	if configFunc == "write" {
+		if err := normalizeWriteParams(config, params); err != nil {
+			return nil, err
+		}
+	}
+
+	return config, nil
+}
+
+func buildExecuteDriverContext(device *models.Device, config map[string]string) *driver.DriverContext {
+	resourceID := int64(0)
+	if device != nil && device.ResourceID != nil {
+		resourceID = *device.ResourceID
+	}
+
+	ctx := &driver.DriverContext{
+		Config:       config,
+		DeviceConfig: "",
+		ResourceID:   resourceID,
+		ResourceType: inferDeviceResourceType(device),
+	}
+	if device != nil {
+		ctx.DeviceID = device.ID
+		ctx.DeviceName = device.Name
+	}
+
+	return ctx
 }

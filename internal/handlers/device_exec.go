@@ -7,6 +7,7 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) {
@@ -34,47 +35,27 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 		WriteBadRequestDef(w, apiErrDeviceHasNoDriver)
 		return
 	}
+	driverID := *device.DriverID
 
-	driverModel, err := database.GetDriverByID(*device.DriverID)
+	driverModel, err := database.GetDriverByID(driverID)
 	if err != nil {
 		WriteServerErrorDef(w, apiErrDriverLookupFailed)
 		return
 	}
-	if !h.driverManager.IsLoaded(*device.DriverID) {
-		if err := h.driverManager.LoadDriverFromModel(driverModel, 0); err != nil {
-			writeServerErrorWithLog(w, apiErrLoadDriverFailed, err)
-			return
-		}
+	if err := h.ensureDriverLoaded(driverID, driverModel); err != nil {
+		writeServerErrorWithLog(w, apiErrLoadDriverFailed, err)
+		return
 	}
 
-	config := make(map[string]string, len(req.Params)+2)
-	for key, value := range req.Params {
-		config[key] = stringifyParamValue(value)
-	}
-	config["device_address"] = device.DeviceAddress
-	config["func_name"] = configFunc
-	enrichExecuteIdentity(config, device)
-	if configFunc == "write" {
-		if err := normalizeWriteParams(config, req.Params); err != nil {
-			WriteBadRequestCode(w, apiErrExecuteDriverParamInvalid.Code, apiErrExecuteDriverParamInvalid.Message+": "+err.Error())
-			return
-		}
+	config, err := buildExecuteDriverConfig(req.Params, device, configFunc)
+	if err != nil {
+		WriteBadRequestCode(w, apiErrExecuteDriverParamInvalid.Code, apiErrExecuteDriverParamInvalid.Message+": "+err.Error())
+		return
 	}
 
-	resourceID := int64(0)
-	if device.ResourceID != nil {
-		resourceID = *device.ResourceID
-	}
-	ctx := &driver.DriverContext{
-		DeviceID:     device.ID,
-		DeviceName:   device.Name,
-		ResourceID:   resourceID,
-		ResourceType: inferDeviceResourceType(device),
-		Config:       config,
-		DeviceConfig: "",
-	}
+	ctx := buildExecuteDriverContext(device, config)
 
-	result, err := h.driverManager.ExecuteDriver(*device.DriverID, pluginFunc, ctx)
+	result, err := h.driverManager.ExecuteDriver(driverID, pluginFunc, ctx)
 	if err != nil {
 		if errors.Is(err, driver.ErrDriverNotFound) {
 			WriteBadRequestDef(w, apiErrDriverNotLoaded)
@@ -85,6 +66,13 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 	}
 
 	WriteSuccess(w, result)
+}
+
+func (h *Handler) ensureDriverLoaded(driverID int64, driverModel *models.Driver) error {
+	if h.driverManager.IsLoaded(driverID) {
+		return nil
+	}
+	return h.driverManager.LoadDriverFromModel(driverModel, 0)
 }
 
 // GetDeviceWritables 返回设备驱动声明的可写寄存器元数据（来自 Driver.ConfigSchema.writable）
