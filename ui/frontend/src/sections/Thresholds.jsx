@@ -3,6 +3,7 @@ import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import { getErrorMessage } from '../api/errorMessages';
+import { showErrorToast } from '../utils/errors';
 
 const empty = { device_id: '', field_name: '', operator: '>', value: 0, severity: 'warning', message: '', enabled: 1 };
 
@@ -18,7 +19,7 @@ export function Thresholds() {
   const load = () => {
     api.thresholds.listThresholds()
       .then((res) => setItems(res || []))
-      .catch((err) => toast.show('error', getErrorMessage(err, '加载阈值失败')));
+      .catch((err) => showErrorToast(toast, err, '加载阈值失败'));
   };
 
   const loadDevices = () => {
@@ -62,7 +63,7 @@ export function Thresholds() {
     if (!confirm('删除该阈值？')) return;
     api.thresholds.deleteThreshold(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
+      .catch((err) => showErrorToast(toast, err, '删除失败'));
   };
 
   return (

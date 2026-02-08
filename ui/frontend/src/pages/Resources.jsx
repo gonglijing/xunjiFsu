@@ -3,6 +3,7 @@ import api from '../api/services';
 import Card, { SectionTabs } from '../components/cards';
 import { useToast } from '../components/Toast';
 import { getErrorMessage } from '../api/errorMessages';
+import { showErrorToast } from '../utils/errors';
 
 const empty = { name: '', type: 'serial', path: '', enabled: 1 };
 
@@ -18,7 +19,7 @@ function Resources() {
   const load = () => {
     api.resources.listResources()
       .then((res) => setItems(res || []))
-      .catch((err) => toast.show('error', getErrorMessage(err, '加载资源失败')));
+      .catch((err) => showErrorToast(toast, err, '加载资源失败'));
   };
 
   createEffect(() => {
@@ -58,13 +59,13 @@ function Resources() {
     if (!confirm('删除后关联设备可能需要重新绑定资源，确认继续？')) return;
     api.resources.deleteResource(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
+      .catch((err) => showErrorToast(toast, err, '删除失败'));
   };
 
   const toggle = (item) => {
     api.resources.toggleResource(item.id)
       .then(load)
-      .catch((err) => toast.show('error', getErrorMessage(err, '切换失败')));
+      .catch((err) => showErrorToast(toast, err, '切换失败'));
   };
 
   return (

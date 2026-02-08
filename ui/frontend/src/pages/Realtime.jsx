@@ -4,6 +4,7 @@ import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { getErrorMessage } from '../api/errorMessages';
+import { showErrorToast } from '../utils/errors';
 
 function Realtime() {
   const toast = useToast();
@@ -151,7 +152,7 @@ function Realtime() {
     api.devices.listDevices().then((list) => {
       setDevices(list);
       if (list.length) setSelected(String(list[0].id));
-    }).catch((err) => toast.show('error', getErrorMessage(err, '加载设备失败')));
+    }).catch((err) => showErrorToast(toast, err, '加载设备失败'));
   });
 
   createEffect(() => {
@@ -162,7 +163,7 @@ function Realtime() {
         list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
         setPoints(list);
       })
-      .catch((err) => toast.show('error', getErrorMessage(err, '加载实时数据失败')))
+      .catch((err) => showErrorToast())
       .finally(() => setLoading(false));
   });
 

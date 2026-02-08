@@ -302,6 +302,7 @@ make ui-dev
 - 业务代码使用 `api.<domain>.<method>()`（例如 `api.devices.listDevices()`），避免直接在页面里拼 `/api/...`。
 - 统一错误处理、鉴权和响应解析由 `ui/frontend/src/api.js` 负责；领域文件仅封装路径与参数。
 - 错误码到用户提示文案映射集中在 `ui/frontend/src/api/errorMessages.js`，页面层优先使用 `getErrorMessage(err, fallback)`。
+- 页面 `toast` 错误提示可通过 `ui/frontend/src/utils/errors.js` 的 `showErrorToast(toast, err, fallback)` 统一调用。
 - Dashboard/设备/驱动/北向/资源/阈值/告警/实时等页面已统一按该约定处理错误提示。
 - 新增接口时，优先在 `ui/frontend/src/api/<domain>.js` 增加方法，再在页面中调用。
 

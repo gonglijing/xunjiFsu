@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
 import { getErrorMessage } from '../api/errorMessages';
+import { showErrorToast } from '../utils/errors';
 
 const empty = { name: '', type: 'mqtt', upload_interval: 5000, config: '{}', enabled: 1 };
 
@@ -196,7 +197,7 @@ export function Northbound() {
         setItems(configs || []);
         setRuntime(status || []);
       })
-      .catch((err) => toast.show('error', getErrorMessage(err, '加载北向配置失败')))
+      .catch((err) => showErrorToast())
       .finally(() => setLoading(false));
   };
 
@@ -262,7 +263,7 @@ export function Northbound() {
       resetForm();
       load();
     })
-      .catch((err) => toast.show('error', getErrorMessage(err, '操作失败')))
+      .catch((err) => showErrorToast())
       .finally(() => setSaving(false));
   };
 
@@ -277,7 +278,7 @@ export function Northbound() {
   const toggle = (id) => {
     api.northbound.toggleNorthboundConfig(id)
       .then(load)
-      .catch((err) => toast.show('error', getErrorMessage(err, '切换失败')));
+      .catch((err) => showErrorToast(toast, err, '切换失败'));
   };
 
   const reload = (id) => {
@@ -286,7 +287,7 @@ export function Northbound() {
         toast.show('success', '重载成功');
         load();
       })
-      .catch((err) => toast.show('error', getErrorMessage(err, '重载失败')));
+      .catch((err) => showErrorToast(toast, err, '重载失败'));
   };
 
   const syncGatewayIdentity = () => {
@@ -298,7 +299,7 @@ export function Northbound() {
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
         load();
       })
-      .catch((err) => toast.show('error', getErrorMessage(err, '同步失败')))
+      .catch((err) => showErrorToast())
       .finally(() => setSyncing(false));
   };
 
@@ -306,7 +307,7 @@ export function Northbound() {
     if (!confirm('删除该配置？')) return;
     api.northbound.deleteNorthboundConfig(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
+      .catch((err) => showErrorToast(toast, err, '删除失败'));
   };
 
   const openCreate = () => {
