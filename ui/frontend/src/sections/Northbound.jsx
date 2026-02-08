@@ -1,5 +1,16 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
-import { del, getJSON, post, postJSON, putJSON, unwrapData } from '../api';
+import { unwrapData } from '../api';
+import {
+  listNorthboundConfigs,
+  listNorthboundStatus,
+  createNorthboundConfig,
+  updateNorthboundConfig,
+  deleteNorthboundConfig,
+  toggleNorthboundConfig,
+  reloadNorthboundConfig,
+  syncGatewayIdentityToNorthbound,
+  getNorthboundSchema,
+} from '../api/northbound';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
@@ -158,9 +169,8 @@ export function Northbound() {
 
   const loadSchema = (nbType, silent = false) => {
     setSchemaLoading(true);
-    return getJSON(`/api/northbound/schema?type=${nbType}`)
-      .then((result) => {
-        const schemaData = unwrapData(result, {});
+    return getNorthboundSchema(nbType)
+      .then((schemaData) => {
         const fields = Array.isArray(schemaData?.fields) ? schemaData.fields : [];
         setSchema(fields);
 
@@ -189,12 +199,12 @@ export function Northbound() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      getJSON('/api/northbound'),
-      getJSON('/api/northbound/status'),
+      listNorthboundConfigs(),
+      listNorthboundStatus(),
     ])
       .then(([configs, status]) => {
-        setItems(unwrapData(configs, []));
-        setRuntime(unwrapData(status, []));
+        setItems(configs || []);
+        setRuntime(status || []);
       })
       .catch(() => toast.show('error', '加载北向配置失败'))
       .finally(() => setLoading(false));
@@ -254,7 +264,7 @@ export function Northbound() {
     }
 
     setSaving(true);
-    const api = editing() ? putJSON(`/api/northbound/${editing()}`, payload) : postJSON('/api/northbound', payload);
+    const api = editing() ? updateNorthboundConfig(editing(), payload) : createNorthboundConfig(payload);
     api.then(() => {
       toast.show('success', editing() ? '已更新' : '已创建');
       resetForm();
@@ -273,13 +283,13 @@ export function Northbound() {
   };
 
   const toggle = (id) => {
-    postJSON(`/api/northbound/${id}/toggle`, {})
+    toggleNorthboundConfig(id)
       .then(load)
       .catch(() => toast.show('error', '切换失败'));
   };
 
   const reload = (id) => {
-    post(`/api/northbound/${id}/reload`)
+    reloadNorthboundConfig(id)
       .then(() => {
         toast.show('success', '重载成功');
         load();
@@ -289,9 +299,8 @@ export function Northbound() {
 
   const syncGatewayIdentity = () => {
     setSyncing(true);
-    post('/api/gateway/northbound/sync-identity')
-      .then((res) => {
-        const data = unwrapData(res, {});
+    syncGatewayIdentityToNorthbound()
+      .then((data) => {
         const updated = data.updated?.length || 0;
         const failed = data.failed ? Object.keys(data.failed).length : 0;
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
@@ -303,7 +312,7 @@ export function Northbound() {
 
   const remove = (id) => {
     if (!confirm('删除该配置？')) return;
-    del(`/api/northbound/${id}`)
+    deleteNorthboundConfig(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };

@@ -10,6 +10,11 @@ export async function listNorthboundStatus() {
   return unwrapData(res, []);
 }
 
+export async function getNorthboundSchema(type) {
+  const res = await getJSON(`/api/northbound/schema?type=${type}`);
+  return unwrapData(res, {});
+}
+
 export async function createNorthboundConfig(payload) {
   return postJSON('/api/northbound', payload);
 }
@@ -34,4 +39,3 @@ export async function syncGatewayIdentityToNorthbound() {
   const res = await post('/api/gateway/northbound/sync-identity');
   return unwrapData(res, {});
 }
-

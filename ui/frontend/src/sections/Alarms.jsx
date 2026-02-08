@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For } from 'solid-js';
-import { getJSON, unwrapData } from '../api';
+import { listAlarms } from '../api/alarms';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import { formatDateTime } from '../utils/time';
@@ -11,8 +11,8 @@ export function Alarms() {
 
   const load = () => {
     setLoading(true);
-    getJSON('/api/alarms')
-      .then((res) => setItems(unwrapData(res, [])))
+    listAlarms()
+      .then((res) => setItems(res || []))
       .catch(() => toast.show('error', '加载告警失败'))
       .finally(() => setLoading(false));
   };

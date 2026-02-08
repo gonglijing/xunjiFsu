@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js';
-import { postJSON } from '../api';
+import { startCollector, stopCollector } from '../api/collector';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 
@@ -9,8 +9,8 @@ export function QuickActions(props) {
 
   const toggleCollector = () => {
     setBusy(true);
-    const api = props.collectorRunning ? '/api/collector/stop' : '/api/collector/start';
-    postJSON(api, {})
+    const api = props.collectorRunning ? stopCollector() : startCollector();
+    api
       .then(() => {
         toast.show('success', props.collectorRunning ? '已停止采集' : '已启动采集');
         props.onRefresh?.();

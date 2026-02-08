@@ -1,5 +1,5 @@
 import { createSignal, createEffect } from 'solid-js';
-import { del, getJSON, post, upload as uploadWithAuth, unwrapData } from '../api';
+import { listDrivers, deleteDriver, reloadDriver as reloadDriverAPI, uploadDriver } from '../api/drivers';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
@@ -13,9 +13,9 @@ export function Drivers() {
 
   const load = () => {
     setLoading(true);
-    getJSON('/api/drivers')
+    listDrivers()
       .then((res) => {
-        setItems(unwrapData(res, []));
+        setItems(res || []);
         setError('');
       })
       .catch(() => setError('加载驱动失败'))
@@ -28,7 +28,7 @@ export function Drivers() {
 
   const remove = (id, name) => {
     if (!confirm(`删除驱动 ${name} ？`)) return;
-    del(`/api/drivers/${id}`)
+    deleteDriver(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };
@@ -36,9 +36,7 @@ export function Drivers() {
   const upload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    uploadWithAuth('/api/drivers/upload', fd)
+    uploadDriver(file)
       .then(() => { toast.show('success', '上传成功'); load(); })
       .catch(() => toast.show('error', '上传失败'))
       .finally(() => { e.target.value = ''; });
@@ -47,7 +45,7 @@ export function Drivers() {
   const reloadDriver = (item) => {
     if (!item?.id) return;
     setBusyId(item.id);
-    post(`/api/drivers/${item.id}/reload`)
+    reloadDriverAPI(item.id)
       .then(() => {
         toast.show('success', `驱动 ${item.name} 重载成功`);
         load();

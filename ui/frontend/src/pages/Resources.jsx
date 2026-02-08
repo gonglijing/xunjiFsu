@@ -1,5 +1,11 @@
 import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
-import { getJSON, del, postJSON, putJSON, unwrapData } from '../api';
+import {
+  listResources,
+  createResource,
+  updateResource,
+  deleteResource,
+  toggleResource,
+} from '../api/resources';
 import Card, { SectionTabs } from '../components/cards';
 import { useToast } from '../components/Toast';
 
@@ -15,8 +21,8 @@ function Resources() {
   const [err, setErr] = createSignal('');
 
   const load = () => {
-    getJSON('/api/resources')
-      .then((res) => setItems(unwrapData(res, [])))
+    listResources()
+      .then((res) => setItems(res || []))
       .catch(() => toast.show('error', '加载资源失败'));
   };
 
@@ -36,7 +42,7 @@ function Resources() {
     e.preventDefault();
     setSaving(true);
     setErr('');
-    const api = editing() ? putJSON(`/api/resources/${editing()}`, form()) : postJSON('/api/resources', form());
+    const api = editing() ? updateResource(editing(), form()) : createResource(form());
     api.then(() => {
       toast.show('success', editing() ? '资源已更新' : '资源已创建');
       setForm(empty);
@@ -52,13 +58,13 @@ function Resources() {
   const remove = (id) => {
     if (!confirm('删除该资源？')) return;
     if (!confirm('删除后关联设备可能需要重新绑定资源，确认继续？')) return;
-    del(`/api/resources/${id}`)
+    deleteResource(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };
 
   const toggle = (item) => {
-    postJSON(`/api/resources/${item.id}/toggle`, {})
+    toggleResource(item.id)
       .then(load)
       .catch(() => toast.show('error', '切换失败'));
   };

@@ -1,6 +1,11 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
 import Card from '../components/cards';
-import { getJSON, unwrapData } from '../api';
+import { listDevices } from '../api/devices';
+import { listResources } from '../api/resources';
+import { listNorthboundConfigs } from '../api/northbound';
+import { getGatewayConfig } from '../api/gateway';
+import { listAlarms } from '../api/alarms';
+import { getDataCacheByDevice } from '../api/data';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 
 function Topology() {
@@ -20,15 +25,15 @@ function Topology() {
     setLoading(true);
     try {
       const [gwRes, resRes, devRes, nbRes] = await Promise.all([
-        getJSON('/api/gateway/config'),
-        getJSON('/api/resources'),
-        getJSON('/api/devices'),
-        getJSON('/api/northbound'),
+        getGatewayConfig(),
+        listResources(),
+        listDevices(),
+        listNorthboundConfigs(),
       ]);
-      setGateway(gwRes?.data || gwRes || null);
-      setResources(unwrapData(resRes, []));
-      setDevices(unwrapData(devRes, []));
-      setNorthbounds(unwrapData(nbRes, []));
+      setGateway(gwRes || null);
+      setResources(resRes || []);
+      setDevices(devRes || []);
+      setNorthbounds(nbRes || []);
     } finally {
       setLoading(false);
     }
@@ -54,8 +59,8 @@ function Topology() {
     setDetailLoading(true);
     try {
       const [cacheRes, alarmsRes] = await Promise.all([
-        getJSON(`/api/data/cache/${device.id}`),
-        getJSON('/api/alarms'),
+        getDataCacheByDevice(device.id),
+        listAlarms(),
       ]);
       const cacheVal = Array.isArray(cacheRes) ? cacheRes : cacheRes?.data || [];
       const allAlarms = Array.isArray(alarmsRes) ? alarmsRes : alarmsRes?.data || [];
@@ -198,4 +203,3 @@ function Topology() {
 }
 
 export default Topology;
-

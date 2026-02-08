@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onCleanup, For } from 'solid-js';
-import { getJSON, postJSON, unwrapData } from '../api';
+import { listDevices } from '../api/devices';
+import { listDataCache } from '../api/data';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
@@ -10,9 +11,8 @@ export function RealtimeMini() {
   const [deviceMap, setDeviceMap] = createSignal(new Map());
 
   const load = () => {
-    getJSON('/api/data')
-      .then((res) => {
-        const list = unwrapData(res, []);
+    listDataCache()
+      .then((list) => {
         list.sort((a, b) => {
           const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
           const bt = new Date(b.collected_at || b.CollectedAt || 0).getTime();
@@ -24,9 +24,8 @@ export function RealtimeMini() {
   };
 
   createEffect(() => {
-    getJSON('/api/devices')
-      .then((res) => {
-        const list = unwrapData(res, []);
+    listDevices()
+      .then((list) => {
         const map = new Map();
         list.forEach((d) => map.set(String(d.id), d.name || d.id));
         setDeviceMap(map);

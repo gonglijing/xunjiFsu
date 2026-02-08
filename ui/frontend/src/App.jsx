@@ -1,6 +1,6 @@
 import { createSignal, createEffect, Show } from 'solid-js';
 import { usePath, navigate } from './router';
-import { getJSON } from './api';
+import { getStatus } from './api/status';
 import SidebarNav from './components/SidebarNav';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -25,7 +25,7 @@ function App() {
     // 登录页不做探测，避免循环跳转
     if (currentPath === '/login') return;
     
-    getJSON('/api/status')
+    getStatus()
       .then(() => setAuthed(true))
       .catch(() => {
         setAuthed(false);

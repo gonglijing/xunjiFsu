@@ -1,5 +1,6 @@
 import { createSignal, createEffect, Show } from 'solid-js';
-import { getJSON, unwrapData } from '../api';
+import { listDevices } from '../api/devices';
+import { getDataCacheByDevice, getHistoryData } from '../api/data';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
@@ -62,15 +63,14 @@ function Realtime() {
     }
     setHistoryLoading(true);
     setHistoryError('');
-    const params = new URLSearchParams({
+    const params = {
       device_id: deviceID,
       field_name: fieldName,
       start: startVal,
       end: endVal,
-    });
-    getJSON(`/api/data/history?${params.toString()}`)
-      .then((res) => {
-        const list = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : []);
+    };
+    getHistoryData(params)
+      .then((list) => {
         list.sort((a, b) => {
           const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
           const bt = new Date(b.collected_at || b.CollectedAt || 0).getTime();
@@ -148,8 +148,7 @@ function Realtime() {
   const chartTicks = () => buildTicks(series(), 700, 260, 28);
 
   createEffect(() => {
-    getJSON('/api/devices').then((res) => {
-      const list = unwrapData(res, []);
+    listDevices().then((list) => {
       setDevices(list);
       if (list.length) setSelected(String(list[0].id));
     }).catch(() => toast.show('error', '加载设备失败'));
@@ -158,9 +157,8 @@ function Realtime() {
   createEffect(() => {
     if (!selected()) return;
     setLoading(true);
-    getJSON(`/api/data/cache/${selected()}`)
-      .then((res) => {
-        const list = unwrapData(res, []);
+    getDataCacheByDevice(selected())
+      .then((list) => {
         list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
         setPoints(list);
       })

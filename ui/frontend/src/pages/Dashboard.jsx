@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
-import { getJSON, unwrapData } from '../api';
+import { getStatus } from '../api/status';
 import StatusCards from '../components/cards';
 import { RealtimeMini } from '../sections/RealtimeMini';
 import { LatestAlarms } from '../sections/LatestAlarms';
@@ -11,8 +11,8 @@ function Dashboard() {
   const [loading, setLoading] = createSignal(true);
 
   const loadStatus = () => {
-    getJSON('/api/status')
-      .then((res) => setStatus(unwrapData(res, null)))
+    getStatus()
+      .then((res) => setStatus(res))
       .catch(() => {})
       .finally(() => setLoading(false));
   };

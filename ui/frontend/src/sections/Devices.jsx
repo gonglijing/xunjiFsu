@@ -1,5 +1,18 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
-import { del, getJSON, postJSON, putJSON } from '../api';
+import { getJSON } from '../api';
+import {
+  listDevices,
+  listResources,
+  listDrivers,
+  createDevice,
+  updateDevice,
+  deleteDevice,
+  toggleDevice,
+  listWritables,
+  executeDeviceFunction,
+} from '../api/devices';
+import { listAlarms } from '../api/alarms';
+import { getDataCacheByDevice } from '../api/data';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
@@ -59,7 +72,7 @@ export function Devices() {
 
   const load = () => {
     setLoading(true);
-    Promise.allSettled([getJSON('/api/devices'), getJSON('/api/resources'), getJSON('/api/drivers')])
+    Promise.allSettled([listDevices(), listResources(), listDrivers()])
       .then(([devRes, resRes, drvRes]) => {
         if (devRes.status === 'fulfilled') {
           setItems(normalizeList(devRes.value));
@@ -111,7 +124,7 @@ export function Devices() {
   const submit = (e) => {
     e.preventDefault();
     setSubmitting(true);
-    const api = editing() ? putJSON(`/api/devices/${editing()}`, form()) : postJSON('/api/devices', form());
+    const api = editing() ? updateDevice(editing(), form()) : createDevice(form());
     api.then(() => {
       toast.show('success', editing() ? '设备已更新' : '设备已创建');
       setForm(defaultForm);
@@ -124,21 +137,21 @@ export function Devices() {
   };
 
   const toggle = (id) => {
-    postJSON(`/api/devices/${id}/toggle`, {})
+    toggleDevice(id)
       .then(load)
       .catch(() => toast.show('error', '切换失败'));
   };
 
   const remove = (id) => {
     if (!confirm('确定删除该设备？')) return;
-    del(`/api/devices/${id}`)
+    deleteDevice(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };
 
   const openWrite = (device) => {
     setWriteTarget(device);
-    getJSON(`/api/devices/${device.id}/writables`)
+    listWritables(device.id)
       .then((res) => {
         const ws = Array.isArray(res) ? res : (res && res.writable) || [];
         setWriteMeta(ws);
@@ -162,7 +175,7 @@ export function Devices() {
         [writeForm().field]: writeForm().value,
       },
     };
-    postJSON(`/api/devices/${writeTarget().id}/execute`, payload)
+    executeDeviceFunction(writeTarget().id, payload)
       .then(() => {
         toast.show('success', '写入成功');
         setShowWriteModal(false);
@@ -176,8 +189,8 @@ export function Devices() {
     setDetailLoading(true);
     try {
       const [cacheRes, alarmsRes] = await Promise.all([
-        getJSON(`/api/data/cache/${device.id}`),
-        getJSON('/api/alarms'),
+        getDataCacheByDevice(device.id),
+        listAlarms(),
       ]);
       const cacheVal = Array.isArray(cacheRes) ? cacheRes : cacheRes?.data || [];
       const allAlarms = Array.isArray(alarmsRes) ? alarmsRes : alarmsRes?.data || [];
