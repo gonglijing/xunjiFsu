@@ -93,7 +93,17 @@ function validateConfig(config, schemaFields) {
   for (const field of schemaFields || []) {
     if (!field.required) continue;
     const value = config[field.key];
-    if (field.type === 'string' && !`${value ?? ''}`.trim()) {
+    if (field.type === 'string') {
+      if (!`${value ?? ''}`.trim()) errors[field.key] = `${field.label} 为必填`;
+      continue;
+    }
+    if (field.type === 'int') {
+      if (`${value ?? ''}`.trim() === '' || Number.isNaN(toInt(value, Number.NaN))) {
+        errors[field.key] = `${field.label} 为必填`;
+      }
+      continue;
+    }
+    if (field.type === 'bool' && value === undefined) {
       errors[field.key] = `${field.label} 为必填`;
     }
   }
@@ -104,6 +114,10 @@ function validateConfig(config, schemaFields) {
     if (qos < 0 || qos > 2) {
       errors.qos = 'QOS 必须在 0~2 之间';
     }
+  }
+
+  if (hasSchemaField(schemaFields, 'gatewayMode') && toBool(config.gatewayMode) !== true) {
+    errors.gatewayMode = '网关模式仅支持 true';
   }
 
   // 上传周期校验
