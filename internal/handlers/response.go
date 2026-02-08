@@ -98,6 +98,10 @@ func WriteBadRequestDef(w http.ResponseWriter, def APIErrorDef) {
 	WriteErrorDef(w, http.StatusBadRequest, def)
 }
 
+func WriteBadRequestCode(w http.ResponseWriter, code, message string) {
+	WriteErrorCode(w, http.StatusBadRequest, code, message)
+}
+
 // WriteUnauthorized 401 错误
 func WriteUnauthorized(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusUnauthorized, message)
@@ -115,6 +119,14 @@ func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
 // WriteServerError 500 错误
 func WriteServerError(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusInternalServerError, message)
+}
+
+func WriteServerErrorDef(w http.ResponseWriter, def APIErrorDef) {
+	WriteErrorDef(w, http.StatusInternalServerError, def)
+}
+
+func WriteServerErrorCode(w http.ResponseWriter, code, message string) {
+	WriteErrorCode(w, http.StatusInternalServerError, code, message)
 }
 
 // ParseRequest 解析请求 JSON 或表单数据

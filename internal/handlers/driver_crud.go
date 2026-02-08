@@ -29,12 +29,12 @@ func (h *Handler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := normalizeDriverInput(h, &driver); err != nil {
-		WriteBadRequest(w, errDriverNameRequiredMessage)
+		WriteBadRequestDef(w, apiErrDriverNameRequired)
 		return
 	}
 
 	if _, err := os.Stat(driver.FilePath); err != nil {
-		WriteBadRequest(w, errDriverWasmFileNotFoundMessage)
+		WriteBadRequestDef(w, apiErrDriverWasmFileNotFound)
 		return
 	}
 
@@ -72,11 +72,11 @@ func (h *Handler) UpdateDriver(w http.ResponseWriter, r *http.Request) {
 
 	driver.ID = id
 	if err := normalizeDriverInput(h, &driver); err != nil {
-		WriteBadRequest(w, errDriverNameRequiredMessage)
+		WriteBadRequestDef(w, apiErrDriverNameRequired)
 		return
 	}
 	if _, err := os.Stat(driver.FilePath); err != nil {
-		WriteBadRequest(w, errDriverWasmFileNotFoundMessage)
+		WriteBadRequestDef(w, apiErrDriverWasmFileNotFound)
 		return
 	}
 	loadAndSyncDriverVersion(h, &driver)

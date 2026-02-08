@@ -18,7 +18,7 @@ func (h *Handler) SyncGatewayIdentityToNorthbound(w http.ResponseWriter, r *http
 	productKey := strings.TrimSpace(gw.ProductKey)
 	deviceKey := strings.TrimSpace(gw.DeviceKey)
 	if productKey == "" || deviceKey == "" {
-		WriteBadRequest(w, errGatewayIdentityRequiredMessage)
+		WriteBadRequestDef(w, apiErrGatewayIdentityRequired)
 		return
 	}
 

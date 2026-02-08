@@ -14,6 +14,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
 
+const defaultCollectIntervalMilliseconds = 5000
+
 // Collector 采集器
 type Collector struct {
 	driverExecutor *driver.DriverExecutor
@@ -82,6 +84,10 @@ func (c *Collector) Start() error {
 	}
 	c.running = true
 	c.stopChan = make(chan struct{})
+	c.tasks = make(map[int64]*collectTask)
+	h := &taskHeap{}
+	heap.Init(h)
+	c.taskHeap = h
 	c.mu.Unlock()
 
 	// 开机时加载所有 enable 的设备
@@ -142,15 +148,7 @@ func (c *Collector) loadEnabledDevices() error {
 	loadedCount := 0
 	for _, device := range devices {
 		if device.Enabled == 1 {
-			interval := time.Duration(device.CollectInterval) * time.Millisecond
-			storageInterval := resolveStorageInterval(device.StorageInterval)
-			task := &collectTask{
-				device:          device,
-				interval:        interval,
-				storageInterval: storageInterval,
-				nextRun:         time.Now().Add(interval),
-				lastRun:         time.Time{},
-			}
+			task := newCollectTask(device, nil)
 			c.tasks[device.ID] = task
 			heap.Push(c.taskHeap, task)
 			loadedCount++
@@ -166,35 +164,44 @@ func (c *Collector) runLoop() {
 	defer c.wg.Done()
 	for {
 		c.mu.Lock()
-		if len(*c.taskHeap) == 0 {
-			c.mu.Unlock()
-			time.Sleep(500 * time.Millisecond)
-			select {
-			case <-c.stopChan:
-				return
-			default:
-				continue
+		var task *collectTask
+		for len(*c.taskHeap) > 0 {
+			candidate := heap.Pop(c.taskHeap).(*collectTask)
+			if c.isTaskCurrentLocked(candidate) {
+				task = candidate
+				break
 			}
 		}
-		task := heap.Pop(c.taskHeap).(*collectTask)
-		now := time.Now()
-		delay := task.nextRun.Sub(now)
-		if delay > 0 {
-			c.mu.Unlock()
-			select {
-			case <-time.After(delay):
-			case <-c.stopChan:
-				return
-			}
-			c.mu.Lock()
-		}
-		// 重新计算下一次时间并放回堆\n\t\t// 在采集后更新 nextRun\n\t\t// 防止 stop 时漏 unlock\n
-		task.nextRun = time.Now().Add(task.interval)
-		heap.Push(c.taskHeap, task)
 		c.mu.Unlock()
+
+		if task == nil {
+			if c.waitForStopOrTimeout(500 * time.Millisecond) {
+				return
+			}
+			continue
+		}
+
+		delay := time.Until(task.nextRun)
+		if delay > 0 {
+			if c.waitForStopOrTimeout(delay) {
+				return
+			}
+		}
+
+		if !c.isTaskCurrent(task) {
+			continue
+		}
 
 		// 实际采集
 		c.collectOnce(task)
+
+		c.mu.Lock()
+		if c.isTaskCurrentLocked(task) {
+			task.nextRun = time.Now().Add(task.interval)
+			heap.Push(c.taskHeap, task)
+		}
+		c.mu.Unlock()
+
 		select {
 		case <-c.stopChan:
 			return
@@ -205,6 +212,10 @@ func (c *Collector) runLoop() {
 
 // collectOnce 执行单次采集
 func (c *Collector) collectOnce(task *collectTask) {
+	if task == nil || task.device == nil || c.driverExecutor == nil {
+		return
+	}
+
 	device := task.device
 	// 串行锁：同一资源串行访问
 	lockCh := c.getResourceLock(device.ResourceID)
@@ -220,6 +231,7 @@ func (c *Collector) collectOnce(task *collectTask) {
 	}
 
 	collect := driverResultToCollectData(device, result)
+	task.lastRun = collect.Timestamp
 
 	storeHistory := shouldStoreHistory(task, collect.Timestamp)
 	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
@@ -264,12 +276,6 @@ func (c *Collector) SyncDeviceStatus() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 获取当前正在采集的设备 ID
-	activeDeviceIDs := make(map[int64]bool)
-	for id := range c.tasks {
-		activeDeviceIDs[id] = true
-	}
-
 	for _, device := range devices {
 		task, exists := c.tasks[device.ID]
 
@@ -277,23 +283,15 @@ func (c *Collector) SyncDeviceStatus() {
 			// 设备启用
 			if !exists {
 				// 新启用的设备，加入采集
-				interval := time.Duration(device.CollectInterval) * time.Millisecond
-				storageInterval := resolveStorageInterval(device.StorageInterval)
-				newTask := &collectTask{
-					device:          device,
-					interval:        interval,
-					storageInterval: storageInterval,
-					nextRun:         time.Now().Add(interval),
-					lastRun:         time.Time{},
-				}
+				newTask := newCollectTask(device, nil)
 				c.tasks[device.ID] = newTask
 				heap.Push(c.taskHeap, newTask)
 				log.Printf("Device %s (ID:%d) enabled, added to collection", device.Name, device.ID)
 			} else {
 				// 已存在的设备，更新配置
-				task.device = device
-				task.interval = time.Duration(device.CollectInterval) * time.Millisecond
-				task.storageInterval = resolveStorageInterval(device.StorageInterval)
+				updatedTask := newCollectTask(device, task)
+				c.tasks[device.ID] = updatedTask
+				heap.Push(c.taskHeap, updatedTask)
 				log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
 			}
 		} else {
@@ -339,15 +337,7 @@ func (c *Collector) AddDevice(device *models.Device) error {
 		return fmt.Errorf("device %d already in collector", device.ID)
 	}
 
-	interval := time.Duration(device.CollectInterval) * time.Millisecond
-	storageInterval := resolveStorageInterval(device.StorageInterval)
-	task := &collectTask{
-		device:          device,
-		interval:        interval,
-		storageInterval: storageInterval,
-		nextRun:         time.Now().Add(interval),
-		lastRun:         time.Time{},
-	}
+	task := newCollectTask(device, nil)
 
 	c.tasks[device.ID] = task
 	heap.Push(c.taskHeap, task)
@@ -373,11 +363,61 @@ func (c *Collector) UpdateDevice(device *models.Device) error {
 		return fmt.Errorf("device %d not in collector", device.ID)
 	}
 
-	task.device = device
-	task.interval = time.Duration(device.CollectInterval) * time.Millisecond
-	task.storageInterval = resolveStorageInterval(device.StorageInterval)
-	task.nextRun = time.Now().Add(task.interval)
+	updatedTask := newCollectTask(device, task)
+	c.tasks[device.ID] = updatedTask
+	heap.Push(c.taskHeap, updatedTask)
 	return nil
+}
+
+func newCollectTask(device *models.Device, previous *collectTask) *collectTask {
+	interval := resolveCollectInterval(device.CollectInterval)
+	task := &collectTask{
+		device:          device,
+		interval:        interval,
+		storageInterval: resolveStorageInterval(device.StorageInterval),
+		nextRun:         time.Now().Add(interval),
+		lastRun:         time.Time{},
+	}
+	if previous != nil {
+		task.lastRun = previous.lastRun
+		task.lastStored = previous.lastStored
+	}
+	return task
+}
+
+func (c *Collector) isTaskCurrentLocked(task *collectTask) bool {
+	if task == nil || task.device == nil {
+		return false
+	}
+	current, exists := c.tasks[task.device.ID]
+	return exists && current == task
+}
+
+func (c *Collector) isTaskCurrent(task *collectTask) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.isTaskCurrentLocked(task)
+}
+
+func (c *Collector) waitForStopOrTimeout(delay time.Duration) bool {
+	if delay <= 0 {
+		return false
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return false
+	case <-c.stopChan:
+		return true
+	}
+}
+
+func resolveCollectInterval(milliseconds int) time.Duration {
+	if milliseconds <= 0 {
+		milliseconds = defaultCollectIntervalMilliseconds
+	}
+	return time.Duration(milliseconds) * time.Millisecond
 }
 
 func resolveStorageInterval(seconds int) time.Duration {

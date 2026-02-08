@@ -217,6 +217,23 @@ func TestWriteErrorDef(t *testing.T) {
 	}
 }
 
+func TestWriteBadRequestCode(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	WriteBadRequestCode(w, "E_UNIT_BAD", "unit bad")
+
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusBadRequest)
+	}
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != "E_UNIT_BAD" || parsed.Error != "unit bad" {
+		t.Fatalf("response mismatch: code=%q err=%q", parsed.Code, parsed.Error)
+	}
+}
+
 func TestWriteDeleted(t *testing.T) {
 	w := httptest.NewRecorder()
 

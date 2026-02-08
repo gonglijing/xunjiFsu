@@ -36,13 +36,13 @@ func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
-		WriteBadRequest(w, "config 参数无效: "+err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
 		return
 	}
 
 	if config.Enabled == 1 {
 		if err := h.registerNorthboundAdapter(&config); err != nil {
-			WriteBadRequest(w, "北向初始化失败: "+err.Error())
+			WriteBadRequestCode(w, apiErrNorthboundInitializeFailed.Code, apiErrNorthboundInitializeFailed.Message+": "+err.Error())
 			return
 		}
 		h.northboundMgr.SetEnabled(config.Name, true)
@@ -83,7 +83,7 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
-		WriteBadRequest(w, "config 参数无效: "+err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		if oldConfig != nil {
 			_ = h.rebuildNorthboundRuntime(oldConfig)
 		}
-		WriteBadRequest(w, "北向初始化失败: "+err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundInitializeFailed.Code, apiErrNorthboundInitializeFailed.Message+": "+err.Error())
 		return
 	}
 

@@ -24,7 +24,7 @@ func (h *Handler) ReloadDriver(w http.ResponseWriter, r *http.Request) {
 
 	path := h.driverFilePath(drv.Name, drv.FilePath)
 	if _, err := os.Stat(path); err != nil {
-		WriteBadRequest(w, errDriverWasmFileNotFoundMessage)
+		WriteBadRequestDef(w, apiErrDriverWasmFileNotFound)
 		return
 	}
 

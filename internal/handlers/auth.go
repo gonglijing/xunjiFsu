@@ -63,7 +63,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := auth.ChangePassword(session.UserID, req.OldPassword, req.NewPassword); err != nil {
-		WriteBadRequest(w, err.Error())
+		WriteBadRequestCode(w, "E_CHANGE_PASSWORD_FAILED", err.Error())
 		return
 	}
 

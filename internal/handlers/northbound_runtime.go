@@ -39,7 +39,7 @@ func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request)
 		_ = database.UpdateNorthboundEnabled(id, prevState)
 		config.Enabled = prevState
 		_ = h.rebuildNorthboundRuntime(config)
-		WriteBadRequest(w, "北向初始化失败: "+err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundInitializeFailed.Code, apiErrNorthboundInitializeFailed.Message+": "+err.Error())
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *Handler) ReloadNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.rebuildNorthboundRuntime(config); err != nil {
-		WriteBadRequest(w, "北向重载失败: "+err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundReloadFailed.Code, apiErrNorthboundReloadFailed.Message+": "+err.Error())
 		return
 	}
 

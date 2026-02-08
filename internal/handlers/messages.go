@@ -51,4 +51,48 @@ var (
 		Code:    "E_RESOURCE_NOT_FOUND",
 		Message: errResourceNotFoundMessage,
 	}
+	apiErrGatewayIdentityRequired = APIErrorDef{
+		Code:    "E_GATEWAY_IDENTITY_REQUIRED",
+		Message: errGatewayIdentityRequiredMessage,
+	}
+	apiErrDriverWasmFileNotFound = APIErrorDef{
+		Code:    "E_DRIVER_WASM_NOT_FOUND",
+		Message: errDriverWasmFileNotFoundMessage,
+	}
+	apiErrDriverLookupFailed = APIErrorDef{
+		Code:    "E_DRIVER_LOOKUP_FAILED",
+		Message: errDriverLookupFailedMessage,
+	}
+	apiErrDriverNotLoaded = APIErrorDef{
+		Code:    "E_DRIVER_NOT_LOADED",
+		Message: errDriverNotLoadedMessage,
+	}
+	apiErrDriverConfigSchemaInvalid = APIErrorDef{
+		Code:    "E_DRIVER_CONFIG_SCHEMA_INVALID",
+		Message: errDriverConfigSchemaInvalidJSONError,
+	}
+	apiErrDeviceHasNoDriver = APIErrorDef{
+		Code:    "E_DEVICE_HAS_NO_DRIVER",
+		Message: errDeviceHasNoDriverMessage,
+	}
+	apiErrDeviceNameRequired = APIErrorDef{
+		Code:    "E_DEVICE_NAME_REQUIRED",
+		Message: errDeviceNameRequiredMessage,
+	}
+	apiErrDriverNameRequired = APIErrorDef{
+		Code:    "E_DRIVER_NAME_REQUIRED",
+		Message: errDriverNameRequiredMessage,
+	}
+	apiErrNorthboundConfigInvalid = APIErrorDef{
+		Code:    "E_NORTHBOUND_CONFIG_INVALID",
+		Message: "config 参数无效",
+	}
+	apiErrNorthboundInitializeFailed = APIErrorDef{
+		Code:    "E_NORTHBOUND_INITIALIZE_FAILED",
+		Message: "北向初始化失败",
+	}
+	apiErrNorthboundReloadFailed = APIErrorDef{
+		Code:    "E_NORTHBOUND_RELOAD_FAILED",
+		Message: "北向重载失败",
+	}
 )

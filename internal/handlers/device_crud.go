@@ -59,7 +59,7 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := normalizeDeviceInput(&device); err != nil {
-		WriteBadRequest(w, errDeviceNameRequiredMessage)
+		WriteBadRequestDef(w, apiErrDeviceNameRequired)
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := normalizeDeviceInput(&device); err != nil {
-		WriteBadRequest(w, errDeviceNameRequiredMessage)
+		WriteBadRequestDef(w, apiErrDeviceNameRequired)
 		return
 	}
 

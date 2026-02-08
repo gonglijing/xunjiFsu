@@ -32,13 +32,13 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if device.DriverID == nil {
-		WriteBadRequest(w, errDeviceHasNoDriverMessage)
+		WriteBadRequestDef(w, apiErrDeviceHasNoDriver)
 		return
 	}
 
 	driverModel, err := database.GetDriverByID(*device.DriverID)
 	if err != nil {
-		WriteServerError(w, errDriverLookupFailedMessage)
+		WriteServerErrorDef(w, apiErrDriverLookupFailed)
 		return
 	}
 	if !h.driverManager.IsLoaded(*device.DriverID) {
@@ -78,7 +78,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 	result, err := h.driverManager.ExecuteDriver(*device.DriverID, pluginFunc, ctx)
 	if err != nil {
 		if errors.Is(err, driver.ErrDriverNotFound) {
-			WriteBadRequest(w, errDriverNotLoadedMessage)
+			WriteBadRequestDef(w, apiErrDriverNotLoaded)
 			return
 		}
 		WriteServerError(w, fmt.Sprintf("Failed to execute %s: %v", requestFunc, err))
@@ -107,7 +107,7 @@ func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
 
 	driverModel, err := database.GetDriverByID(*device.DriverID)
 	if err != nil {
-		WriteServerError(w, errDriverLookupFailedMessage)
+		WriteServerErrorDef(w, apiErrDriverLookupFailed)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
 	}
 	if driverModel.ConfigSchema != "" {
 		if err := json.Unmarshal([]byte(driverModel.ConfigSchema), &cfg); err != nil {
-			WriteBadRequest(w, errDriverConfigSchemaInvalidJSONError)
+			WriteBadRequestDef(w, apiErrDriverConfigSchemaInvalid)
 			return
 		}
 	}
