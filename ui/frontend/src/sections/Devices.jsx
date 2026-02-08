@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
-import { alarmsAPI, dataAPI, devicesAPI } from '../api/services';
+import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
@@ -60,9 +60,9 @@ export function Devices() {
   const load = () => {
     setLoading(true);
     Promise.allSettled([
-      devicesAPI.listDevices(),
-      devicesAPI.listResources(),
-      devicesAPI.listDrivers(),
+      api.devices.listDevices(),
+      api.devices.listResources(),
+      api.devices.listDrivers(),
     ])
       .then(([devRes, resRes, drvRes]) => {
         if (devRes.status === 'fulfilled') {
@@ -115,10 +115,10 @@ export function Devices() {
   const submit = (e) => {
     e.preventDefault();
     setSubmitting(true);
-    const api = editing()
-      ? devicesAPI.updateDevice(editing(), form())
-      : devicesAPI.createDevice(form());
-    api.then(() => {
+    const request = editing()
+      ? api.devices.updateDevice(editing(), form())
+      : api.devices.createDevice(form());
+    request.then(() => {
       toast.show('success', editing() ? '设备已更新' : '设备已创建');
       setForm(defaultForm);
       setEditing(null);
@@ -130,21 +130,21 @@ export function Devices() {
   };
 
   const toggle = (id) => {
-    devicesAPI.toggleDevice(id)
+    api.devices.toggleDevice(id)
       .then(load)
       .catch(() => toast.show('error', '切换失败'));
   };
 
   const remove = (id) => {
     if (!confirm('确定删除该设备？')) return;
-    devicesAPI.deleteDevice(id)
+    api.devices.deleteDevice(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };
 
   const openWrite = (device) => {
     setWriteTarget(device);
-    devicesAPI.listWritables(device.id)
+    api.devices.listWritables(device.id)
       .then((res) => {
         const ws = Array.isArray(res) ? res : (res && res.writable) || [];
         setWriteMeta(ws);
@@ -168,7 +168,7 @@ export function Devices() {
         [writeForm().field]: writeForm().value,
       },
     };
-    devicesAPI.executeDeviceFunction(writeTarget().id, payload)
+    api.devices.executeDeviceFunction(writeTarget().id, payload)
       .then(() => {
         toast.show('success', '写入成功');
         setShowWriteModal(false);
@@ -182,8 +182,8 @@ export function Devices() {
     setDetailLoading(true);
     try {
       const [cacheRes, alarmsRes] = await Promise.all([
-        dataAPI.getDataCacheByDevice(device.id),
-        alarmsAPI.listAlarms(),
+        api.data.getDataCacheByDevice(device.id),
+        api.alarms.listAlarms(),
       ]);
       const cacheVal = Array.isArray(cacheRes) ? cacheRes : cacheRes?.data || [];
       const allAlarms = Array.isArray(alarmsRes) ? alarmsRes : alarmsRes?.data || [];

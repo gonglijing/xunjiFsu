@@ -1,6 +1,6 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
 import Card from '../components/cards';
-import { alarmsAPI, dataAPI, devicesAPI, gatewayAPI, northboundAPI, resourcesAPI } from '../api/services';
+import api from '../api/services';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 
 function Topology() {
@@ -20,10 +20,10 @@ function Topology() {
     setLoading(true);
     try {
       const [gwRes, resRes, devRes, nbRes] = await Promise.all([
-        gatewayAPI.getGatewayConfig(),
-        resourcesAPI.listResources(),
-        devicesAPI.listDevices(),
-        northboundAPI.listNorthboundConfigs(),
+        api.gateway.getGatewayConfig(),
+        api.resources.listResources(),
+        api.devices.listDevices(),
+        api.northbound.listNorthboundConfigs(),
       ]);
       setGateway(gwRes || null);
       setResources(resRes || []);
@@ -54,8 +54,8 @@ function Topology() {
     setDetailLoading(true);
     try {
       const [cacheRes, alarmsRes] = await Promise.all([
-        dataAPI.getDataCacheByDevice(device.id),
-        alarmsAPI.listAlarms(),
+        api.data.getDataCacheByDevice(device.id),
+        api.alarms.listAlarms(),
       ]);
       const cacheVal = Array.isArray(cacheRes) ? cacheRes : cacheRes?.data || [];
       const allAlarms = Array.isArray(alarmsRes) ? alarmsRes : alarmsRes?.data || [];

@@ -1,5 +1,5 @@
 import { createSignal, createEffect, Show } from 'solid-js';
-import { dataAPI, devicesAPI } from '../api/services';
+import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
@@ -68,7 +68,7 @@ function Realtime() {
       start: startVal,
       end: endVal,
     };
-    dataAPI.getHistoryData(params)
+    api.data.getHistoryData(params)
       .then((list) => {
         list.sort((a, b) => {
           const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
@@ -147,7 +147,7 @@ function Realtime() {
   const chartTicks = () => buildTicks(series(), 700, 260, 28);
 
   createEffect(() => {
-    devicesAPI.listDevices().then((list) => {
+    api.devices.listDevices().then((list) => {
       setDevices(list);
       if (list.length) setSelected(String(list[0].id));
     }).catch(() => toast.show('error', '加载设备失败'));
@@ -156,7 +156,7 @@ function Realtime() {
   createEffect(() => {
     if (!selected()) return;
     setLoading(true);
-    dataAPI.getDataCacheByDevice(selected())
+    api.data.getDataCacheByDevice(selected())
       .then((list) => {
         list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
         setPoints(list);

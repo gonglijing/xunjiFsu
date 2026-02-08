@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
-import { metricsAPI } from '../api/services';
+import api from '../api/services';
 import Card from '../components/cards';
 
 export function GatewayStatus() {
@@ -7,7 +7,7 @@ export function GatewayStatus() {
   const [loading, setLoading] = createSignal(true);
 
   const load = () => {
-    metricsAPI.getMetrics()
+    api.metrics.getMetrics()
       .then((res) => setMetrics(res || null))
       .catch(() => {})
       .finally(() => setLoading(false));

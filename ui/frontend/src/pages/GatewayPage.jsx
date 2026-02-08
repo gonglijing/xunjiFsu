@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
-import { gatewayAPI } from '../api/services';
+import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 
@@ -17,7 +17,7 @@ function GatewayPage() {
 
   const load = () => {
     setLoading(true);
-    gatewayAPI.getGatewayConfig()
+    api.gateway.getGatewayConfig()
       .then((data) => {
         setForm({
           product_key: data.product_key || '',
@@ -38,7 +38,7 @@ function GatewayPage() {
     setSaving(true);
     setErr('');
 
-    gatewayAPI.updateGatewayConfig(form())
+    api.gateway.updateGatewayConfig(form())
       .then(() => {
         toast.show('success', '网关配置已保存');
       })
@@ -51,7 +51,7 @@ function GatewayPage() {
 
   const syncNorthboundIdentity = () => {
     setSyncing(true);
-    gatewayAPI.syncGatewayIdentityToNorthbound()
+    api.gateway.syncGatewayIdentityToNorthbound()
       .then((data) => {
         const updated = data.updated?.length || 0;
         const failed = data.failed ? Object.keys(data.failed).length : 0;

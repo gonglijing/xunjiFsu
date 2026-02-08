@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, For } from 'solid-js';
-import { dataAPI, devicesAPI } from '../api/services';
+import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
@@ -10,7 +10,7 @@ export function RealtimeMini() {
   const [deviceMap, setDeviceMap] = createSignal(new Map());
 
   const load = () => {
-    dataAPI.listDataCache()
+    api.data.listDataCache()
       .then((list) => {
         list.sort((a, b) => {
           const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
@@ -23,7 +23,7 @@ export function RealtimeMini() {
   };
 
   createEffect(() => {
-    devicesAPI.listDevices()
+    api.devices.listDevices()
       .then((list) => {
         const map = new Map();
         list.forEach((d) => map.set(String(d.id), d.name || d.id));
