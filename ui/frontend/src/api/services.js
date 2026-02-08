@@ -29,19 +29,3 @@ const api = {
 };
 
 export default api;
-
-export {
-  alarms as alarmsAPI,
-  auth as authAPI,
-  collector as collectorAPI,
-  data as dataAPI,
-  devices as devicesAPI,
-  drivers as driversAPI,
-  gateway as gatewayAPI,
-  metrics as metricsAPI,
-  northbound as northboundAPI,
-  resources as resourcesAPI,
-  status as statusAPI,
-  storage as storageAPI,
-  thresholds as thresholdsAPI,
-};
