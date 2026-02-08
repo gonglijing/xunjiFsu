@@ -196,7 +196,7 @@ export function Northbound() {
         setItems(configs || []);
         setRuntime(status || []);
       })
-      .catch(() => toast.show('error', '加载北向配置失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载北向配置失败')))
       .finally(() => setLoading(false));
   };
 

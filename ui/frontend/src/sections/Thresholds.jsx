@@ -2,6 +2,7 @@ import { createSignal, createEffect, For, Show } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import { getErrorMessage } from '../api/errorMessages';
 
 const empty = { device_id: '', field_name: '', operator: '>', value: 0, severity: 'warning', message: '', enabled: 1 };
 
@@ -17,7 +18,7 @@ export function Thresholds() {
   const load = () => {
     api.thresholds.listThresholds()
       .then((res) => setItems(res || []))
-      .catch(() => toast.show('error', '加载阈值失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载阈值失败')));
   };
 
   const loadDevices = () => {
@@ -50,8 +51,9 @@ export function Thresholds() {
         load(); 
       })
       .catch((er) => { 
-        setErr(er.message || '创建失败'); 
-        toast.show('error', '创建失败'); 
+        const msg = getErrorMessage(er, '创建失败');
+        setErr(msg); 
+        toast.show('error', msg); 
       })
       .finally(() => setSaving(false));
   };
@@ -60,7 +62,7 @@ export function Thresholds() {
     if (!confirm('删除该阈值？')) return;
     api.thresholds.deleteThreshold(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch(() => toast.show('error', '删除失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
   };
 
   return (

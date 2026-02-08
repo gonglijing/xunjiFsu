@@ -3,6 +3,7 @@ import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
+import { getErrorMessage } from '../api/errorMessages';
 
 export function RealtimeMini() {
   const toast = useToast();
@@ -19,7 +20,7 @@ export function RealtimeMini() {
         });
         setPoints(list.slice(0, 8));
       })
-      .catch(() => toast.show('error', '加载实时数据失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载实时数据失败')));
   };
 
   createEffect(() => {

@@ -3,6 +3,7 @@ import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import { formatDateTime } from '../utils/time';
+import { getErrorMessage } from '../api/errorMessages';
 
 export function Alarms() {
   const toast = useToast();
@@ -13,7 +14,7 @@ export function Alarms() {
     setLoading(true);
     api.alarms.listAlarms()
       .then((res) => setItems(res || []))
-      .catch(() => toast.show('error', '加载告警失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载告警失败')))
       .finally(() => setLoading(false));
   };
 

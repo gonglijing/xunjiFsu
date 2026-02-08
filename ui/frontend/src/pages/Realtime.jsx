@@ -3,6 +3,7 @@ import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
+import { getErrorMessage } from '../api/errorMessages';
 
 function Realtime() {
   const toast = useToast();
@@ -77,7 +78,7 @@ function Realtime() {
         });
         setHistoryData(list);
       })
-      .catch(() => setHistoryError('加载历史数据失败'))
+      .catch((err) => setHistoryError(getErrorMessage(err, '加载历史数据失败')))
       .finally(() => setHistoryLoading(false));
   };
 
@@ -150,7 +151,7 @@ function Realtime() {
     api.devices.listDevices().then((list) => {
       setDevices(list);
       if (list.length) setSelected(String(list[0].id));
-    }).catch(() => toast.show('error', '加载设备失败'));
+    }).catch((err) => toast.show('error', getErrorMessage(err, '加载设备失败')));
   });
 
   createEffect(() => {
@@ -161,7 +162,7 @@ function Realtime() {
         list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
         setPoints(list);
       })
-      .catch(() => toast.show('error', '加载实时数据失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载实时数据失败')))
       .finally(() => setLoading(false));
   });
 

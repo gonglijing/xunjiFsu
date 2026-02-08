@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
+import { getErrorMessage } from '../api/errorMessages';
 
 export function QuickActions(props) {
   const toast = useToast();
@@ -15,7 +16,7 @@ export function QuickActions(props) {
         toast.show('success', props.collectorRunning ? '已停止采集' : '已启动采集');
         props.onRefresh?.();
       })
-      .catch(() => toast.show('error', '操作失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '操作失败')))
       .finally(() => setBusy(false));
   };
 

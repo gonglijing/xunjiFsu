@@ -3,6 +3,7 @@ import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
+import { getErrorMessage } from '../api/errorMessages';
 
 export function LatestAlarms() {
   const toast = useToast();
@@ -11,7 +12,7 @@ export function LatestAlarms() {
   const load = () => {
     api.alarms.listAlarms()
       .then((res) => setItems((res || []).slice(0, 8)))
-      .catch(() => toast.show('error', '加载告警失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载告警失败')));
   };
 
   createEffect(() => {
@@ -21,7 +22,7 @@ export function LatestAlarms() {
   const ack = (id) => {
     api.alarms.acknowledgeAlarm(id)
       .then(() => { toast.show('success', '已确认'); load(); })
-      .catch(() => toast.show('error', '确认失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '确认失败')));
   };
 
   return (
