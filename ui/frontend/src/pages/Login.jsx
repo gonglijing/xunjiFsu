@@ -1,5 +1,6 @@
 import { createSignal, onMount } from 'solid-js';
-import { postJSON, storeToken } from '../api';
+import { storeToken } from '../api';
+import { login } from '../api/auth';
 
 function Login(props) {
   const [username, setUsername] = createSignal('admin');
@@ -11,7 +12,7 @@ function Login(props) {
     e.preventDefault();
     setLoading(true);
     setError('');
-    postJSON('/login', { username: username(), password: password() })
+    login({ username: username(), password: password() })
       .then((res) => {
         storeToken(res.token);
         // 全刷新，确保服务端鉴权和 cookie 生效
