@@ -1,32 +1,41 @@
-import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import { createSignal } from 'solid-js';
 
 // 路由状态
 const [path, setPath] = createSignal(window.location.pathname || '/');
 const [query, setQuery] = createSignal(new URLSearchParams(window.location.search));
 
+let popstateBound = false;
+
 // 初始化 URL 监听
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !popstateBound) {
   const handler = () => {
     setPath(window.location.pathname || '/');
     setQuery(new URLSearchParams(window.location.search));
   };
   window.addEventListener('popstate', handler);
-  onCleanup(() => window.removeEventListener('popstate', handler));
+  popstateBound = true;
 }
 
 // 导航函数
 export function navigate(to, options = {}) {
-  const current = path();
-  if (to === current) return;
+  const target = new URL(to, window.location.origin);
+  const nextPath = target.pathname || '/';
+  const nextSearch = target.search || '';
+
+  const currentPath = path();
+  const currentSearch = window.location.search || '';
+  if (nextPath === currentPath && nextSearch === currentSearch) return;
+
+  const nextURL = `${nextPath}${nextSearch}`;
   
   if (options.replace) {
-    window.history.replaceState({}, '', to);
+    window.history.replaceState({}, '', nextURL);
   } else {
-    window.history.pushState({}, '', to);
+    window.history.pushState({}, '', nextURL);
   }
   
-  setPath(to);
-  setQuery(new URLSearchParams(window.location.search));
+  setPath(nextPath);
+  setQuery(new URLSearchParams(nextSearch));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 

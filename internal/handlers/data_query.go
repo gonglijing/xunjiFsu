@@ -38,7 +38,30 @@ func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
 	}
 	query.EndTime = endTime
 
+	if err := validateHistoryDataQuery(query); err != nil {
+		return historyDataQuery{}, err
+	}
+
 	return query, nil
+}
+
+func validateHistoryDataQuery(query historyDataQuery) error {
+	if query.DeviceID != nil && *query.DeviceID <= 0 {
+		return fmt.Errorf(errInvalidDeviceIDMessage)
+	}
+
+	if !query.StartTime.IsZero() && !query.EndTime.IsZero() && query.StartTime.After(query.EndTime) {
+		return fmt.Errorf(errHistoryStartAfterEndDetail)
+	}
+
+	if query.DeviceID == nil {
+		hasFilter := query.FieldName != "" || !query.StartTime.IsZero() || !query.EndTime.IsZero()
+		if hasFilter {
+			return fmt.Errorf(errHistoryFilterRequiresDevice)
+		}
+	}
+
+	return nil
 }
 
 func parseOptionalInt64Query(r *http.Request, key string) (*int64, error) {

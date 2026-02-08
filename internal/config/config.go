@@ -42,15 +42,18 @@ type Config struct {
 	LogJSON  bool   `json:"log_json"`
 
 	// 采集器配置
-	CollectorEnabled bool          `json:"collector_enabled"`
-	CollectorWorkers int           `json:"collector_workers"`
-	SyncInterval     time.Duration `json:"sync_interval"`
+	CollectorEnabled             bool          `json:"collector_enabled"`
+	CollectorWorkers             int           `json:"collector_workers"`
+	SyncInterval                 time.Duration `json:"sync_interval"`
+	CollectorDeviceSyncInterval  time.Duration `json:"collector_device_sync_interval"`
+	CollectorCommandPollInterval time.Duration `json:"collector_command_poll_interval"`
 
 	// 驱动目录
 	DriversDir string `json:"drivers_dir"`
 
 	// 北向插件目录
-	NorthboundPluginsDir string `json:"northbound_plugins_dir"`
+	NorthboundPluginsDir            string        `json:"northbound_plugins_dir"`
+	NorthboundMQTTReconnectInterval time.Duration `json:"northbound_mqtt_reconnect_interval"`
 
 	// 驱动执行配置
 	DriverCallTimeout       time.Duration `json:"driver_call_timeout"`
@@ -74,39 +77,42 @@ type Config struct {
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		ListenAddr:              ":8080",
-		TLSCertFile:             "",
-		TLSKeyFile:              "",
-		TLSAuto:                 false,
-		TLSDomain:               "",
-		TLSCacheDir:             "cert-cache",
-		HTTPReadTimeout:         30 * time.Second,
-		HTTPWriteTimeout:        30 * time.Second,
-		HTTPIdleTimeout:         60 * time.Second,
-		DBPath:                  "gogw.db",
-		ParamDBPath:             "param.db",
-		DataDBPath:              "data.db",
-		SessionSecret:           "",
-		AllowedOrigins:          "",
-		LogLevel:                "info",
-		LogJSON:                 false,
-		CollectorEnabled:        true,
-		CollectorWorkers:        10,
-		SyncInterval:            5 * time.Minute,
-		DriversDir:              "drivers",
-		NorthboundPluginsDir:    "plugin_north",
-		DriverCallTimeout:       0,
-		DriverSerialReadTimeout: 0,
-		DriverSerialOpenRetries: 0,
-		DriverSerialOpenBackoff: 0,
-		DriverTCPDialTimeout:    0,
-		DriverTCPDialRetries:    0,
-		DriverTCPDialBackoff:    0,
-		DriverTCPReadTimeout:    0,
-		ThresholdCacheEnabled:   true,
-		ThresholdCacheTTL:       time.Minute,
-		MaxDataPoints:           100000,
-		MaxDataCache:            10000,
+		ListenAddr:                      ":8080",
+		TLSCertFile:                     "",
+		TLSKeyFile:                      "",
+		TLSAuto:                         false,
+		TLSDomain:                       "",
+		TLSCacheDir:                     "cert-cache",
+		HTTPReadTimeout:                 30 * time.Second,
+		HTTPWriteTimeout:                30 * time.Second,
+		HTTPIdleTimeout:                 60 * time.Second,
+		DBPath:                          "gogw.db",
+		ParamDBPath:                     "param.db",
+		DataDBPath:                      "data.db",
+		SessionSecret:                   "",
+		AllowedOrigins:                  "",
+		LogLevel:                        "info",
+		LogJSON:                         false,
+		CollectorEnabled:                true,
+		CollectorWorkers:                10,
+		SyncInterval:                    5 * time.Minute,
+		CollectorDeviceSyncInterval:     10 * time.Second,
+		CollectorCommandPollInterval:    500 * time.Millisecond,
+		DriversDir:                      "drivers",
+		NorthboundPluginsDir:            "plugin_north",
+		NorthboundMQTTReconnectInterval: 5 * time.Second,
+		DriverCallTimeout:               0,
+		DriverSerialReadTimeout:         0,
+		DriverSerialOpenRetries:         0,
+		DriverSerialOpenBackoff:         0,
+		DriverTCPDialTimeout:            0,
+		DriverTCPDialRetries:            0,
+		DriverTCPDialBackoff:            0,
+		DriverTCPReadTimeout:            0,
+		ThresholdCacheEnabled:           true,
+		ThresholdCacheTTL:               time.Minute,
+		MaxDataPoints:                   100000,
+		MaxDataCache:                    10000,
 	}
 }
 
@@ -172,14 +178,17 @@ func loadFromFile(cfg *Config) error {
 			TCPReadTimeout    string `yaml:"tcp_read_timeout"`
 		} `yaml:"drivers"`
 		Northbound struct {
-			PluginsDir string `yaml:"plugins_dir"`
+			PluginsDir            string `yaml:"plugins_dir"`
+			MQTTReconnectInterval string `yaml:"mqtt_reconnect_interval"`
 		} `yaml:"northbound"`
 		Auth struct {
 			SessionMaxAge int `yaml:"session_max_age"`
 		} `yaml:"auth"`
 		Collector struct {
-			DefaultInterval       int `yaml:"default_interval"`
-			DefaultUploadInterval int `yaml:"default_upload_interval"`
+			DefaultInterval       int    `yaml:"default_interval"`
+			DefaultUploadInterval int    `yaml:"default_upload_interval"`
+			DeviceSyncInterval    string `yaml:"device_sync_interval"`
+			CommandPollInterval   string `yaml:"command_poll_interval"`
 		} `yaml:"collector"`
 		Logging struct {
 			Level  string `yaml:"level"`
@@ -211,6 +220,11 @@ func loadFromFile(cfg *Config) error {
 	}
 	if yamlCfg.Northbound.PluginsDir != "" {
 		cfg.NorthboundPluginsDir = yamlCfg.Northbound.PluginsDir
+	}
+	if yamlCfg.Northbound.MQTTReconnectInterval != "" {
+		if interval, err := time.ParseDuration(yamlCfg.Northbound.MQTTReconnectInterval); err == nil {
+			cfg.NorthboundMQTTReconnectInterval = interval
+		}
 	}
 	if yamlCfg.Drivers.CallTimeout != "" {
 		if timeout, err := time.ParseDuration(yamlCfg.Drivers.CallTimeout); err == nil {
@@ -246,6 +260,16 @@ func loadFromFile(cfg *Config) error {
 	if yamlCfg.Drivers.TCPReadTimeout != "" {
 		if timeout, err := time.ParseDuration(yamlCfg.Drivers.TCPReadTimeout); err == nil {
 			cfg.DriverTCPReadTimeout = timeout
+		}
+	}
+	if yamlCfg.Collector.DeviceSyncInterval != "" {
+		if interval, err := time.ParseDuration(yamlCfg.Collector.DeviceSyncInterval); err == nil {
+			cfg.CollectorDeviceSyncInterval = interval
+		}
+	}
+	if yamlCfg.Collector.CommandPollInterval != "" {
+		if interval, err := time.ParseDuration(yamlCfg.Collector.CommandPollInterval); err == nil {
+			cfg.CollectorCommandPollInterval = interval
 		}
 	}
 
@@ -348,6 +372,20 @@ func loadFromEnv(cfg *Config) {
 			cfg.SyncInterval = defaultCfg.SyncInterval
 		}
 	}
+	if v := os.Getenv("COLLECTOR_DEVICE_SYNC_INTERVAL"); v != "" {
+		if interval, err := time.ParseDuration(v); err == nil && interval > 0 {
+			cfg.CollectorDeviceSyncInterval = interval
+		} else if cfg.CollectorDeviceSyncInterval == 0 {
+			cfg.CollectorDeviceSyncInterval = defaultCfg.CollectorDeviceSyncInterval
+		}
+	}
+	if v := os.Getenv("COLLECTOR_COMMAND_POLL_INTERVAL"); v != "" {
+		if interval, err := time.ParseDuration(v); err == nil && interval > 0 {
+			cfg.CollectorCommandPollInterval = interval
+		} else if cfg.CollectorCommandPollInterval == 0 {
+			cfg.CollectorCommandPollInterval = defaultCfg.CollectorCommandPollInterval
+		}
+	}
 
 	// 驱动目录
 	if v := os.Getenv("DRIVERS_DIR"); v != "" {
@@ -355,6 +393,13 @@ func loadFromEnv(cfg *Config) {
 	}
 	if v := os.Getenv("NORTHBOUND_PLUGINS_DIR"); v != "" {
 		cfg.NorthboundPluginsDir = v
+	}
+	if v := os.Getenv("NORTHBOUND_MQTT_RECONNECT_INTERVAL"); v != "" {
+		if interval, err := time.ParseDuration(v); err == nil && interval > 0 {
+			cfg.NorthboundMQTTReconnectInterval = interval
+		} else if cfg.NorthboundMQTTReconnectInterval == 0 {
+			cfg.NorthboundMQTTReconnectInterval = defaultCfg.NorthboundMQTTReconnectInterval
+		}
 	}
 
 	// 驱动执行配置

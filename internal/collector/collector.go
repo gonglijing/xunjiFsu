@@ -17,15 +17,23 @@ import (
 
 const defaultCollectIntervalMilliseconds = 5000
 
+const (
+	defaultDeviceSyncInterval  = 10 * time.Second
+	defaultCommandPollInterval = 500 * time.Millisecond
+)
+
 // Collector 采集器
 type Collector struct {
-	driverExecutor *driver.DriverExecutor
-	northboundMgr  *northbound.NorthboundManager
-	resourceLock   map[int64]chan struct{} // 每个资源一个串行锁
-	mu             sync.RWMutex
-	running        bool
-	stopChan       chan struct{}
-	wg             sync.WaitGroup
+	driverExecutor      *driver.DriverExecutor
+	northboundMgr       *northbound.NorthboundManager
+	resourceLock        map[int64]chan struct{} // 每个资源一个串行锁
+	mu                  sync.RWMutex
+	running             bool
+	stopChan            chan struct{}
+	wakeChan            chan struct{}
+	deviceSyncInterval  time.Duration
+	commandPollInterval time.Duration
+	wg                  sync.WaitGroup
 	// 设备采集任务
 	tasks    map[int64]*collectTask
 	taskHeap *taskHeap // 优先队列，按下次采集时间排序
@@ -72,16 +80,30 @@ func (h *taskHeap) Pop() interface{} {
 
 // NewCollector 创建采集器
 func NewCollector(driverExecutor *driver.DriverExecutor, northboundMgr *northbound.NorthboundManager) *Collector {
+	return NewCollectorWithIntervals(driverExecutor, northboundMgr, defaultDeviceSyncInterval, defaultCommandPollInterval)
+}
+
+func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northboundMgr *northbound.NorthboundManager, deviceSyncInterval, commandPollInterval time.Duration) *Collector {
+	if deviceSyncInterval <= 0 {
+		deviceSyncInterval = defaultDeviceSyncInterval
+	}
+	if commandPollInterval <= 0 {
+		commandPollInterval = defaultCommandPollInterval
+	}
+
 	h := &taskHeap{}
 	heap.Init(h)
 	return &Collector{
-		driverExecutor: driverExecutor,
-		northboundMgr:  northboundMgr,
-		running:        false,
-		stopChan:       make(chan struct{}),
-		tasks:          make(map[int64]*collectTask),
-		taskHeap:       h,
-		resourceLock:   make(map[int64]chan struct{}),
+		driverExecutor:      driverExecutor,
+		northboundMgr:       northboundMgr,
+		running:             false,
+		stopChan:            make(chan struct{}),
+		wakeChan:            make(chan struct{}, 1),
+		deviceSyncInterval:  deviceSyncInterval,
+		commandPollInterval: commandPollInterval,
+		tasks:               make(map[int64]*collectTask),
+		taskHeap:            h,
+		resourceLock:        make(map[int64]chan struct{}),
 	}
 }
 
@@ -94,6 +116,7 @@ func (c *Collector) Start() error {
 	}
 	c.running = true
 	c.stopChan = make(chan struct{})
+	c.wakeChan = make(chan struct{}, 1)
 	c.tasks = make(map[int64]*collectTask)
 	h := &taskHeap{}
 	heap.Init(h)
@@ -105,11 +128,11 @@ func (c *Collector) Start() error {
 		log.Printf("Failed to load enabled devices: %v", err)
 	}
 
-	// 每 10 秒同步设备状态
-	c.startTickerWorker(10*time.Second, c.SyncDeviceStatus)
+	// 同步设备状态
+	c.startTickerWorker(c.deviceSyncInterval, c.SyncDeviceStatus)
 
 	// 北向下发命令轮询
-	c.startTickerWorker(500*time.Millisecond, c.processNorthboundCommands)
+	c.startTickerWorker(c.commandPollInterval, c.processNorthboundCommands)
 
 	// 主循环
 	c.wg.Add(1)
@@ -139,6 +162,10 @@ func (c *Collector) loadEnabledDevices() error {
 		}
 	}
 
+	if loadedCount > 0 {
+		c.notifyTaskChangedLocked()
+	}
+
 	log.Printf("Loaded %d enabled devices for collection", loadedCount)
 	return nil
 }
@@ -148,11 +175,10 @@ func (c *Collector) runLoop() {
 	defer c.wg.Done()
 	for {
 		c.mu.Lock()
-		task := c.popNextCurrentTaskLocked()
-		c.mu.Unlock()
-
+		task := c.peekNextCurrentTaskLocked()
 		if task == nil {
-			if c.waitForStopOrTimeout(500 * time.Millisecond) {
+			c.mu.Unlock()
+			if c.waitForStopOrWake(0) {
 				return
 			}
 			continue
@@ -160,9 +186,17 @@ func (c *Collector) runLoop() {
 
 		delay := time.Until(task.nextRun)
 		if delay > 0 {
-			if c.waitForStopOrTimeout(delay) {
+			c.mu.Unlock()
+			if c.waitForStopOrWake(delay) {
 				return
 			}
+			continue
+		}
+
+		task = c.popNextCurrentTaskLocked()
+		c.mu.Unlock()
+		if task == nil {
+			continue
 		}
 
 		if !c.isTaskCurrent(task) {
@@ -249,10 +283,18 @@ func (c *Collector) SyncDeviceStatus() {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	changed := false
 
 	for _, device := range devices {
 		action := c.syncDeviceTaskLocked(device)
+		if action != deviceSyncActionNone {
+			changed = true
+		}
 		c.logDeviceSyncAction(device, action)
+	}
+
+	if changed {
+		c.notifyTaskChangedLocked()
 	}
 }
 
@@ -286,22 +328,28 @@ func (c *Collector) AddDevice(device *models.Device) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if _, exists := c.tasks[device.ID]; exists {
+		c.mu.Unlock()
 		return fmt.Errorf("device %d already in collector", device.ID)
 	}
 
 	c.upsertTaskLocked(device)
+	c.notifyTaskChangedLocked()
+	c.mu.Unlock()
 	return nil
 }
 
 // RemoveDevice 从采集任务移除设备
 func (c *Collector) RemoveDevice(deviceID int64) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	_, exists := c.tasks[deviceID]
 	c.removeTaskLocked(deviceID)
+	if exists {
+		c.notifyTaskChangedLocked()
+	}
+	c.mu.Unlock()
+
 	return nil
 }
 
@@ -312,14 +360,15 @@ func (c *Collector) UpdateDevice(device *models.Device) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	_, exists := c.tasks[device.ID]
 	if !exists {
+		c.mu.Unlock()
 		return fmt.Errorf("device %d not in collector", device.ID)
 	}
 
 	c.upsertTaskLocked(device)
+	c.notifyTaskChangedLocked()
+	c.mu.Unlock()
 	return nil
 }
 
@@ -375,6 +424,24 @@ func (c *Collector) removeTaskLocked(deviceID int64) {
 	delete(c.tasks, deviceID)
 }
 
+func (c *Collector) notifyTaskChangedLocked() {
+	select {
+	case c.wakeChan <- struct{}{}:
+	default:
+	}
+}
+
+func (c *Collector) peekNextCurrentTaskLocked() *collectTask {
+	for len(*c.taskHeap) > 0 {
+		candidate := (*c.taskHeap)[0]
+		if c.isTaskCurrentLocked(candidate) {
+			return candidate
+		}
+		heap.Pop(c.taskHeap)
+	}
+	return nil
+}
+
 func (c *Collector) popNextCurrentTaskLocked() *collectTask {
 	for len(*c.taskHeap) > 0 {
 		candidate := heap.Pop(c.taskHeap).(*collectTask)
@@ -415,17 +482,26 @@ func (c *Collector) isTaskCurrent(task *collectTask) bool {
 	return c.isTaskCurrentLocked(task)
 }
 
-func (c *Collector) waitForStopOrTimeout(delay time.Duration) bool {
+func (c *Collector) waitForStopOrWake(delay time.Duration) bool {
 	if delay <= 0 {
-		return false
+		select {
+		case <-c.stopChan:
+			return true
+		case <-c.wakeChan:
+			return false
+		}
 	}
+
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
+
 	select {
 	case <-timer.C:
 		return false
 	case <-c.stopChan:
 		return true
+	case <-c.wakeChan:
+		return false
 	}
 }
 

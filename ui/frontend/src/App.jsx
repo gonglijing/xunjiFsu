@@ -1,6 +1,5 @@
-import { createSignal, createEffect, Show } from 'solid-js';
+import { Show } from 'solid-js';
 import { usePath, navigate } from './router';
-import api from './api/services';
 import SidebarNav from './components/SidebarNav';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -14,24 +13,11 @@ import AlarmsPage from './pages/AlarmsPage';
 import Realtime from './pages/Realtime';
 import { StoragePage } from './pages/StoragePage';
 import Topology from './pages/Topology';
+import { useAuthGuard } from './utils/authGuard';
 
 function App() {
-  const [path, setNavigate, query] = usePath();
-  const [authed, setAuthed] = createSignal(true);
-
-  // 鉴权探测
-  createEffect(() => {
-    const currentPath = path();
-    // 登录页不做探测，避免循环跳转
-    if (currentPath === '/login') return;
-    
-    api.status.getStatus()
-      .then(() => setAuthed(true))
-      .catch(() => {
-        setAuthed(false);
-        navigate('/login');
-      });
-  });
+  const [path, setNavigate] = usePath();
+  useAuthGuard(path, navigate);
 
   // 路由渲染
   const render = () => {

@@ -1,31 +1,41 @@
-import { createSignal, createEffect } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
-import { showErrorToast } from '../utils/errors';
+import { showErrorToast, withErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import LoadErrorHint from '../components/LoadErrorHint';
 
 const empty = { name: '', storage_days: 30, enabled: 1 };
 
 export function Storage() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
-  const [loading, setLoading] = createSignal(true);
+  const showLoadError = withErrorToast(toast, '加载存储策略失败');
+  const showSaveError = withErrorToast(toast, '保存失败');
+  const {
+    loading,
+    error: loadError,
+    setError: setLoadError,
+    run: runStorageLoad,
+  } = usePageLoader(async () => {
+    const res = await api.storage.listStorageConfigs();
+    setItems(res || []);
+  }, {
+    onError: showLoadError,
+    errorMessage: '加载存储策略失败',
+  });
   const [form, setForm] = createSignal(empty);
   const [editing, setEditing] = createSignal(null);
   const [saving, setSaving] = createSignal(false);
 
   const load = () => {
-    setLoading(true);
-    api.storage.listStorageConfigs()
-      .then((res) => setItems(res || []))
-      .catch((err) => showErrorToast())
-      .finally(() => setLoading(false));
+    setLoadError('');
+    runStorageLoad();
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   const submit = (e) => {
     e.preventDefault();
@@ -39,7 +49,7 @@ export function Storage() {
       setEditing(null); 
       load(); 
     })
-    .catch((err) => showErrorToast())
+    .catch(showSaveError)
     .finally(() => setSaving(false));
   };
 
@@ -83,6 +93,7 @@ export function Storage() {
   return (
     <div class="grid" style="grid-template-columns: 3fr 1.4fr; gap:24px;">
       <Card title="存储策略列表" extra={<button class="btn" onClick={runCleanup}>立即清理</button>}>
+        <LoadErrorHint error={loadError()} onRetry={load} />
         <CrudTable
           columns={columns}
           items={items()}

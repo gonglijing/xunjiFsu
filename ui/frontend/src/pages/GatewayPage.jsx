@@ -1,9 +1,10 @@
-import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { createSignal, onMount, Show } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
 
 function GatewayPage() {
   const toast = useToast();
@@ -12,28 +13,25 @@ function GatewayPage() {
     device_key: '',
     gateway_name: 'HuShu智能网关',
   });
-  const [loading, setLoading] = createSignal(true);
+  const { loading, run: runGatewayLoad } = usePageLoader(async () => {
+    const data = await api.gateway.getGatewayConfig();
+    setForm({
+      product_key: data.product_key || '',
+      device_key: data.device_key || '',
+      gateway_name: data.gateway_name || 'HuShu智能网关',
+    });
+  }, {
+    onError: (err) => showErrorToast(toast, err, '加载网关配置失败'),
+  });
   const [saving, setSaving] = createSignal(false);
   const [syncing, setSyncing] = createSignal(false);
   const [err, setErr] = createSignal('');
 
   const load = () => {
-    setLoading(true);
-    api.gateway.getGatewayConfig()
-      .then((data) => {
-        setForm({
-          product_key: data.product_key || '',
-          device_key: data.device_key || '',
-          gateway_name: data.gateway_name || 'HuShu智能网关',
-        });
-      })
-      .catch((err) => showErrorToast())
-      .finally(() => setLoading(false));
+    runGatewayLoad();
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   const submit = (e) => {
     e.preventDefault();
@@ -61,7 +59,7 @@ function GatewayPage() {
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
       })
       .catch((er) => {
-	        showErrorToast(toast, er, '同步失败');
+        showErrorToast(toast, er, '同步失败');
       })
       .finally(() => setSyncing(false));
   };

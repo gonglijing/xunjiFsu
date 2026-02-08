@@ -1,29 +1,43 @@
-import { createSignal, createEffect, onCleanup, For } from 'solid-js';
+import { createSignal, onMount, onCleanup, For } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { showErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import LoadErrorHint from '../components/LoadErrorHint';
+import { getRealtimeMiniPollIntervalMs } from '../utils/runtimeConfig';
+
+const REALTIME_MINI_POLL_INTERVAL_MS = getRealtimeMiniPollIntervalMs();
 
 export function RealtimeMini() {
   const toast = useToast();
   const [points, setPoints] = createSignal([]);
   const [deviceMap, setDeviceMap] = createSignal(new Map());
+  const {
+    loading,
+    error: loadError,
+    setError: setLoadError,
+    run: runRealtimeLoad,
+  } = usePageLoader(async () => {
+    const list = await api.data.listDataCache();
+    list.sort((a, b) => {
+      const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
+      const bt = new Date(b.collected_at || b.CollectedAt || 0).getTime();
+      return bt - at;
+    });
+    setPoints(list.slice(0, 8));
+  }, {
+    errorMessage: '加载实时数据失败',
+    onError: (err) => showErrorToast(toast, err, '加载实时数据失败'),
+  });
 
   const load = () => {
-    api.data.listDataCache()
-      .then((list) => {
-        list.sort((a, b) => {
-          const at = new Date(a.collected_at || a.CollectedAt || 0).getTime();
-          const bt = new Date(b.collected_at || b.CollectedAt || 0).getTime();
-          return bt - at;
-        });
-        setPoints(list.slice(0, 8));
-      })
-      .catch((err) => showErrorToast(toast, err, '加载实时数据失败'));
+    setLoadError('');
+    runRealtimeLoad();
   };
 
-  createEffect(() => {
+  onMount(() => {
     api.devices.listDevices()
       .then((list) => {
         const map = new Map();
@@ -32,12 +46,13 @@ export function RealtimeMini() {
       })
       .catch(() => {});
     load();
-    const timer = setInterval(load, 4000);
+    const timer = setInterval(load, REALTIME_MINI_POLL_INTERVAL_MS);
     onCleanup(() => clearInterval(timer));
   });
 
   return (
     <Card title="最新采集" extra={<button class="btn" onClick={load}>刷新</button>}>
+      <LoadErrorHint error={loadError()} onRetry={load} />
       <div class="table-container" style="max-height:320px; overflow:auto;">
         <table class="table">
           <thead>
@@ -65,7 +80,9 @@ export function RealtimeMini() {
             <For each={points().length === 0 ? [1] : []}>
               {() => (
                 <tr>
-                  <td colSpan={4} style="text-align:center; padding:16px; color:var(--text-muted);">暂无数据</td>
+                  <td colSpan={4} style="text-align:center; padding:16px; color:var(--text-muted);">
+                    {loading() ? '加载中...' : '暂无数据'}
+                  </td>
                 </tr>
               )}
             </For>

@@ -59,12 +59,13 @@ func Run(cfg *config.Config) error {
 	northboundMgr := northbound.NewNorthboundManager()
 
 	loadEnabledNorthboundConfigs(northboundMgr)
+	applyNorthboundRuntimeConfig(cfg, northboundMgr)
 
 	// 开启北向上传调度（按配置）
 	startNorthboundSchedulers(northboundMgr)
 	northboundMgr.Start()
 
-	collect := collector.NewCollector(driverExecutor, northboundMgr)
+	collect := collector.NewCollectorWithIntervals(driverExecutor, northboundMgr, cfg.CollectorDeviceSyncInterval, cfg.CollectorCommandPollInterval)
 	authManager := auth.NewJWTManager(secretKey)
 	h := handlers.NewHandler(authManager, collect, driverManager, northboundMgr, cfg.DriversDir)
 

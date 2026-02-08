@@ -1,23 +1,26 @@
-import { createSignal, createEffect, For } from 'solid-js';
+import { createSignal, onMount, For } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { showErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
 
 function AlarmsPage() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
+  const { run: runAlarmsLoad } = usePageLoader(async () => {
+    const res = await api.alarms.listAlarms();
+    setItems(res || []);
+  }, {
+    onError: (err) => showErrorToast(toast, err, '加载告警失败'),
+  });
 
   const load = () => {
-    api.alarms.listAlarms()
-      .then((res) => setItems(res || []))
-      .catch((err) => showErrorToast(toast, err, '加载告警失败'));
+    runAlarmsLoad();
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   const ack = (id) => {
     api.alarms.acknowledgeAlarm(id)

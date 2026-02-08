@@ -1,4 +1,4 @@
-import { createSignal, onMount } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { storeToken } from '../api';
 import api from '../api/services';
 
@@ -15,8 +15,7 @@ function Login(props) {
     api.auth.login({ username: username(), password: password() })
       .then((res) => {
         storeToken(res.token);
-        // 全刷新，确保服务端鉴权和 cookie 生效
-        window.location.replace('/');
+        props.onSuccess?.();
       })
       .catch(() => setError('用户名或密码错误'))
       .finally(() => setLoading(false));

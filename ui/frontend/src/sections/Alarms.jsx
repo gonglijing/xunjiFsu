@@ -1,29 +1,32 @@
-import { createSignal, createEffect, For } from 'solid-js';
+import { createSignal, onMount, For } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import { formatDateTime } from '../utils/time';
-import { showErrorToast } from '../utils/errors';
+import { withErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import LoadErrorHint from '../components/LoadErrorHint';
 
 export function Alarms() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
-  const [loading, setLoading] = createSignal(true);
+  const showLoadError = withErrorToast(toast, '加载告警失败');
+  const { loading, run: runAlarmsLoad } = usePageLoader(async () => {
+    const res = await api.alarms.listAlarms();
+    setItems(res || []);
+  }, {
+    onError: showLoadError,
+  });
 
   const load = () => {
-    setLoading(true);
-    api.alarms.listAlarms()
-      .then((res) => setItems(res || []))
-      .catch((err) => showErrorToast())
-      .finally(() => setLoading(false));
+    runAlarmsLoad();
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   return (
     <Card title="报警日志" extra={<button class="btn" onClick={load}>刷新</button>}>
+      <LoadErrorHint error={loadError()} onRetry={load} />
       {loading() ? (
         <div class="text-center" style="padding:48px; color:var(--text-muted);">
           <div class="loading-spinner" style="margin:0 auto 16px;"></div>

@@ -217,3 +217,32 @@ func TestSetRetriesOverridesDefaults(t *testing.T) {
 		t.Fatalf("expected tcp backoff 250ms, got %v", got)
 	}
 }
+
+func TestGetTCPConnReturnsRegisteredConnectionWithoutProbeWrite(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+
+	c1, c2 := net.Pipe()
+	defer c1.Close()
+	defer c2.Close()
+
+	executor.RegisterTCP(12, c1)
+
+	got := executor.GetTCPConn(12)
+	if got != c1 {
+		t.Fatalf("expected existing registered connection")
+	}
+
+	readDone := make(chan struct{})
+	go func() {
+		buf := make([]byte, 1)
+		_, _ = c2.Read(buf)
+		close(readDone)
+	}()
+
+	select {
+	case <-readDone:
+		t.Fatalf("expected no unsolicited probe write on existing TCP connection")
+	case <-time.After(50 * time.Millisecond):
+	}
+}

@@ -12,6 +12,7 @@ drivers:
 # 北向插件目录
 northbound:
   plugins_dir: "plugin_north"
+  mqtt_reconnect_interval: 5s
 
 # 认证配置
 auth:
@@ -21,6 +22,8 @@ auth:
 collector:
   default_interval: 5000   # 默认采集周期，毫秒
   default_upload_interval: 10000  # 默认上传周期，毫秒
+  device_sync_interval: 10s
+  command_poll_interval: 500ms
 
 # 日志配置
 logging:

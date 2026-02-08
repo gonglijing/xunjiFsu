@@ -1,31 +1,36 @@
-import { createSignal, createEffect } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
-import { showErrorToast } from '../utils/errors';
+import { showErrorToast, withErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import LoadErrorHint from '../components/LoadErrorHint';
 
 export function Drivers() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
-  const [loading, setLoading] = createSignal(true);
   const [busyId, setBusyId] = createSignal(0);
-  const [error, setError] = createSignal('');
+  const {
+    loading,
+    error,
+    setError,
+    run: runDriversLoad,
+  } = usePageLoader(async () => {
+    const res = await api.drivers.listDrivers();
+    setItems(res || []);
+  }, {
+    errorMessage: '加载驱动失败',
+  });
+  const showUploadError = withErrorToast(toast, '上传失败');
+  const showReloadError = withErrorToast(toast, '重载失败');
 
   const load = () => {
-    setLoading(true);
-    api.drivers.listDrivers()
-      .then((res) => {
-        setItems(res || []);
-        setError('');
-      })
-      .catch(() => setError('加载驱动失败'))
-      .finally(() => setLoading(false));
+    setError('');
+    runDriversLoad();
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   const remove = (id, name) => {
     if (!confirm(`删除驱动 ${name} ？`)) return;
@@ -39,7 +44,7 @@ export function Drivers() {
     if (!file) return;
     api.drivers.uploadDriver(file)
       .then(() => { toast.show('success', '上传成功'); load(); })
-      .catch((err) => showErrorToast())
+      .catch(showUploadError)
       .finally(() => { e.target.value = ''; });
   };
 
@@ -51,7 +56,7 @@ export function Drivers() {
         toast.show('success', `驱动 ${item.name} 重载成功`);
         load();
       })
-      .catch((err) => showErrorToast())
+      .catch(showReloadError)
       .finally(() => setBusyId(0));
   };
 
@@ -82,13 +87,12 @@ export function Drivers() {
         </div>
       }
     >
+      <LoadErrorHint error={error()} onRetry={load} />
       {loading() ? (
         <div class="text-center" style="padding:48px; color:var(--text-muted);">
           <div class="loading-spinner" style="margin:0 auto 16px;"></div>
           <div>加载中...</div>
         </div>
-      ) : error() ? (
-        <div style="color:var(--accent-red); padding:16px 0;">{error()}</div>
       ) : (
         <CrudTable
           style="max-height:520px; overflow:auto;"

@@ -197,6 +197,23 @@ cd xunjiFsu
 # 安装前端依赖
 cd ui/frontend && npm install && cd ../..
 
+# (可选) 调整前端鉴权探测节流间隔（毫秒）
+# 开发默认 600，生产默认 1200
+export VITE_AUTH_CHECK_INTERVAL_MS=800
+
+# (可选) 调整前端轮询间隔（毫秒）
+# Dashboard 状态轮询：开发默认 3000，生产默认 5000
+export VITE_DASHBOARD_STATUS_POLL_MS=4000
+# 网关指标轮询：开发默认 5000，生产默认 8000
+export VITE_GATEWAY_METRICS_POLL_MS=6000
+# 最新采集轮询：开发默认 3000，生产默认 4000
+export VITE_REALTIME_MINI_POLL_MS=3500
+# 北向默认上报间隔：开发/生产默认 5000
+export VITE_NORTHBOUND_DEFAULT_UPLOAD_INTERVAL_MS=7000
+
+# 提示：开发模式会在浏览器控制台打印一次当前生效的前端运行时配置
+# 如果 VITE_* 配置非法或越界，开发模式会输出警告并自动回退默认值
+
 # 编译前端
 make ui
 
@@ -348,6 +365,21 @@ make deploy-windows  # Windows
 | 默认密码 | `123456` |
 
 ## 配置说明
+
+### 运行时环境变量（驱动 / 采集 / 北向）
+
+| 环境变量 | 默认值 | 说明 |
+|------|------|------|
+| `COLLECTOR_DEVICE_SYNC_INTERVAL` | `10s` | 采集器设备状态同步周期 |
+| `COLLECTOR_COMMAND_POLL_INTERVAL` | `500ms` | 采集器北向命令拉取周期 |
+| `NORTHBOUND_MQTT_RECONNECT_INTERVAL` | `5s` | MQTT 北向断线重连重试间隔 |
+| `DRIVER_SERIAL_READ_TIMEOUT` | `200ms`（驱动默认） | 串口读超时 |
+| `DRIVER_SERIAL_OPEN_RETRIES` | `0` | 串口打开重试次数（实际次数=配置+1） |
+| `DRIVER_SERIAL_OPEN_BACKOFF` | `200ms`（驱动默认） | 串口打开重试退避 |
+| `DRIVER_TCP_DIAL_TIMEOUT` | `5s`（驱动默认） | TCP 建连超时 |
+| `DRIVER_TCP_DIAL_RETRIES` | `0` | TCP 建连重试次数（实际次数=配置+1） |
+| `DRIVER_TCP_DIAL_BACKOFF` | `200ms`（驱动默认） | TCP 建连重试退避 |
+| `DRIVER_TCP_READ_TIMEOUT` | `500ms`（驱动默认） | TCP 读超时 |
 
 ### 资源配置
 

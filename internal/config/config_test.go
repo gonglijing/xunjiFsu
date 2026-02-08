@@ -68,6 +68,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.SyncInterval != 5*time.Minute {
 		t.Errorf("SyncInterval = %v, want 5m", cfg.SyncInterval)
 	}
+	if cfg.CollectorDeviceSyncInterval != 10*time.Second {
+		t.Errorf("CollectorDeviceSyncInterval = %v, want 10s", cfg.CollectorDeviceSyncInterval)
+	}
+	if cfg.CollectorCommandPollInterval != 500*time.Millisecond {
+		t.Errorf("CollectorCommandPollInterval = %v, want 500ms", cfg.CollectorCommandPollInterval)
+	}
 
 	// 验证驱动目录默认配置
 	if cfg.DriversDir != "drivers" {
@@ -75,6 +81,9 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.NorthboundPluginsDir != "plugin_north" {
 		t.Errorf("NorthboundPluginsDir = %s, want plugin_north", cfg.NorthboundPluginsDir)
+	}
+	if cfg.NorthboundMQTTReconnectInterval != 5*time.Second {
+		t.Errorf("NorthboundMQTTReconnectInterval = %v, want 5s", cfg.NorthboundMQTTReconnectInterval)
 	}
 
 	// 验证阈值缓存默认配置
@@ -265,6 +274,35 @@ func TestLoadFromEnv_SyncInterval(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnv_CollectorRuntimeIntervals(t *testing.T) {
+	os.Setenv("COLLECTOR_DEVICE_SYNC_INTERVAL", "15s")
+	os.Setenv("COLLECTOR_COMMAND_POLL_INTERVAL", "800ms")
+	defer os.Unsetenv("COLLECTOR_DEVICE_SYNC_INTERVAL")
+	defer os.Unsetenv("COLLECTOR_COMMAND_POLL_INTERVAL")
+
+	cfg := &Config{}
+	loadFromEnv(cfg)
+
+	if cfg.CollectorDeviceSyncInterval != 15*time.Second {
+		t.Errorf("CollectorDeviceSyncInterval = %v, want 15s", cfg.CollectorDeviceSyncInterval)
+	}
+	if cfg.CollectorCommandPollInterval != 800*time.Millisecond {
+		t.Errorf("CollectorCommandPollInterval = %v, want 800ms", cfg.CollectorCommandPollInterval)
+	}
+}
+
+func TestLoadFromEnv_NorthboundMQTTReconnectInterval(t *testing.T) {
+	os.Setenv("NORTHBOUND_MQTT_RECONNECT_INTERVAL", "7s")
+	defer os.Unsetenv("NORTHBOUND_MQTT_RECONNECT_INTERVAL")
+
+	cfg := &Config{}
+	loadFromEnv(cfg)
+
+	if cfg.NorthboundMQTTReconnectInterval != 7*time.Second {
+		t.Errorf("NorthboundMQTTReconnectInterval = %v, want 7s", cfg.NorthboundMQTTReconnectInterval)
+	}
+}
+
 func TestLoadFromEnv_DriversDir(t *testing.T) {
 	os.Setenv("DRIVERS_DIR", "/custom/drivers")
 	os.Setenv("NORTHBOUND_PLUGINS_DIR", "/custom/plugins")
@@ -284,7 +322,7 @@ func TestLoadFromEnv_DriversDir(t *testing.T) {
 
 func TestLoadFromEnv_LogLevel(t *testing.T) {
 	tests := []struct {
-		envValue  string
+		envValue string
 		expected string
 	}{
 		{"debug", "debug"},
@@ -311,7 +349,7 @@ func TestLoadFromEnv_LogLevel(t *testing.T) {
 
 func TestLoadFromEnv_LogJSON(t *testing.T) {
 	tests := []struct {
-		envValue  string
+		envValue string
 		expected bool
 	}{
 		{"true", true},

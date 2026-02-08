@@ -35,6 +35,7 @@ func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFu
 
 			req, _ := p.Memory().Read(uint32(wPtr), uint32(wSize))
 			if _, err := conn.Write(req); err != nil {
+				executor.UnregisterTCP(resourceID)
 				stack[0] = 0
 				return
 			}
@@ -47,6 +48,7 @@ func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFu
 			buf := make([]byte, rCap)
 			n, err := conn.Read(buf)
 			if err != nil || n <= 0 {
+				executor.UnregisterTCP(resourceID)
 				stack[0] = 0
 				return
 			}

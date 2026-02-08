@@ -1,25 +1,29 @@
-import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import { createSignal, onMount, onCleanup } from 'solid-js';
 import api from '../api/services';
 import StatusCards from '../components/cards';
 import { RealtimeMini } from '../sections/RealtimeMini';
 import { LatestAlarms } from '../sections/LatestAlarms';
 import { QuickActions } from '../sections/QuickActions';
 import { GatewayStatus } from '../sections/GatewayStatus';
+import { usePageLoader } from '../utils/pageLoader';
+import { getDashboardStatusPollIntervalMs } from '../utils/runtimeConfig';
+
+const DASHBOARD_STATUS_POLL_INTERVAL_MS = getDashboardStatusPollIntervalMs();
 
 function Dashboard() {
   const [status, setStatus] = createSignal(null);
-  const [loading, setLoading] = createSignal(true);
+  const { loading, run: runStatusLoad } = usePageLoader(async () => {
+    const res = await api.status.getStatus();
+    setStatus(res);
+  });
 
   const loadStatus = () => {
-    api.status.getStatus()
-      .then((res) => setStatus(res))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    runStatusLoad();
   };
 
-  createEffect(() => {
+  onMount(() => {
     loadStatus();
-    const timer = setInterval(loadStatus, 5000);
+    const timer = setInterval(loadStatus, DASHBOARD_STATUS_POLL_INTERVAL_MS);
     onCleanup(() => clearInterval(timer));
   });
 

@@ -2,11 +2,12 @@ import { createSignal } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
-import { showErrorToast } from '../utils/errors';
+import { withErrorToast } from '../utils/errors';
 
 export function QuickActions(props) {
   const toast = useToast();
   const [busy, setBusy] = createSignal(false);
+  const showToggleError = withErrorToast(toast, '切换采集器状态失败');
 
   const toggleCollector = () => {
     setBusy(true);
@@ -16,7 +17,7 @@ export function QuickActions(props) {
         toast.show('success', props.collectorRunning ? '已停止采集' : '已启动采集');
         props.onRefresh?.();
       })
-      .catch((err) => showErrorToast())
+      .catch(showToggleError)
       .finally(() => setBusy(false));
   };
 

@@ -1,11 +1,11 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 import { getErrorMessage } from '../api/errorMessages';
-import { showErrorToast } from '../utils/errors';
+import { showErrorToast, withErrorToast } from '../utils/errors';
 
 const defaultForm = {
   name: '',
@@ -51,6 +51,7 @@ export function Devices() {
   const [detailCache, setDetailCache] = createSignal([]);
   const [detailAlarms, setDetailAlarms] = createSignal([]);
   const [detailLoading, setDetailLoading] = createSignal(false);
+  const showSaveError = withErrorToast(toast, '保存失败');
   let modalRoot;
 
   const normalizeList = (res) => {
@@ -84,9 +85,7 @@ export function Devices() {
       .finally(() => setLoading(false));
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   // ESC 关闭弹窗
   createEffect(() => {
@@ -127,7 +126,7 @@ export function Devices() {
       setShowModal(false);
       load();
     })
-    .catch((err) => showErrorToast())
+    .catch(showSaveError)
     .finally(() => setSubmitting(false));
   };
 

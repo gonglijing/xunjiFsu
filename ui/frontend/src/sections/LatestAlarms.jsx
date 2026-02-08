@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, onMount, For, Show } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
@@ -15,9 +15,7 @@ export function LatestAlarms() {
       .catch((err) => showErrorToast(toast, err, '加载告警失败'));
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   const ack = (id) => {
     api.alarms.acknowledgeAlarm(id)

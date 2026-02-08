@@ -1,12 +1,22 @@
-import { createSignal, createEffect, Show, For } from 'solid-js';
+import { createSignal, createEffect, onMount, Show, For } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
+import LoadErrorHint from '../components/LoadErrorHint';
 import { getErrorMessage } from '../api/errorMessages';
-import { showErrorToast } from '../utils/errors';
+import { showErrorToast, withErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import { getNorthboundDefaultUploadIntervalMs } from '../utils/runtimeConfig';
 
-const empty = { name: '', type: 'mqtt', upload_interval: 5000, config: '{}', enabled: 1 };
+const DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS = getNorthboundDefaultUploadIntervalMs();
+const empty = {
+  name: '',
+  type: 'mqtt',
+  upload_interval: DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS,
+  config: '{}',
+  enabled: 1,
+};
 
 function toInt(value, fallback = 0) {
   const n = Number.parseInt(`${value ?? ''}`, 10);
@@ -34,7 +44,7 @@ function hasSchemaField(schemaFields, key) {
   return (schemaFields || []).some((field) => field.key === key);
 }
 
-function normalizeConfig(raw, schemaFields, uploadIntervalFallback = 5000) {
+function normalizeConfig(raw, schemaFields, uploadIntervalFallback = DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS) {
   const src = raw && typeof raw === 'object' ? raw : {};
   const out = { ...buildSchemaDefaults(schemaFields) };
 
@@ -49,8 +59,11 @@ function normalizeConfig(raw, schemaFields, uploadIntervalFallback = 5000) {
 
   // 处理上传周期
   if (hasSchemaField(schemaFields, 'uploadIntervalMs') && toInt(out.uploadIntervalMs, 0) <= 0) {
-    const fallback = toInt(src.uploadIntervalMs, toInt(src.reportIntervalMs, toInt(uploadIntervalFallback, 5000)));
-    out.uploadIntervalMs = fallback > 0 ? fallback : 5000;
+    const fallback = toInt(
+      src.uploadIntervalMs,
+      toInt(src.reportIntervalMs, toInt(uploadIntervalFallback, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS)),
+    );
+    out.uploadIntervalMs = fallback > 0 ? fallback : DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS;
   }
 
   // QOS 校验
@@ -146,7 +159,25 @@ export function Northbound() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const [runtime, setRuntime] = createSignal([]);
-  const [loading, setLoading] = createSignal(true);
+  const showLoadError = withErrorToast(toast, '加载北向配置失败');
+  const showSaveError = withErrorToast(toast, '保存失败');
+  const showSyncError = withErrorToast(toast, '同步失败');
+  const {
+    loading,
+    error: loadError,
+    setError: setLoadError,
+    run: runNorthboundLoad,
+  } = usePageLoader(async () => {
+    const [configs, status] = await Promise.all([
+      api.northbound.listNorthboundConfigs(),
+      api.northbound.listNorthboundStatus(),
+    ]);
+    setItems(configs || []);
+    setRuntime(status || []);
+  }, {
+    onError: showLoadError,
+    errorMessage: '加载北向配置失败',
+  });
   const [form, setForm] = createSignal(empty);
   const [editing, setEditing] = createSignal(null);
   const [showModal, setShowModal] = createSignal(false);
@@ -202,20 +233,11 @@ export function Northbound() {
   };
 
   const load = () => {
-    setLoading(true);
-    Promise.all([
-      api.northbound.listNorthboundConfigs(),
-      api.northbound.listNorthboundStatus(),
-    ])
-      .then(([configs, status]) => {
-        setItems(configs || []);
-        setRuntime(status || []);
-      })
-      .catch((err) => showErrorToast())
-      .finally(() => setLoading(false));
+    setLoadError('');
+    runNorthboundLoad();
   };
 
-  createEffect(() => {
+  onMount(() => {
     load();
     loadSchema('pandax', true);
   });
@@ -236,7 +258,7 @@ export function Northbound() {
 
       // 从 schema 配置同步上传周期
       if (hasSchemaField(schema(), 'uploadIntervalMs')) {
-        payload.upload_interval = toInt(cfg.uploadIntervalMs, 5000);
+        payload.upload_interval = toInt(cfg.uploadIntervalMs, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
       }
       payload.config = JSON.stringify(cfg);
 
@@ -277,7 +299,7 @@ export function Northbound() {
       resetForm();
       load();
     })
-      .catch((err) => showErrorToast())
+      .catch(showSaveError)
       .finally(() => setSaving(false));
   };
 
@@ -285,7 +307,7 @@ export function Northbound() {
     setForm(empty);
     setEditing(null);
     setShowModal(false);
-    setConfig(normalizeConfig({}, [], 5000));
+    setConfig(normalizeConfig({}, [], DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS));
     setConfigErrors({});
   };
 
@@ -313,7 +335,7 @@ export function Northbound() {
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
         load();
       })
-      .catch((err) => showErrorToast())
+      .catch(showSyncError)
       .finally(() => setSyncing(false));
   };
 
@@ -328,7 +350,7 @@ export function Northbound() {
     setForm(empty);
     setEditing(null);
     setShowModal(true);
-    setConfig(normalizeConfig({}, [], 5000));
+    setConfig(normalizeConfig({}, [], DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS));
     setConfigErrors({});
     // 确保加载了对应类型的 schema
     const currentType = form().type || 'mqtt';
@@ -338,7 +360,7 @@ export function Northbound() {
   };
 
   const edit = (item) => {
-    const upload = toInt(item.upload_interval, 5000);
+    const upload = toInt(item.upload_interval, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
     const base = { name: item.name, type: item.type, upload_interval: upload, config: item.config, enabled: item.enabled };
 
     const parsed = safeParseJSON(item.config, {});
@@ -398,7 +420,7 @@ export function Northbound() {
       const next = { ...prev, [key]: nextValue };
       // 同步上传周期
       if (key === 'uploadIntervalMs') {
-        const uploadInterval = toInt(next.uploadIntervalMs, 5000);
+        const uploadInterval = toInt(next.uploadIntervalMs, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
         setForm((f) => ({ ...f, upload_interval: uploadInterval }));
       }
       return next;
@@ -437,6 +459,7 @@ export function Northbound() {
           </div>
         }
       >
+        <LoadErrorHint error={loadError()} onRetry={load} />
         {loading() ? (
           <div class="text-center" style="padding:48px; color:var(--text-muted);">
             <div class="loading-spinner" style="margin:0 auto 16px;"></div>

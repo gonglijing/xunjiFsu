@@ -4,10 +4,11 @@ import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { getErrorMessage } from '../api/errorMessages';
-import { showErrorToast } from '../utils/errors';
+import { showErrorToast, withErrorToast } from '../utils/errors';
 
 function Realtime() {
   const toast = useToast();
+  const showLoadError = withErrorToast(toast, '加载实时数据失败');
   const [devices, setDevices] = createSignal([]);
   const [selected, setSelected] = createSignal('');
   const [points, setPoints] = createSignal([]);
@@ -163,7 +164,7 @@ function Realtime() {
         list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
         setPoints(list);
       })
-      .catch((err) => showErrorToast())
+      .catch(showLoadError)
       .finally(() => setLoading(false));
   });
 

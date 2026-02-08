@@ -31,32 +31,32 @@ type MQTTConfig struct {
 // MQTTAdapter MQTT北向适配器
 // 每个 MQTTAdapter 自己管理自己的状态和发送线程
 type MQTTAdapter struct {
-	name       string
-	config     *MQTTConfig
-	broker     string
-	topic      string
-	alarmTopic string
-	clientID   string
-	username   string
-	password   string
-	qos        byte
-	retain     bool
+	name         string
+	config       *MQTTConfig
+	broker       string
+	topic        string
+	alarmTopic   string
+	clientID     string
+	username     string
+	password     string
+	qos          byte
+	retain       bool
 	cleanSession bool
-	timeout    time.Duration
-	keepAlive  time.Duration
-	interval   time.Duration
-	lastSend   time.Time
+	timeout      time.Duration
+	keepAlive    time.Duration
+	interval     time.Duration
+	lastSend     time.Time
 
 	// MQTT客户端
 	client mqtt.Client
 
 	// 数据缓冲
 	pendingData []*models.CollectData
-	pendingMu  sync.RWMutex
+	pendingMu   sync.RWMutex
 
 	// 报警缓冲
 	pendingAlarms []*models.AlarmPayload
-	alarmMu      sync.RWMutex
+	alarmMu       sync.RWMutex
 
 	// 控制通道
 	stopChan chan struct{}
@@ -64,23 +64,35 @@ type MQTTAdapter struct {
 	wg       sync.WaitGroup
 
 	// 状态
-	mu          sync.RWMutex
-	initialized bool
-	enabled     bool
-	connected   bool
+	mu                sync.RWMutex
+	initialized       bool
+	enabled           bool
+	connected         bool
+	reconnecting      bool
+	reconnectInterval time.Duration
 }
 
 // NewMQTTAdapter 创建MQTT适配器
 func NewMQTTAdapter(name string) *MQTTAdapter {
 	return &MQTTAdapter{
-		name:        name,
-		lastSend:    time.Time{},
-		interval:    5 * time.Second, // 默认5秒
-		stopChan:    make(chan struct{}),
-		dataChan:    make(chan struct{}, 1),
-		pendingData: make([]*models.CollectData, 0),
-		pendingAlarms: make([]*models.AlarmPayload, 0),
+		name:              name,
+		lastSend:          time.Time{},
+		interval:          5 * time.Second, // 默认5秒
+		reconnectInterval: 5 * time.Second,
+		stopChan:          make(chan struct{}),
+		dataChan:          make(chan struct{}, 1),
+		pendingData:       make([]*models.CollectData, 0),
+		pendingAlarms:     make([]*models.AlarmPayload, 0),
 	}
+}
+
+func (a *MQTTAdapter) SetReconnectInterval(interval time.Duration) {
+	a.mu.Lock()
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	a.reconnectInterval = interval
+	a.mu.Unlock()
 }
 
 // Name 获取名称
@@ -209,6 +221,20 @@ func (a *MQTTAdapter) connectMQTT() (mqtt.Client, error) {
 
 // reconnect 断线重连
 func (a *MQTTAdapter) reconnect() {
+	a.mu.Lock()
+	if a.reconnecting {
+		a.mu.Unlock()
+		return
+	}
+	a.reconnecting = true
+	a.mu.Unlock()
+
+	defer func() {
+		a.mu.Lock()
+		a.reconnecting = false
+		a.mu.Unlock()
+	}()
+
 	for {
 		select {
 		case <-a.stopChan:
@@ -217,8 +243,18 @@ func (a *MQTTAdapter) reconnect() {
 			log.Printf("MQTT [%s] attempting to reconnect...", a.name)
 			client, err := a.connectMQTT()
 			if err != nil {
-				log.Printf("MQTT [%s] reconnect failed: %v, retry in 5s", a.name, err)
-				time.Sleep(5 * time.Second)
+				a.mu.RLock()
+				reconnectInterval := a.reconnectInterval
+				a.mu.RUnlock()
+				if reconnectInterval <= 0 {
+					reconnectInterval = 5 * time.Second
+				}
+				log.Printf("MQTT [%s] reconnect failed: %v, retry in %v", a.name, err, reconnectInterval)
+				select {
+				case <-time.After(reconnectInterval):
+				case <-a.stopChan:
+					return
+				}
 				continue
 			}
 
@@ -235,6 +271,7 @@ func (a *MQTTAdapter) reconnect() {
 func (a *MQTTAdapter) Start() {
 	a.mu.Lock()
 	if a.initialized && !a.enabled {
+		a.stopChan = make(chan struct{})
 		a.enabled = true
 		a.wg.Add(2)
 		go a.sendLoop()
@@ -249,7 +286,10 @@ func (a *MQTTAdapter) Stop() {
 	a.mu.Lock()
 	if a.enabled {
 		a.enabled = false
-		close(a.stopChan)
+		stopChan := a.stopChan
+		if stopChan != nil {
+			close(stopChan)
+		}
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
@@ -461,9 +501,9 @@ func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
 			"actual_value": alarm.ActualValue,
 			"threshold":    alarm.Threshold,
 			"operator":     alarm.Operator,
-			"severity":    alarm.Severity,
-			"message":     alarm.Message,
-			"timestamp":   time.Now().Unix(),
+			"severity":     alarm.Severity,
+			"message":      alarm.Message,
+			"timestamp":    time.Now().Unix(),
 		}
 		body, _ = json.Marshal(msg)
 	} else {
@@ -508,19 +548,19 @@ func (a *MQTTAdapter) GetStats() map[string]interface{} {
 
 	return map[string]interface{}{
 		"name":          a.name,
-		"type":         "mqtt",
-		"enabled":      enabled,
-		"initialized":  initialized,
-		"connected":    connected,
-		"interval_ms":  interval.Milliseconds(),
-		"pending_data": pendingCount,
+		"type":          "mqtt",
+		"enabled":       enabled,
+		"initialized":   initialized,
+		"connected":     connected,
+		"interval_ms":   interval.Milliseconds(),
+		"pending_data":  pendingCount,
 		"pending_alarm": alarmCount,
-		"broker":       a.broker,
-		"topic":        a.topic,
-		"alarm_topic":  a.alarmTopic,
-		"client_id":    a.clientID,
-		"qos":          a.qos,
-		"retain":       a.retain,
+		"broker":        a.broker,
+		"topic":         a.topic,
+		"alarm_topic":   a.alarmTopic,
+		"client_id":     a.clientID,
+		"qos":           a.qos,
+		"retain":        a.retain,
 	}
 }
 

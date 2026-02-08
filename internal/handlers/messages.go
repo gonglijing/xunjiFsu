@@ -20,6 +20,8 @@ const (
 	errDeviceHasNoDriverMessage           = "Device has no driver"
 
 	errGatewayIdentityRequiredMessage = "请先在网关配置中设置 product_key 和 device_key"
+	errHistoryStartAfterEndDetail     = "start time must be before end time"
+	errHistoryFilterRequiresDevice    = "device_id is required when using field_name/start/end filters"
 )
 
 func newAPIError(code, message string) APIErrorDef {

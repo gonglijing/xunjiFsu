@@ -335,6 +335,57 @@ func TestStartTickerWorker_NilWorker(t *testing.T) {
 	close(c.stopChan)
 }
 
+func TestWaitForStopOrWake_Wake(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+	c.stopChan = make(chan struct{})
+	c.wakeChan = make(chan struct{}, 1)
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		c.wakeChan <- struct{}{}
+	}()
+
+	if stopped := c.waitForStopOrWake(200 * time.Millisecond); stopped {
+		t.Fatalf("expected wake to return stopped=false")
+	}
+}
+
+func TestWaitForStopOrWake_Stop(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+	c.stopChan = make(chan struct{})
+	c.wakeChan = make(chan struct{}, 1)
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		close(c.stopChan)
+	}()
+
+	if stopped := c.waitForStopOrWake(200 * time.Millisecond); !stopped {
+		t.Fatalf("expected stop to return stopped=true")
+	}
+}
+
+func TestPeekNextCurrentTaskLockedSkipsStale(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	device := &models.Device{ID: 11, CollectInterval: 1000, StorageInterval: 60}
+	oldTask := newCollectTask(device, nil)
+	newTask := newCollectTask(device, oldTask)
+
+	c.mu.Lock()
+	c.tasks[device.ID] = newTask
+	*c.taskHeap = append(*c.taskHeap, oldTask, newTask)
+	peeked := c.peekNextCurrentTaskLocked()
+	c.mu.Unlock()
+
+	if peeked != newTask {
+		t.Fatalf("expected peeked current task to be new task")
+	}
+}
+
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }

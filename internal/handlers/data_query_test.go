@@ -54,3 +54,39 @@ func TestParseHistoryDataQuery_InvalidTime(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestParseHistoryDataQuery_StartAfterEnd(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?device_id=1&start=2026-01-02T05:04:05Z&end=2026-01-02T04:04:05Z", nil)
+
+	_, err := parseHistoryDataQuery(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != errHistoryStartAfterEndDetail {
+		t.Fatalf("error = %q, want %q", err.Error(), errHistoryStartAfterEndDetail)
+	}
+}
+
+func TestParseHistoryDataQuery_FilterRequiresDeviceID(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?field_name=temp", nil)
+
+	_, err := parseHistoryDataQuery(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != errHistoryFilterRequiresDevice {
+		t.Fatalf("error = %q, want %q", err.Error(), errHistoryFilterRequiresDevice)
+	}
+}
+
+func TestParseHistoryDataQuery_InvalidDeviceIDValue(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?device_id=0", nil)
+
+	_, err := parseHistoryDataQuery(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != errInvalidDeviceIDMessage {
+		t.Fatalf("error = %q, want %q", err.Error(), errInvalidDeviceIDMessage)
+	}
+}

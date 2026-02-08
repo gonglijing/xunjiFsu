@@ -1,8 +1,22 @@
 const TOKEN_KEY = 'gogw_jwt';
 import { resolveAPIErrorMessage } from './api/errorMessages';
 
+const unauthorizedListeners = new Set();
+
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
+}
+
+function emitUnauthorized() {
+  let handled = false;
+  unauthorizedListeners.forEach((listener) => {
+    try {
+      if (listener() === true) handled = true;
+    } catch {
+      // ignore listener errors
+    }
+  });
+  return handled;
 }
 
 function authHeaders(headers = {}) {
@@ -13,8 +27,14 @@ function authHeaders(headers = {}) {
 function handleAuth(res) {
   if (res.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
-    window.location.href = '/login';
-    throw new Error('unauthorized');
+    const handled = emitUnauthorized();
+    if (!handled) {
+      window.location.href = '/login';
+    }
+    const err = new Error('unauthorized');
+    err.status = 401;
+    err.code = 'E_UNAUTHORIZED';
+    throw err;
   }
 }
 
@@ -101,6 +121,18 @@ async function ensureOK(res) {
 
 export function storeToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function onUnauthorized(listener) {
+  if (typeof listener !== 'function') {
+    return () => {};
+  }
+  unauthorizedListeners.add(listener);
+  return () => unauthorizedListeners.delete(listener);
 }
 
 export async function getJSON(url, options = {}) {

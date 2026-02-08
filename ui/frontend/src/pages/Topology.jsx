@@ -1,14 +1,26 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, onMount, For, Show } from 'solid-js';
 import Card from '../components/cards';
 import api from '../api/services';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
+import { usePageLoader } from '../utils/pageLoader';
 
 function Topology() {
   const [gateway, setGateway] = createSignal(null);
   const [resources, setResources] = createSignal([]);
   const [devices, setDevices] = createSignal([]);
   const [northbounds, setNorthbounds] = createSignal([]);
-  const [loading, setLoading] = createSignal(true);
+  const { loading, run: runTopologyLoad } = usePageLoader(async () => {
+    const [gwRes, resRes, devRes, nbRes] = await Promise.all([
+      api.gateway.getGatewayConfig(),
+      api.resources.listResources(),
+      api.devices.listDevices(),
+      api.northbound.listNorthboundConfigs(),
+    ]);
+    setGateway(gwRes || null);
+    setResources(resRes || []);
+    setDevices(devRes || []);
+    setNorthbounds(nbRes || []);
+  });
 
   const [detailVisible, setDetailVisible] = createSignal(false);
   const [detailDevice, setDetailDevice] = createSignal(null);
@@ -17,24 +29,10 @@ function Topology() {
   const [detailLoading, setDetailLoading] = createSignal(false);
 
   const load = async () => {
-    setLoading(true);
-    try {
-      const [gwRes, resRes, devRes, nbRes] = await Promise.all([
-        api.gateway.getGatewayConfig(),
-        api.resources.listResources(),
-        api.devices.listDevices(),
-        api.northbound.listNorthboundConfigs(),
-      ]);
-      setGateway(gwRes || null);
-      setResources(resRes || []);
-      setDevices(devRes || []);
-      setNorthbounds(nbRes || []);
-    } finally {
-      setLoading(false);
-    }
+    await runTopologyLoad();
   };
 
-  createEffect(load);
+  onMount(load);
 
   const devicesByResource = () => {
     const map = {};
@@ -137,7 +135,7 @@ function Topology() {
               >
                 <div style="font-size:14px;opacity:0.8;">网关</div>
                 <div style="font-weight:600;margin-top:4px;">
-                  {gateway()?.name || 'HuShu 网关'}
+                  {gateway()?.gateway_name || 'HuShu 网关'}
                 </div>
                 <div class="text-xs text-muted" style="margin-top:4px;">
                   {gateway()?.id ? `ID: ${gateway().id}` : ''}

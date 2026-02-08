@@ -1,21 +1,25 @@
-import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { createSignal, onMount, onCleanup, Show } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
+import { usePageLoader } from '../utils/pageLoader';
+import { getGatewayMetricsPollIntervalMs } from '../utils/runtimeConfig';
+
+const GATEWAY_METRICS_POLL_INTERVAL_MS = getGatewayMetricsPollIntervalMs();
 
 export function GatewayStatus() {
   const [metrics, setMetrics] = createSignal(null);
-  const [loading, setLoading] = createSignal(true);
+  const { loading, run: runMetricsLoad } = usePageLoader(async () => {
+    const res = await api.metrics.getMetrics();
+    setMetrics(res || null);
+  });
 
   const load = () => {
-    api.metrics.getMetrics()
-      .then((res) => setMetrics(res || null))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    runMetricsLoad();
   };
 
-  createEffect(() => {
+  onMount(() => {
     load();
-    const timer = setInterval(load, 8000);
+    const timer = setInterval(load, GATEWAY_METRICS_POLL_INTERVAL_MS);
     onCleanup(() => clearInterval(timer));
   });
 

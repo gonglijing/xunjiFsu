@@ -1,15 +1,29 @@
-import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import { createSignal, createEffect, onCleanup, onMount, Show, For } from 'solid-js';
 import api from '../api/services';
 import Card, { SectionTabs } from '../components/cards';
 import { useToast } from '../components/Toast';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import LoadErrorHint from '../components/LoadErrorHint';
 
 const empty = { name: '', type: 'serial', path: '', enabled: 1 };
 
 function Resources() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
+  const {
+    loading,
+    error: loadError,
+    setError: setLoadError,
+    run: runResourcesLoad,
+  } = usePageLoader(async () => {
+    const res = await api.resources.listResources();
+    setItems(res || []);
+  }, {
+    errorMessage: '加载资源失败',
+    onError: (err) => showErrorToast(toast, err, '加载资源失败'),
+  });
   const [form, setForm] = createSignal(empty);
   const [editing, setEditing] = createSignal(null);
   const [showModal, setShowModal] = createSignal(false);
@@ -17,14 +31,11 @@ function Resources() {
   const [err, setErr] = createSignal('');
 
   const load = () => {
-    api.resources.listResources()
-      .then((res) => setItems(res || []))
-      .catch((err) => showErrorToast(toast, err, '加载资源失败'));
+    setLoadError('');
+    runResourcesLoad();
   };
 
-  createEffect(() => {
-    load();
-  });
+  onMount(load);
 
   // ESC 关闭弹窗
   createEffect(() => {
@@ -78,6 +89,7 @@ function Resources() {
           </button>
         }
       >
+        <LoadErrorHint error={loadError()} onRetry={load} />
         <div class="table-container" style="max-height:520px; overflow:auto;">
           <table class="table">
             <thead>
@@ -118,7 +130,9 @@ function Resources() {
               </For>
               <Show when={items().length === 0}>
                 <tr>
-                  <td colSpan={6} style="text-align:center; padding:24px; color:var(--text-muted);">暂无资源</td>
+                  <td colSpan={6} style="text-align:center; padding:24px; color:var(--text-muted);">
+                    {loading() ? '加载中...' : '暂无资源'}
+                  </td>
                 </tr>
               </Show>
             </tbody>

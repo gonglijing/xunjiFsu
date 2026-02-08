@@ -1,9 +1,11 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
+import { usePageLoader } from '../utils/pageLoader';
+import LoadErrorHint from '../components/LoadErrorHint';
 
 const empty = { device_id: '', field_name: '', operator: '>', value: 0, severity: 'warning', message: '', enabled: 1 };
 
@@ -11,27 +13,33 @@ export function Thresholds() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const [devices, setDevices] = createSignal([]);
+  const {
+    loading,
+    error: loadError,
+    setError: setLoadError,
+    run: runThresholdsLoad,
+  } = usePageLoader(async () => {
+    const [thresholds, devicesList] = await Promise.all([
+      api.thresholds.listThresholds(),
+      api.devices.listDevices(),
+    ]);
+    setItems(thresholds || []);
+    setDevices(devicesList || []);
+  }, {
+    errorMessage: '加载阈值失败',
+    onError: (err) => showErrorToast(toast, err, '加载阈值失败'),
+  });
   const [form, setForm] = createSignal(empty);
   const [showModal, setShowModal] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [err, setErr] = createSignal('');
 
   const load = () => {
-    api.thresholds.listThresholds()
-      .then((res) => setItems(res || []))
-      .catch((err) => showErrorToast(toast, err, '加载阈值失败'));
+    setLoadError('');
+    runThresholdsLoad();
   };
 
-  const loadDevices = () => {
-    api.devices.listDevices()
-      .then((res) => setDevices(res || []))
-      .catch(() => {});
-  };
-
-  createEffect(() => {
-    load();
-    loadDevices();
-  });
+  onMount(load);
 
   createEffect(() => {
     if (!showModal()) return;
@@ -79,6 +87,7 @@ export function Thresholds() {
           </button>
         }
       >
+        <LoadErrorHint error={loadError()} onRetry={load} />
         <div class="table-container" style="max-height:520px; overflow:auto;">
           <table class="table">
             <thead>
@@ -115,7 +124,9 @@ export function Thresholds() {
               <For each={items().length === 0 ? [1] : []}>
                 {() => (
                   <tr>
-                    <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">暂无阈值</td>
+                    <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">
+                      {loading() ? '加载中...' : '暂无阈值'}
+                    </td>
                   </tr>
                 )}
               </For>

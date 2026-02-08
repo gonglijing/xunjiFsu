@@ -172,21 +172,7 @@ func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
 	e.mu.RUnlock()
 
 	if exists && conn != nil {
-		// 检查连接是否仍然有效
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			if err := tcpConn.SetReadDeadline(time.Now()); err == nil {
-				// 测试连接是否存活
-				one := []byte{0}
-				_, err := tcpConn.Write(one)
-				if err == nil {
-					return conn
-				}
-			}
-		}
-		// 连接无效，关闭并删除
-		e.mu.Lock()
-		delete(e.tcpConns, resourceID)
-		e.mu.Unlock()
+		return conn
 	}
 
 	// 获取路径信息

@@ -5,3 +5,8 @@ export function showErrorToast(toast, error, fallback = '操作失败') {
   toast.show('error', getErrorMessage(error, fallback));
 }
 
+export function withErrorToast(toast, fallback = '操作失败') {
+  return (error) => {
+    showErrorToast(toast, error, fallback);
+  };
+}
