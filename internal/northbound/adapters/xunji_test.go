@@ -1,6 +1,9 @@
 package adapters
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestExtractCommandProperties_DirectParams(t *testing.T) {
 	params := map[string]interface{}{
@@ -110,5 +113,63 @@ func TestParseIdentityMap(t *testing.T) {
 	})
 	if pk != "pk" || dk != "dk" {
 		t.Fatalf("expected trimmed identity, got %q/%q", pk, dk)
+	}
+}
+
+func TestParseXunJiConfig_SnakeCaseCompatibility(t *testing.T) {
+	config := `{
+		"product_key": "pk",
+		"device_key": "dk",
+		"server_url": "127.0.0.1",
+		"port": 1883,
+		"client_id": "cid",
+		"keep_alive": 30,
+		"connect_timeout": 9,
+		"upload_interval_ms": 3000,
+		"alarm_flush_interval_ms": 1000,
+		"alarm_batch_size": 10,
+		"alarm_queue_size": 100,
+		"realtime_queue_size": 200
+	}`
+
+	cfg, err := parseXunJiConfig(config)
+	if err != nil {
+		t.Fatalf("parseXunJiConfig() error = %v", err)
+	}
+	if cfg.ProductKey != "pk" || cfg.DeviceKey != "dk" {
+		t.Fatalf("identity mismatch: %+v", cfg)
+	}
+	if cfg.ServerURL != "tcp://127.0.0.1:1883" {
+		t.Fatalf("server url mismatch: %q", cfg.ServerURL)
+	}
+	if cfg.ClientID != "cid" {
+		t.Fatalf("client id mismatch: %q", cfg.ClientID)
+	}
+	if cfg.KeepAlive != 30 || cfg.Timeout != 9 {
+		t.Fatalf("mqtt options mismatch: keepAlive=%d timeout=%d", cfg.KeepAlive, cfg.Timeout)
+	}
+	if cfg.UploadIntervalMs != 3000 || cfg.AlarmFlushIntervalMs != 1000 {
+		t.Fatalf("interval mismatch: upload=%d alarm=%d", cfg.UploadIntervalMs, cfg.AlarmFlushIntervalMs)
+	}
+	if cfg.AlarmBatchSize != 10 || cfg.AlarmQueueSize != 100 || cfg.RealtimeQueueSize != 200 {
+		t.Fatalf("queue mismatch: batch=%d alarmQueue=%d realtimeQueue=%d", cfg.AlarmBatchSize, cfg.AlarmQueueSize, cfg.RealtimeQueueSize)
+	}
+}
+
+func TestParseXunJiConfig_Defaults(t *testing.T) {
+	config := `{"productKey":"pk","deviceKey":"dk","serverUrl":"tcp://127.0.0.1:1883"}`
+	cfg, err := parseXunJiConfig(config)
+	if err != nil {
+		t.Fatalf("parseXunJiConfig() error = %v", err)
+	}
+
+	if cfg.KeepAlive != 60 || cfg.Timeout != 10 {
+		t.Fatalf("default mqtt options mismatch: keepAlive=%d timeout=%d", cfg.KeepAlive, cfg.Timeout)
+	}
+	if cfg.UploadIntervalMs != int((5 * time.Second).Milliseconds()) {
+		t.Fatalf("default upload interval mismatch: %d", cfg.UploadIntervalMs)
+	}
+	if cfg.AlarmFlushIntervalMs != int((2 * time.Second).Milliseconds()) {
+		t.Fatalf("default alarm flush mismatch: %d", cfg.AlarmFlushIntervalMs)
 	}
 }

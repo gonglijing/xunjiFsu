@@ -1,12 +1,9 @@
 package adapters
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"log"
-	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,8 +13,6 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gonglijing/xunjiFsu/internal/models"
-	northboundpb "github.com/gonglijing/xunjiFsu/internal/northbound/pb"
-	"google.golang.org/grpc"
 )
 
 // XunJiConfig 循迹北向配置（与 models.XunJiConfig 保持一致）
@@ -38,8 +33,6 @@ type XunJiConfig struct {
 	UploadIntervalMs int `json:"uploadIntervalMs"`
 	// 兼容旧字段：插件内管理上传节奏（毫秒）。<=0 使用默认值。
 	ReportIntervalMs int `json:"reportIntervalMs"`
-	// 插件 gRPC 地址（主程序 -> 插件），为空则按 productKey/deviceKey 自动生成本机地址。
-	GRPCAddress string `json:"grpcAddress"`
 	// 报警批量发送周期（毫秒）。<=0 使用默认值。
 	AlarmFlushIntervalMs int `json:"alarmFlushIntervalMs"`
 	// 单次批量发送报警条数。<=0 使用默认值。
@@ -93,11 +86,6 @@ type XunJiAdapter struct {
 	flushNow chan struct{}
 	stopChan chan struct{}
 	wg       sync.WaitGroup
-
-	// gRPC 服务
-	grpcAddress  string
-	grpcListener net.Listener
-	grpcServer   *grpc.Server
 
 	// 状态
 	mu          sync.RWMutex
@@ -160,25 +148,9 @@ func (a *XunJiAdapter) Initialize(configStr string) error {
 		timeout = time.Duration(cfg.Timeout) * time.Second
 	}
 
-	// 启动 gRPC 服务
-	grpcAddress := resolveXunJiGRPCAddress(cfg.ProductKey, cfg.DeviceKey, cfg.GRPCAddress)
-	grpcListener, err := net.Listen("tcp", grpcAddress)
-	if err != nil {
-		return fmt.Errorf("failed to listen xunji grpc %s: %w", grpcAddress, err)
-	}
-	grpcServer := grpc.NewServer()
-	northboundpb.RegisterXunjiIngressServer(grpcServer, &xunjiIngressServer{adapter: a})
-	go func() {
-		if serveErr := grpcServer.Serve(grpcListener); serveErr != nil {
-			log.Printf("xunji grpc server stopped: %v", serveErr)
-		}
-	}()
-
 	// 连接 MQTT
 	client, err := connectMQTT(broker, clientID, cfg.Username, cfg.Password, cfg.KeepAlive, cfg.Timeout)
 	if err != nil {
-		grpcServer.Stop()
-		_ = grpcListener.Close()
 		return fmt.Errorf("failed to connect MQTT: %w", err)
 	}
 
@@ -203,9 +175,6 @@ func (a *XunJiAdapter) Initialize(configStr string) error {
 	a.commandCap = resolvePositive(cfg.RealtimeQueueSize, defaultRealtimeQueue)
 	a.flushNow = make(chan struct{}, 1)
 	a.stopChan = make(chan struct{})
-	a.grpcAddress = grpcAddress
-	a.grpcListener = grpcListener
-	a.grpcServer = grpcServer
 	a.initialized = true
 	a.connected = true
 	a.mu.Unlock()
@@ -213,8 +182,8 @@ func (a *XunJiAdapter) Initialize(configStr string) error {
 	// 订阅命令主题
 	a.subscribeCommandTopics(client)
 
-	log.Printf("XunJi adapter initialized: %s (broker=%s, topic=%s, grpc=%s)",
-		a.name, broker, topic, grpcAddress)
+	log.Printf("XunJi adapter initialized: %s (broker=%s, topic=%s)",
+		a.name, broker, topic)
 	return nil
 }
 
@@ -306,8 +275,6 @@ func (a *XunJiAdapter) Close() error {
 	a.mu.Lock()
 	stopChan := a.stopChan
 	client := a.client
-	grpcServer := a.grpcServer
-	grpcListener := a.grpcListener
 	a.initialized = false
 	a.connected = false
 	a.mu.Unlock()
@@ -321,12 +288,6 @@ func (a *XunJiAdapter) Close() error {
 	_ = a.flushLatestData()
 	_ = a.flushAlarmBatch()
 
-	if grpcServer != nil {
-		grpcServer.Stop()
-	}
-	if grpcListener != nil {
-		_ = grpcListener.Close()
-	}
 	if client != nil && client.IsConnected() {
 		client.Disconnect(250)
 	}
@@ -339,9 +300,6 @@ func (a *XunJiAdapter) Close() error {
 	a.latestData = nil
 	a.alarmQueue = nil
 	a.commandQueue = nil
-	a.grpcAddress = ""
-	a.grpcListener = nil
-	a.grpcServer = nil
 	a.mu.Unlock()
 
 	return nil
@@ -974,93 +932,36 @@ func (a *XunJiAdapter) PendingCommandCount() int {
 	return len(a.commandQueue)
 }
 
-// xunjiIngressServer gRPC 入口服务
-type xunjiIngressServer struct {
-	northboundpb.UnimplementedXunjiIngressServer
-	adapter *XunJiAdapter
-}
-
-func (s *xunjiIngressServer) PushRealtime(_ context.Context, req *northboundpb.PushRealtimeRequest) (*northboundpb.PushAck, error) {
-	if req == nil {
-		return &northboundpb.PushAck{Success: false, Message: "request is nil"}, nil
-	}
-
-	s.adapter.dataMu.Lock()
-	if !s.adapter.initialized {
-		s.adapter.dataMu.Unlock()
-		return &northboundpb.PushAck{Success: false, Message: "adapter not initialized"}, nil
-	}
-
-	ts := time.UnixMilli(req.GetTimestampUnixMs())
-	if req.GetTimestampUnixMs() <= 0 {
-		ts = time.Now()
-	}
-
-	data := &models.CollectData{
-		DeviceID:   req.GetDeviceId(),
-		DeviceName: req.GetDeviceName(),
-		ProductKey: req.GetProductKey(),
-		DeviceKey:  req.GetDeviceKey(),
-		Timestamp:  ts,
-		Fields:     req.GetFields(),
-	}
-
-	s.adapter.enqueueRealtimeLocked(data)
-	s.adapter.dataMu.Unlock()
-
-	return &northboundpb.PushAck{Success: true, Message: "ok"}, nil
-}
-
-func (s *xunjiIngressServer) PushAlarm(_ context.Context, req *northboundpb.PushAlarmRequest) (*northboundpb.PushAck, error) {
-	if req == nil {
-		return &northboundpb.PushAck{Success: false, Message: "request is nil"}, nil
-	}
-
-	s.adapter.alarmMu.Lock()
-	if !s.adapter.initialized {
-		s.adapter.alarmMu.Unlock()
-		return &northboundpb.PushAck{Success: false, Message: "adapter not initialized"}, nil
-	}
-
-	alarm := &models.AlarmPayload{
-		DeviceID:    req.GetDeviceId(),
-		DeviceName:  req.GetDeviceName(),
-		ProductKey:  req.GetProductKey(),
-		DeviceKey:   req.GetDeviceKey(),
-		FieldName:   req.GetFieldName(),
-		ActualValue: req.GetActualValue(),
-		Threshold:   req.GetThreshold(),
-		Operator:    req.GetOperator(),
-		Severity:    req.GetSeverity(),
-		Message:     req.GetMessage(),
-	}
-
-	s.adapter.enqueueAlarmLocked(alarm)
-	needFlush := len(s.adapter.alarmQueue) >= s.adapter.alarmBatch
-	flushNow := s.adapter.flushNow
-	s.adapter.alarmMu.Unlock()
-
-	if needFlush {
-		select {
-		case flushNow <- struct{}{}:
-		default:
-		}
-	}
-
-	return &northboundpb.PushAck{Success: true, Message: "ok"}, nil
-}
-
 // 辅助函数
 func parseXunJiConfig(configStr string) (*XunJiConfig, error) {
-	cfg := &XunJiConfig{}
-	if err := json.Unmarshal([]byte(configStr), cfg); err != nil {
+	raw := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(configStr), &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	cfg.ProductKey = strings.TrimSpace(cfg.ProductKey)
-	cfg.DeviceKey = strings.TrimSpace(cfg.DeviceKey)
-	cfg.ServerURL = strings.TrimSpace(cfg.ServerURL)
-	cfg.GRPCAddress = strings.TrimSpace(cfg.GRPCAddress)
+	cfg := &XunJiConfig{}
+	cfg.ProductKey = strings.TrimSpace(xunjiPickString(raw, "productKey", "product_key", "productID", "product_id"))
+	cfg.DeviceKey = strings.TrimSpace(xunjiPickString(raw, "deviceKey", "device_key", "deviceName", "device_name"))
+	cfg.ServerURL = normalizeServerURLWithPort(
+		xunjiPickString(raw, "serverUrl", "server_url", "broker"),
+		xunjiPickString(raw, "protocol"),
+		xunjiPickInt(raw, 0, "port"),
+	)
+	cfg.Username = strings.TrimSpace(xunjiPickString(raw, "username"))
+	cfg.Password = strings.TrimSpace(xunjiPickString(raw, "password"))
+	cfg.Topic = strings.TrimSpace(xunjiPickString(raw, "topic"))
+	cfg.AlarmTopic = strings.TrimSpace(xunjiPickString(raw, "alarmTopic", "alarm_topic"))
+	cfg.ClientID = strings.TrimSpace(xunjiPickString(raw, "clientId", "client_id"))
+	cfg.QOS = xunjiPickInt(raw, 0, "qos")
+	cfg.Retain = xunjiPickBool(raw, false, "retain")
+	cfg.KeepAlive = xunjiPickInt(raw, 60, "keepAlive", "keep_alive")
+	cfg.Timeout = xunjiPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout")
+	cfg.UploadIntervalMs = xunjiPickInt(raw, 5000, "uploadIntervalMs", "upload_interval_ms")
+	cfg.ReportIntervalMs = xunjiPickInt(raw, 0, "reportIntervalMs", "report_interval_ms")
+	cfg.AlarmFlushIntervalMs = xunjiPickInt(raw, 2000, "alarmFlushIntervalMs", "alarm_flush_interval_ms")
+	cfg.AlarmBatchSize = xunjiPickInt(raw, 20, "alarmBatchSize", "alarm_batch_size")
+	cfg.AlarmQueueSize = xunjiPickInt(raw, 1000, "alarmQueueSize", "alarm_queue_size")
+	cfg.RealtimeQueueSize = xunjiPickInt(raw, 1000, "realtimeQueueSize", "realtime_queue_size")
 
 	if cfg.ProductKey == "" {
 		return nil, fmt.Errorf("productKey is required")
@@ -1073,6 +974,16 @@ func parseXunJiConfig(configStr string) (*XunJiConfig, error) {
 	}
 	if cfg.QOS < 0 || cfg.QOS > 2 {
 		return nil, fmt.Errorf("qos must be between 0 and 2")
+	}
+	// 设置默认值
+	if cfg.QOS <= 0 {
+		cfg.QOS = 0
+	}
+	if cfg.KeepAlive <= 0 {
+		cfg.KeepAlive = 60
+	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = 10
 	}
 	if cfg.UploadIntervalMs <= 0 && cfg.ReportIntervalMs <= 0 {
 		cfg.UploadIntervalMs = 5000
@@ -1091,6 +1002,18 @@ func parseXunJiConfig(configStr string) (*XunJiConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func xunjiPickString(data map[string]interface{}, keys ...string) string {
+	return pickConfigString(data, keys...)
+}
+
+func xunjiPickInt(data map[string]interface{}, fallback int, keys ...string) int {
+	return pickConfigInt(data, fallback, keys...)
+}
+
+func xunjiPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
+	return pickConfigBool(data, fallback, keys...)
 }
 
 func cloneCollectData(data *models.CollectData) *models.CollectData {
@@ -1322,14 +1245,4 @@ func resolvePositive(v int, fallback int) int {
 		return fallback
 	}
 	return v
-}
-
-func resolveXunJiGRPCAddress(productKey, deviceKey, configured string) string {
-	if v := strings.TrimSpace(configured); v != "" {
-		return v
-	}
-	hasher := fnv.New32a()
-	_, _ = hasher.Write([]byte(strings.TrimSpace(productKey) + "|" + strings.TrimSpace(deviceKey)))
-	port := 30000 + int(hasher.Sum32()%10000)
-	return fmt.Sprintf("127.0.0.1:%d", port)
 }
