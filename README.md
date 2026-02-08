@@ -381,6 +381,23 @@ make deploy-windows  # Windows
 | `DRIVER_TCP_DIAL_BACKOFF` | `200ms`（驱动默认） | TCP 建连重试退避 |
 | `DRIVER_TCP_READ_TIMEOUT` | `500ms`（驱动默认） | TCP 读超时 |
 
+### 运行时热更新接口
+
+- `GET /api/gateway/runtime`：获取当前生效中的采集/驱动/北向运行参数。
+- `PUT /api/gateway/runtime`：在线更新运行参数（无需重启服务）。
+- `GET /api/gateway/runtime/audits?limit=20`：查询运行参数变更审计日志（谁改了什么、何时改、来源 IP）。
+- 支持字段：
+  - `collector_device_sync_interval`
+  - `collector_command_poll_interval`
+  - `northbound_mqtt_reconnect_interval`
+  - `driver_serial_read_timeout`
+  - `driver_tcp_dial_timeout`
+  - `driver_tcp_read_timeout`
+  - `driver_serial_open_backoff`
+  - `driver_tcp_dial_backoff`
+  - `driver_serial_open_retries`
+  - `driver_tcp_dial_retries`
+
 ### 资源配置
 
 | 类型 | 类型字段 | 配置示例 |

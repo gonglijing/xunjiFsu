@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -215,3 +216,20 @@ func TestJWTManager_TokenTTL(t *testing.T) {
 	}
 }
 
+func TestSessionFromContext(t *testing.T) {
+	if info := SessionFromContext(nil); info != nil {
+		t.Fatalf("expected nil from nil context")
+	}
+
+	ctx := context.Background()
+	if info := SessionFromContext(ctx); info != nil {
+		t.Fatalf("expected nil when no session in context")
+	}
+
+	want := &SessionInfo{UserID: 9, Username: "admin", Role: "admin"}
+	ctx = context.WithValue(ctx, sessionInfoContextKey{}, want)
+	got := SessionFromContext(ctx)
+	if got == nil || got.UserID != 9 || got.Username != "admin" || got.Role != "admin" {
+		t.Fatalf("unexpected session info from context: %+v", got)
+	}
+}

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -29,6 +30,8 @@ type JWTManager struct {
 	secret     []byte
 	cookieName string
 }
+
+type sessionInfoContextKey struct{}
 
 func NewJWTManager(secretKey []byte) *JWTManager {
 	if len(secretKey) < 16 {
@@ -96,8 +99,8 @@ func (m *JWTManager) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// 将用户信息放入 context，必要时可扩展
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), sessionInfoContextKey{}, info)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -114,7 +117,8 @@ func (m *JWTManager) RequireAdmin(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), sessionInfoContextKey{}, info)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -212,4 +216,12 @@ func ResetPassword(userID int64, newPassword string) error {
 
 	user.Password = pwdutil.Hash(newPassword)
 	return database.UpdateUser(user)
+}
+
+func SessionFromContext(ctx context.Context) *SessionInfo {
+	if ctx == nil {
+		return nil
+	}
+	info, _ := ctx.Value(sessionInfoContextKey{}).(*SessionInfo)
+	return info
 }

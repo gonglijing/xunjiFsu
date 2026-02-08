@@ -386,6 +386,37 @@ func TestPeekNextCurrentTaskLockedSkipsStale(t *testing.T) {
 	}
 }
 
+func TestSetRuntimeIntervals_WhenNotRunning(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	c.SetRuntimeIntervals(3*time.Second, 400*time.Millisecond)
+
+	deviceSync, commandPoll := c.GetRuntimeIntervals()
+	if deviceSync != 3*time.Second {
+		t.Fatalf("device sync interval = %v, want 3s", deviceSync)
+	}
+	if commandPoll != 400*time.Millisecond {
+		t.Fatalf("command poll interval = %v, want 400ms", commandPoll)
+	}
+}
+
+func TestNotifyIntervalChange_ReplacesPending(t *testing.T) {
+	ch := make(chan time.Duration, 1)
+
+	notifyIntervalChange(ch, time.Second)
+	notifyIntervalChange(ch, 2*time.Second)
+
+	select {
+	case got := <-ch:
+		if got != 2*time.Second {
+			t.Fatalf("interval = %v, want 2s", got)
+		}
+	default:
+		t.Fatalf("expected interval in channel")
+	}
+}
+
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }

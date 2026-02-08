@@ -64,6 +64,8 @@ var (
 	apiErrDeleteUserFailed              = newAPIError("E_DELETE_USER_FAILED", "删除用户失败")
 	apiErrGetGatewayConfigFailed        = newAPIError("E_GET_GATEWAY_CONFIG_FAILED", "获取网关配置失败")
 	apiErrUpdateGatewayConfigFailed     = newAPIError("E_UPDATE_GATEWAY_CONFIG_FAILED", "更新网关配置失败")
+	apiErrUpdateRuntimeConfigFailed     = newAPIError("E_UPDATE_RUNTIME_CONFIG_FAILED", "更新运行时参数失败")
+	apiErrListRuntimeConfigAuditsFailed = newAPIError("E_LIST_RUNTIME_CONFIG_AUDITS_FAILED", "查询运行时参数审计日志失败")
 	apiErrListStorageConfigsFailed      = newAPIError("E_LIST_STORAGE_CONFIGS_FAILED", "获取存储策略失败")
 	apiErrCreateStorageConfigFailed     = newAPIError("E_CREATE_STORAGE_CONFIG_FAILED", "创建存储策略失败")
 	apiErrUpdateStorageConfigFailed     = newAPIError("E_UPDATE_STORAGE_CONFIG_FAILED", "更新存储策略失败")

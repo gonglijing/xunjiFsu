@@ -24,16 +24,18 @@ const (
 
 // Collector 采集器
 type Collector struct {
-	driverExecutor      *driver.DriverExecutor
-	northboundMgr       *northbound.NorthboundManager
-	resourceLock        map[int64]chan struct{} // 每个资源一个串行锁
-	mu                  sync.RWMutex
-	running             bool
-	stopChan            chan struct{}
-	wakeChan            chan struct{}
-	deviceSyncInterval  time.Duration
-	commandPollInterval time.Duration
-	wg                  sync.WaitGroup
+	driverExecutor       *driver.DriverExecutor
+	northboundMgr        *northbound.NorthboundManager
+	resourceLock         map[int64]chan struct{} // 每个资源一个串行锁
+	mu                   sync.RWMutex
+	running              bool
+	stopChan             chan struct{}
+	wakeChan             chan struct{}
+	deviceSyncResetChan  chan time.Duration
+	commandPollResetChan chan time.Duration
+	deviceSyncInterval   time.Duration
+	commandPollInterval  time.Duration
+	wg                   sync.WaitGroup
 	// 设备采集任务
 	tasks    map[int64]*collectTask
 	taskHeap *taskHeap // 优先队列，按下次采集时间排序
@@ -94,16 +96,18 @@ func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northbound
 	h := &taskHeap{}
 	heap.Init(h)
 	return &Collector{
-		driverExecutor:      driverExecutor,
-		northboundMgr:       northboundMgr,
-		running:             false,
-		stopChan:            make(chan struct{}),
-		wakeChan:            make(chan struct{}, 1),
-		deviceSyncInterval:  deviceSyncInterval,
-		commandPollInterval: commandPollInterval,
-		tasks:               make(map[int64]*collectTask),
-		taskHeap:            h,
-		resourceLock:        make(map[int64]chan struct{}),
+		driverExecutor:       driverExecutor,
+		northboundMgr:        northboundMgr,
+		running:              false,
+		stopChan:             make(chan struct{}),
+		wakeChan:             make(chan struct{}, 1),
+		deviceSyncResetChan:  make(chan time.Duration, 1),
+		commandPollResetChan: make(chan time.Duration, 1),
+		deviceSyncInterval:   deviceSyncInterval,
+		commandPollInterval:  commandPollInterval,
+		tasks:                make(map[int64]*collectTask),
+		taskHeap:             h,
+		resourceLock:         make(map[int64]chan struct{}),
 	}
 }
 
@@ -117,6 +121,8 @@ func (c *Collector) Start() error {
 	c.running = true
 	c.stopChan = make(chan struct{})
 	c.wakeChan = make(chan struct{}, 1)
+	c.deviceSyncResetChan = make(chan time.Duration, 1)
+	c.commandPollResetChan = make(chan time.Duration, 1)
 	c.tasks = make(map[int64]*collectTask)
 	h := &taskHeap{}
 	heap.Init(h)
@@ -129,10 +135,10 @@ func (c *Collector) Start() error {
 	}
 
 	// 同步设备状态
-	c.startTickerWorker(c.deviceSyncInterval, c.SyncDeviceStatus)
+	c.startAdjustableTickerWorker(c.deviceSyncInterval, c.deviceSyncResetChan, c.SyncDeviceStatus)
 
 	// 北向下发命令轮询
-	c.startTickerWorker(c.commandPollInterval, c.processNorthboundCommands)
+	c.startAdjustableTickerWorker(c.commandPollInterval, c.commandPollResetChan, c.processNorthboundCommands)
 
 	// 主循环
 	c.wg.Add(1)
@@ -319,6 +325,39 @@ func (c *Collector) IsRunning() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.running
+}
+
+func (c *Collector) GetRuntimeIntervals() (time.Duration, time.Duration) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.deviceSyncInterval, c.commandPollInterval
+}
+
+func (c *Collector) SetRuntimeIntervals(deviceSyncInterval, commandPollInterval time.Duration) {
+	c.mu.Lock()
+	running := c.running
+	if deviceSyncInterval > 0 {
+		c.deviceSyncInterval = deviceSyncInterval
+	}
+	if commandPollInterval > 0 {
+		c.commandPollInterval = commandPollInterval
+	}
+	deviceSyncResetChan := c.deviceSyncResetChan
+	commandPollResetChan := c.commandPollResetChan
+	deviceSyncCurrent := c.deviceSyncInterval
+	commandPollCurrent := c.commandPollInterval
+	c.mu.Unlock()
+
+	if !running {
+		return
+	}
+
+	if deviceSyncInterval > 0 {
+		notifyIntervalChange(deviceSyncResetChan, deviceSyncCurrent)
+	}
+	if commandPollInterval > 0 {
+		notifyIntervalChange(commandPollResetChan, commandPollCurrent)
+	}
 }
 
 // AddDevice 添加设备到采集任务
@@ -525,6 +564,59 @@ func (c *Collector) startTickerWorker(interval time.Duration, worker func()) {
 			}
 		}
 	}()
+}
+
+func (c *Collector) startAdjustableTickerWorker(interval time.Duration, resetChan <-chan time.Duration, worker func()) {
+	if worker == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-c.stopChan:
+				return
+			case <-ticker.C:
+				worker()
+			case next := <-resetChan:
+				if next <= 0 {
+					continue
+				}
+				ticker.Stop()
+				ticker = time.NewTicker(next)
+			}
+		}
+	}()
+}
+
+func notifyIntervalChange(ch chan time.Duration, interval time.Duration) {
+	if ch == nil || interval <= 0 {
+		return
+	}
+
+	select {
+	case ch <- interval:
+		return
+	default:
+	}
+
+	select {
+	case <-ch:
+	default:
+	}
+
+	select {
+	case ch <- interval:
+	default:
+	}
 }
 
 func resolveCollectInterval(milliseconds int) time.Duration {

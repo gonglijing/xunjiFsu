@@ -1,8 +1,6 @@
 package app
 
 import (
-	"time"
-
 	"github.com/gonglijing/xunjiFsu/internal/config"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
@@ -12,9 +10,6 @@ import (
 func applyNorthboundRuntimeConfig(cfg *config.Config, nm *northbound.NorthboundManager) {
 	if cfg == nil || nm == nil {
 		return
-	}
-
-	if cfg.NorthboundMQTTReconnectInterval <= 0 {
 		return
 	}
 
@@ -30,11 +25,4 @@ func applyNorthboundRuntimeConfig(cfg *config.Config, nm *northbound.NorthboundM
 		mqttAdapter.SetReconnectInterval(cfg.NorthboundMQTTReconnectInterval)
 		logger.Info("Applied MQTT reconnect interval", "name", name, "interval", cfg.NorthboundMQTTReconnectInterval)
 	}
-}
-
-func normalizeDurationOrDefault(value, defaultValue time.Duration) time.Duration {
-	if value <= 0 {
-		return defaultValue
-	}
-	return value
 }

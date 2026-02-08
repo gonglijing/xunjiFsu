@@ -110,5 +110,8 @@ func registerResourceRoutes(api *mux.Router, h *handlers.Handler) {
 func registerGatewayRoutes(api *mux.Router, h *handlers.Handler) {
 	api.HandleFunc("/gateway/config", h.GetGatewayConfig).Methods("GET")
 	api.HandleFunc("/gateway/config", h.UpdateGatewayConfig).Methods("PUT")
+	api.HandleFunc("/gateway/runtime", h.GetGatewayRuntimeConfig).Methods("GET")
+	api.HandleFunc("/gateway/runtime", h.UpdateGatewayRuntimeConfig).Methods("PUT")
+	api.HandleFunc("/gateway/runtime/audits", h.GetGatewayRuntimeAudits).Methods("GET")
 	api.HandleFunc("/gateway/northbound/sync-identity", h.SyncGatewayIdentityToNorthbound).Methods("POST")
 }
