@@ -32,7 +32,7 @@ func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 	normalizeNorthboundConfig(&config)
 	if err := validateNorthboundConfig(&config); err != nil {
-		WriteBadRequest(w, err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
 		return
 	}
 	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
@@ -79,7 +79,7 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 	normalizeNorthboundConfig(&config)
 	if err := validateNorthboundConfig(&config); err != nil {
-		WriteBadRequest(w, err.Error())
+		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
 		return
 	}
 	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {

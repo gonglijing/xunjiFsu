@@ -307,4 +307,8 @@ var (
 		Code:    "E_LIST_PAGINATED_DATA_POINTS_FAILED",
 		Message: "分页查询历史数据失败",
 	}
+	apiErrHistoryDataQueryInvalid = APIErrorDef{
+		Code:    "E_HISTORY_DATA_QUERY_INVALID",
+		Message: "历史数据查询参数无效",
+	}
 )

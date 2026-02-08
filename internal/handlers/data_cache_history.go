@@ -32,7 +32,7 @@ func (h *Handler) GetDataCacheByDeviceID(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
 	query, err := parseHistoryDataQuery(r)
 	if err != nil {
-		WriteBadRequest(w, err.Error())
+		WriteBadRequestCode(w, apiErrHistoryDataQueryInvalid.Code, apiErrHistoryDataQueryInvalid.Message+": "+err.Error())
 		return
 	}
 
