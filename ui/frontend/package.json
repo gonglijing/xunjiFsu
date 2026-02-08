@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:unit": "node --test src/api/errorMessages.test.js",
+    "test": "npm run test:unit"
   },
   "dependencies": {
     "solid-js": "^1.8.15"
