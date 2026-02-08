@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'gogw_jwt';
+import { resolveAPIErrorMessage } from './api/errorMessages';
 
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
@@ -36,11 +37,16 @@ async function parseJSON(res) {
     // 统一处理 APIResponse 包装
     if (json && typeof json === 'object' && 'success' in json) {
       if (json.success) return json.data ?? null;
-      const message = json.error || json.message || 'request failed';
-      throw new Error(message);
+      const err = new Error(resolveAPIErrorMessage(json.code, json.error || json.message, 'request failed'));
+      err.code = json.code || '';
+      err.status = res.status;
+      throw err;
     }
     return json;
   } catch (e) {
+    if (e instanceof Error && e.message !== 'invalid json') {
+      throw e;
+    }
     throw new Error('invalid json');
   }
 }
@@ -51,7 +57,7 @@ function extractAPIError(payload, fallbackMessage) {
   }
 
   return {
-    message: payload.error || payload.message || fallbackMessage,
+    message: resolveAPIErrorMessage(payload.code, payload.error || payload.message, fallbackMessage),
     code: payload.code || '',
   };
 }

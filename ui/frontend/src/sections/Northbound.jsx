@@ -3,6 +3,7 @@ import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
+import { getErrorMessage } from '../api/errorMessages';
 
 const empty = { name: '', type: 'mqtt', upload_interval: 5000, config: '{}', enabled: 1 };
 
@@ -175,7 +176,7 @@ export function Northbound() {
         setConfig((prev) => normalizeConfig(prev, fields, form().upload_interval));
       })
       .catch((err) => {
-        const message = err?.message || `加载 ${nbType.toUpperCase()} Schema 失败`;
+        const message = getErrorMessage(err, `加载 ${nbType.toUpperCase()} Schema 失败`);
         setSchema([]);
         setSchemaError(message);
         if (!silent) {
@@ -261,7 +262,7 @@ export function Northbound() {
       resetForm();
       load();
     })
-      .catch((err) => toast.show('error', err?.message || '操作失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '操作失败')))
       .finally(() => setSaving(false));
   };
 
@@ -276,7 +277,7 @@ export function Northbound() {
   const toggle = (id) => {
     api.northbound.toggleNorthboundConfig(id)
       .then(load)
-      .catch(() => toast.show('error', '切换失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '切换失败')));
   };
 
   const reload = (id) => {
@@ -285,7 +286,7 @@ export function Northbound() {
         toast.show('success', '重载成功');
         load();
       })
-      .catch(() => toast.show('error', '重载失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '重载失败')));
   };
 
   const syncGatewayIdentity = () => {
@@ -297,7 +298,7 @@ export function Northbound() {
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
         load();
       })
-      .catch((err) => toast.show('error', err?.message || '同步失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '同步失败')))
       .finally(() => setSyncing(false));
   };
 
@@ -305,7 +306,7 @@ export function Northbound() {
     if (!confirm('删除该配置？')) return;
     api.northbound.deleteNorthboundConfig(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch(() => toast.show('error', '删除失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
   };
 
   const openCreate = () => {

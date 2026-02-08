@@ -301,7 +301,19 @@ make ui-dev
 - 页面/区块统一通过 `ui/frontend/src/api/services.js`（`default export`）访问后端接口。
 - 业务代码使用 `api.<domain>.<method>()`（例如 `api.devices.listDevices()`），避免直接在页面里拼 `/api/...`。
 - 统一错误处理、鉴权和响应解析由 `ui/frontend/src/api.js` 负责；领域文件仅封装路径与参数。
+- 错误码到用户提示文案映射集中在 `ui/frontend/src/api/errorMessages.js`，页面层优先使用 `getErrorMessage(err, fallback)`。
 - 新增接口时，优先在 `ui/frontend/src/api/<domain>.js` 增加方法，再在页面中调用。
+
+### API 错误契约
+
+- 后端统一返回格式：`{ success, data, error, code, message }`。
+- 失败时前端优先展示 `message`，其次按 `code` 映射默认提示。
+- 常见错误码示例：
+  - 通用：`E_BAD_REQUEST`、`E_UNAUTHORIZED`、`E_NOT_FOUND`、`E_SERVER_ERROR`
+  - 设备：`E_DEVICE_NOT_FOUND`、`E_CREATE_DEVICE_FAILED`、`E_UPDATE_DEVICE_FAILED`
+  - 驱动：`E_DRIVER_NOT_FOUND`、`E_DRIVER_NOT_LOADED`、`E_RELOAD_DRIVER_FAILED`
+  - 北向：`E_NORTHBOUND_CONFIG_INVALID`、`E_NORTHBOUND_INITIALIZE_FAILED`、`E_NORTHBOUND_RELOAD_FAILED`
+  - 资源/存储：`E_CREATE_RESOURCE_FAILED`、`E_LIST_STORAGE_CONFIGS_FAILED`、`E_CLEANUP_BY_POLICY_FAILED`
 
 
 ### 跨平台编译

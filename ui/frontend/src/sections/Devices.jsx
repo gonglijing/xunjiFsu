@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
+import { getErrorMessage } from '../api/errorMessages';
 
 const defaultForm = {
   name: '',
@@ -125,21 +126,21 @@ export function Devices() {
       setShowModal(false);
       load();
     })
-    .catch(() => toast.show('error', '操作失败'))
+    .catch((err) => toast.show('error', getErrorMessage(err, '操作失败')))
     .finally(() => setSubmitting(false));
   };
 
   const toggle = (id) => {
     api.devices.toggleDevice(id)
       .then(load)
-      .catch(() => toast.show('error', '切换失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '切换失败')));
   };
 
   const remove = (id) => {
     if (!confirm('确定删除该设备？')) return;
     api.devices.deleteDevice(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch(() => toast.show('error', '删除失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
   };
 
   const openWrite = (device) => {
@@ -173,7 +174,7 @@ export function Devices() {
         toast.show('success', '写入成功');
         setShowWriteModal(false);
       })
-      .catch((err) => setWriteError(err.message || '写入失败'));
+      .catch((err) => setWriteError(getErrorMessage(err, '写入失败')));
   };
 
   const openDetail = async (device) => {

@@ -3,6 +3,7 @@ import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
+import { getErrorMessage } from '../api/errorMessages';
 
 const empty = { name: '', storage_days: 30, enabled: 1 };
 
@@ -18,7 +19,7 @@ export function Storage() {
     setLoading(true);
     api.storage.listStorageConfigs()
       .then((res) => setItems(res || []))
-      .catch(() => toast.show('error', '加载存储配置失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载存储配置失败')))
       .finally(() => setLoading(false));
   };
 
@@ -38,7 +39,7 @@ export function Storage() {
       setEditing(null); 
       load(); 
     })
-    .catch(() => toast.show('error', '操作失败'))
+    .catch((err) => toast.show('error', getErrorMessage(err, '操作失败')))
     .finally(() => setSaving(false));
   };
 
@@ -46,7 +47,7 @@ export function Storage() {
     if (!confirm('删除该配置？')) return;
     api.storage.deleteStorageConfig(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch(() => toast.show('error', '删除失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
   };
 
   const edit = (item) => {
@@ -61,7 +62,7 @@ export function Storage() {
   const runCleanup = () => {
     api.storage.cleanupByPolicy()
       .then((res) => toast.show('success', `清理完成，删除 ${res.deleted_count} 条记录`))
-      .catch(() => toast.show('error', '清理失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '清理失败')));
   };
 
   const columns = [

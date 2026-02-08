@@ -2,6 +2,7 @@ import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
+import { getErrorMessage } from '../api/errorMessages';
 
 function GatewayPage() {
   const toast = useToast();
@@ -25,7 +26,7 @@ function GatewayPage() {
           gateway_name: data.gateway_name || 'HuShu智能网关',
         });
       })
-      .catch(() => toast.show('error', '加载网关配置失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载网关配置失败')))
       .finally(() => setLoading(false));
   };
 
@@ -43,8 +44,9 @@ function GatewayPage() {
         toast.show('success', '网关配置已保存');
       })
       .catch((er) => {
-        setErr(er.message || '保存失败');
-        toast.show('error', '保存失败');
+        const msg = getErrorMessage(er, '保存失败');
+        setErr(msg);
+        toast.show('error', msg);
       })
       .finally(() => setSaving(false));
   };
@@ -58,7 +60,7 @@ function GatewayPage() {
         toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
       })
       .catch((er) => {
-        toast.show('error', er.message || '同步失败');
+        toast.show('error', getErrorMessage(er, '同步失败'));
       })
       .finally(() => setSyncing(false));
   };

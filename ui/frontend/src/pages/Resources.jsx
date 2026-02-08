@@ -2,6 +2,7 @@ import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
 import api from '../api/services';
 import Card, { SectionTabs } from '../components/cards';
 import { useToast } from '../components/Toast';
+import { getErrorMessage } from '../api/errorMessages';
 
 const empty = { name: '', type: 'serial', path: '', enabled: 1 };
 
@@ -17,7 +18,7 @@ function Resources() {
   const load = () => {
     api.resources.listResources()
       .then((res) => setItems(res || []))
-      .catch(() => toast.show('error', '加载资源失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '加载资源失败')));
   };
 
   createEffect(() => {
@@ -46,8 +47,9 @@ function Resources() {
       setShowModal(false);
       load();
     }).catch((er) => {
-      setErr(er.message || '保存失败');
-      toast.show('error', '保存失败');
+      const msg = getErrorMessage(er, '保存失败');
+      setErr(msg);
+      toast.show('error', msg);
     }).finally(() => setSaving(false));
   };
 
@@ -56,13 +58,13 @@ function Resources() {
     if (!confirm('删除后关联设备可能需要重新绑定资源，确认继续？')) return;
     api.resources.deleteResource(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch(() => toast.show('error', '删除失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
   };
 
   const toggle = (item) => {
     api.resources.toggleResource(item.id)
       .then(load)
-      .catch(() => toast.show('error', '切换失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '切换失败')));
   };
 
   return (

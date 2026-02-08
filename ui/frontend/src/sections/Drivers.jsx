@@ -3,6 +3,7 @@ import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
+import { getErrorMessage } from '../api/errorMessages';
 
 export function Drivers() {
   const toast = useToast();
@@ -30,7 +31,7 @@ export function Drivers() {
     if (!confirm(`删除驱动 ${name} ？`)) return;
     api.drivers.deleteDriver(id)
       .then(() => { toast.show('success', '已删除'); load(); })
-      .catch(() => toast.show('error', '删除失败'));
+      .catch((err) => toast.show('error', getErrorMessage(err, '删除失败')));
   };
 
   const upload = (e) => {
@@ -38,7 +39,7 @@ export function Drivers() {
     if (!file) return;
     api.drivers.uploadDriver(file)
       .then(() => { toast.show('success', '上传成功'); load(); })
-      .catch(() => toast.show('error', '上传失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '上传失败')))
       .finally(() => { e.target.value = ''; });
   };
 
@@ -50,7 +51,7 @@ export function Drivers() {
         toast.show('success', `驱动 ${item.name} 重载成功`);
         load();
       })
-      .catch((err) => toast.show('error', err.message || '重载失败'))
+      .catch((err) => toast.show('error', getErrorMessage(err, '重载失败')))
       .finally(() => setBusyId(0));
   };
 
