@@ -66,64 +66,21 @@ type DriverStats struct {
 
 // GetStatus 获取系统状态
 func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
-	// 获取设备统计
 	devices, _ := database.GetAllDevices()
-	deviceTotal := len(devices)
-	deviceEnabled := 0
-	for _, d := range devices {
-		if d.Enabled == 1 {
-			deviceEnabled++
-		}
-	}
-
-	// 获取北向配置统计
 	configs, _ := database.GetAllNorthboundConfigs()
-	northboundTotal := len(configs)
-	northboundEnabled := 0
-	for _, c := range configs {
-		if c.Enabled == 1 {
-			northboundEnabled++
-		}
-	}
-
-	// 获取报警统计
 	alarms, _ := database.GetRecentAlarmLogs(1000)
-	alarmTotal := len(alarms)
-	alarmUnacked := 0
-	alarmToday := 0
-	today := time.Now().Truncate(24 * time.Hour)
-	for _, a := range alarms {
-		if a.Acknowledged == 0 {
-			alarmUnacked++
-		}
-		if a.TriggeredAt.After(today) {
-			alarmToday++
-		}
-	}
-
-	// 驱动统计
 	drivers := h.driverManager.ListDrivers()
-	driverTotal := len(drivers)
+	now := time.Now()
 
 	status := StatusData{
 		CollectorRunning: h.collector.IsRunning(),
-		Devices: DeviceStats{
-			Total:   deviceTotal,
-			Enabled: deviceEnabled,
-		},
-		Northbound: NorthboundStats{
-			Total:   northboundTotal,
-			Enabled: northboundEnabled,
-		},
-		Alarms: AlarmStats{
-			Total:   alarmTotal,
-			Unacked: alarmUnacked,
-			Today:   alarmToday,
-		},
+		Devices:          summarizeDeviceStats(devices),
+		Northbound:       summarizeNorthboundStats(configs),
+		Alarms:           summarizeAlarmStats(alarms, now),
 		Drivers: DriverStats{
-			Total: driverTotal,
+			Total: len(drivers),
 		},
-		Timestamp: time.Now(),
+		Timestamp: now,
 	}
 
 	WriteSuccess(w, status)
