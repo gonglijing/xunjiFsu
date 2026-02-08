@@ -41,6 +41,15 @@ type collectTask struct {
 	lastStored      time.Time
 }
 
+type deviceSyncAction int
+
+const (
+	deviceSyncActionNone deviceSyncAction = iota
+	deviceSyncActionAdded
+	deviceSyncActionUpdated
+	deviceSyncActionRemoved
+)
+
 // taskHeap 任务优先队列（小根堆）
 type taskHeap []*collectTask
 
@@ -97,36 +106,10 @@ func (c *Collector) Start() error {
 	}
 
 	// 每 10 秒同步设备状态
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-c.stopChan:
-				return
-			case <-ticker.C:
-				c.SyncDeviceStatus()
-			}
-		}
-	}()
+	c.startTickerWorker(10*time.Second, c.SyncDeviceStatus)
 
 	// 北向下发命令轮询
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-c.stopChan:
-				return
-			case <-ticker.C:
-				c.processNorthboundCommands()
-			}
-		}
-	}()
+	c.startTickerWorker(500*time.Millisecond, c.processNorthboundCommands)
 
 	// 主循环
 	c.wg.Add(1)
@@ -268,30 +251,8 @@ func (c *Collector) SyncDeviceStatus() {
 	defer c.mu.Unlock()
 
 	for _, device := range devices {
-		if device == nil {
-			continue
-		}
-		_, exists := c.tasks[device.ID]
-
-		if device.Enabled == 1 {
-			// 设备启用
-			if !exists {
-				// 新启用的设备，加入采集
-				c.upsertTaskLocked(device)
-				log.Printf("Device %s (ID:%d) enabled, added to collection", device.Name, device.ID)
-			} else {
-				// 已存在的设备，更新配置
-				c.upsertTaskLocked(device)
-				log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
-			}
-		} else {
-			// 设备禁用
-			if exists {
-				// 从采集任务中移除
-				c.removeTaskLocked(device.ID)
-				log.Printf("Device %s (ID:%d) disabled, removed from collection", device.Name, device.ID)
-			}
-		}
+		action := c.syncDeviceTaskLocked(device)
+		c.logDeviceSyncAction(device, action)
 	}
 }
 
@@ -373,6 +334,43 @@ func (c *Collector) upsertTaskLocked(device *models.Device) bool {
 	return !exists
 }
 
+func (c *Collector) syncDeviceTaskLocked(device *models.Device) deviceSyncAction {
+	if device == nil {
+		return deviceSyncActionNone
+	}
+
+	_, exists := c.tasks[device.ID]
+	if device.Enabled == 1 {
+		created := c.upsertTaskLocked(device)
+		if created {
+			return deviceSyncActionAdded
+		}
+		return deviceSyncActionUpdated
+	}
+
+	if exists {
+		c.removeTaskLocked(device.ID)
+		return deviceSyncActionRemoved
+	}
+
+	return deviceSyncActionNone
+}
+
+func (c *Collector) logDeviceSyncAction(device *models.Device, action deviceSyncAction) {
+	if device == nil {
+		return
+	}
+
+	switch action {
+	case deviceSyncActionAdded:
+		log.Printf("Device %s (ID:%d) enabled, added to collection", device.Name, device.ID)
+	case deviceSyncActionUpdated:
+		log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
+	case deviceSyncActionRemoved:
+		log.Printf("Device %s (ID:%d) disabled, removed from collection", device.Name, device.ID)
+	}
+}
+
 func (c *Collector) removeTaskLocked(deviceID int64) {
 	delete(c.tasks, deviceID)
 }
@@ -429,6 +427,28 @@ func (c *Collector) waitForStopOrTimeout(delay time.Duration) bool {
 	case <-c.stopChan:
 		return true
 	}
+}
+
+func (c *Collector) startTickerWorker(interval time.Duration, worker func()) {
+	if worker == nil {
+		return
+	}
+
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-c.stopChan:
+				return
+			case <-ticker.C:
+				worker()
+			}
+		}
+	}()
 }
 
 func resolveCollectInterval(milliseconds int) time.Duration {

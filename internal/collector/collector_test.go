@@ -289,6 +289,52 @@ func TestBuildNorthboundCommandResult(t *testing.T) {
 	}
 }
 
+func TestSyncDeviceTaskLocked(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	device := &models.Device{ID: 100, Name: "d-1", Enabled: 1, CollectInterval: 1000, StorageInterval: 60}
+
+	c.mu.Lock()
+	action := c.syncDeviceTaskLocked(device)
+	c.mu.Unlock()
+	if action != deviceSyncActionAdded {
+		t.Fatalf("expected added action, got %v", action)
+	}
+
+	device.Enabled = 1
+	c.mu.Lock()
+	action = c.syncDeviceTaskLocked(device)
+	c.mu.Unlock()
+	if action != deviceSyncActionUpdated {
+		t.Fatalf("expected updated action, got %v", action)
+	}
+
+	device.Enabled = 0
+	c.mu.Lock()
+	action = c.syncDeviceTaskLocked(device)
+	c.mu.Unlock()
+	if action != deviceSyncActionRemoved {
+		t.Fatalf("expected removed action, got %v", action)
+	}
+
+	c.mu.Lock()
+	action = c.syncDeviceTaskLocked(device)
+	c.mu.Unlock()
+	if action != deviceSyncActionNone {
+		t.Fatalf("expected none action, got %v", action)
+	}
+}
+
+func TestStartTickerWorker_NilWorker(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	c.stopChan = make(chan struct{})
+	c.startTickerWorker(5*time.Millisecond, nil)
+	close(c.stopChan)
+}
+
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
