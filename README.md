@@ -304,6 +304,7 @@ make ui-dev
 - 错误码到用户提示文案映射集中在 `ui/frontend/src/api/errorMessages.js`，并按通用/设备/驱动/资源/网关/北向/存储分组维护。
 - 页面 `toast` 错误提示可通过 `ui/frontend/src/utils/errors.js` 的 `showErrorToast(toast, err, fallback)` 统一调用。
 - Dashboard/设备/驱动/北向/资源/阈值/告警/实时等页面已统一按该约定处理错误提示。
+- `ui/frontend/src/api/errorMessages.test.js` 提供错误码映射的纯函数测试（可用 `node --test` 执行）。
 - 新增接口时，优先在 `ui/frontend/src/api/<domain>.js` 增加方法，再在页面中调用。
 
 ### API 错误契约
