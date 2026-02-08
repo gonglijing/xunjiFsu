@@ -1,0 +1,13 @@
+export * as alarmsAPI from './alarms';
+export * as authAPI from './auth';
+export * as collectorAPI from './collector';
+export * as dataAPI from './data';
+export * as devicesAPI from './devices';
+export * as driversAPI from './drivers';
+export * as gatewayAPI from './gateway';
+export * as metricsAPI from './metrics';
+export * as northboundAPI from './northbound';
+export * as resourcesAPI from './resources';
+export * as statusAPI from './status';
+export * as storageAPI from './storage';
+export * as thresholdsAPI from './thresholds';

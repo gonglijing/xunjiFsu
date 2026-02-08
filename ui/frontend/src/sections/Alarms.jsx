@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For } from 'solid-js';
-import { listAlarms } from '../api/alarms';
+import { alarmsAPI } from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import { formatDateTime } from '../utils/time';
@@ -11,7 +11,7 @@ export function Alarms() {
 
   const load = () => {
     setLoading(true);
-    listAlarms()
+    alarmsAPI.listAlarms()
       .then((res) => setItems(res || []))
       .catch(() => toast.show('error', '加载告警失败'))
       .finally(() => setLoading(false));

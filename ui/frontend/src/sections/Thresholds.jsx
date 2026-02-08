@@ -1,6 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
-import { listDevices } from '../api/devices';
-import { listThresholds, createThreshold, deleteThreshold } from '../api/thresholds';
+import { devicesAPI, thresholdsAPI } from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 
@@ -16,13 +15,13 @@ export function Thresholds() {
   const [err, setErr] = createSignal('');
 
   const load = () => {
-    listThresholds()
+    thresholdsAPI.listThresholds()
       .then((res) => setItems(res || []))
       .catch(() => toast.show('error', '加载阈值失败'));
   };
 
   const loadDevices = () => {
-    listDevices()
+    devicesAPI.listDevices()
       .then((res) => setDevices(res || []))
       .catch(() => {});
   };
@@ -43,7 +42,7 @@ export function Thresholds() {
     e.preventDefault();
     setSaving(true);
     setErr('');
-    createThreshold(form())
+    thresholdsAPI.createThreshold(form())
       .then(() => { 
         toast.show('success', '阈值已创建'); 
         setForm(empty); 
@@ -59,7 +58,7 @@ export function Thresholds() {
 
   const remove = (id) => {
     if (!confirm('删除该阈值？')) return;
-    deleteThreshold(id)
+    thresholdsAPI.deleteThreshold(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };

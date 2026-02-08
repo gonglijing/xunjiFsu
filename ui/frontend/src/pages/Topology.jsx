@@ -1,11 +1,6 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
 import Card from '../components/cards';
-import { listDevices } from '../api/devices';
-import { listResources } from '../api/resources';
-import { listNorthboundConfigs } from '../api/northbound';
-import { getGatewayConfig } from '../api/gateway';
-import { listAlarms } from '../api/alarms';
-import { getDataCacheByDevice } from '../api/data';
+import { alarmsAPI, dataAPI, devicesAPI, gatewayAPI, northboundAPI, resourcesAPI } from '../api/services';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 
 function Topology() {
@@ -25,10 +20,10 @@ function Topology() {
     setLoading(true);
     try {
       const [gwRes, resRes, devRes, nbRes] = await Promise.all([
-        getGatewayConfig(),
-        listResources(),
-        listDevices(),
-        listNorthboundConfigs(),
+        gatewayAPI.getGatewayConfig(),
+        resourcesAPI.listResources(),
+        devicesAPI.listDevices(),
+        northboundAPI.listNorthboundConfigs(),
       ]);
       setGateway(gwRes || null);
       setResources(resRes || []);
@@ -59,8 +54,8 @@ function Topology() {
     setDetailLoading(true);
     try {
       const [cacheRes, alarmsRes] = await Promise.all([
-        getDataCacheByDevice(device.id),
-        listAlarms(),
+        dataAPI.getDataCacheByDevice(device.id),
+        alarmsAPI.listAlarms(),
       ]);
       const cacheVal = Array.isArray(cacheRes) ? cacheRes : cacheRes?.data || [];
       const allAlarms = Array.isArray(alarmsRes) ? alarmsRes : alarmsRes?.data || [];

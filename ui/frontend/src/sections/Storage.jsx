@@ -1,11 +1,5 @@
 import { createSignal, createEffect } from 'solid-js';
-import {
-  listStorageConfigs,
-  createStorageConfig,
-  updateStorageConfig,
-  deleteStorageConfig,
-  cleanupByPolicy,
-} from '../api/storage';
+import { storageAPI } from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
@@ -22,7 +16,7 @@ export function Storage() {
 
   const load = () => {
     setLoading(true);
-    listStorageConfigs()
+    storageAPI.listStorageConfigs()
       .then((res) => setItems(res || []))
       .catch(() => toast.show('error', '加载存储配置失败'))
       .finally(() => setLoading(false));
@@ -35,7 +29,9 @@ export function Storage() {
   const submit = (e) => {
     e.preventDefault();
     setSaving(true);
-    const api = editing() ? updateStorageConfig(editing(), form()) : createStorageConfig(form());
+    const api = editing()
+      ? storageAPI.updateStorageConfig(editing(), form())
+      : storageAPI.createStorageConfig(form());
     api.then(() => { 
       toast.show('success', editing() ? '已更新' : '已创建'); 
       setForm(empty); 
@@ -48,7 +44,7 @@ export function Storage() {
 
   const remove = (id) => {
     if (!confirm('删除该配置？')) return;
-    deleteStorageConfig(id)
+    storageAPI.deleteStorageConfig(id)
       .then(() => { toast.show('success', '已删除'); load(); })
       .catch(() => toast.show('error', '删除失败'));
   };
@@ -63,7 +59,7 @@ export function Storage() {
   };
 
   const runCleanup = () => {
-    cleanupByPolicy()
+    storageAPI.cleanupByPolicy()
       .then((res) => toast.show('success', `清理完成，删除 ${res.deleted_count} 条记录`))
       .catch(() => toast.show('error', '清理失败'));
   };
