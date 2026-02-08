@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -147,10 +148,10 @@ func (c *Collector) loadEnabledDevices() error {
 
 	loadedCount := 0
 	for _, device := range devices {
-		if device.Enabled == 1 {
-			task := newCollectTask(device, nil)
-			c.tasks[device.ID] = task
-			heap.Push(c.taskHeap, task)
+		if device == nil || device.Enabled != 1 {
+			continue
+		}
+		if c.upsertTaskLocked(device) {
 			loadedCount++
 		}
 	}
@@ -164,14 +165,7 @@ func (c *Collector) runLoop() {
 	defer c.wg.Done()
 	for {
 		c.mu.Lock()
-		var task *collectTask
-		for len(*c.taskHeap) > 0 {
-			candidate := heap.Pop(c.taskHeap).(*collectTask)
-			if c.isTaskCurrentLocked(candidate) {
-				task = candidate
-				break
-			}
-		}
+		task := c.popNextCurrentTaskLocked()
 		c.mu.Unlock()
 
 		if task == nil {
@@ -231,15 +225,12 @@ func (c *Collector) collectOnce(task *collectTask) {
 	}
 
 	collect := driverResultToCollectData(device, result)
-	task.lastRun = collect.Timestamp
 
 	storeHistory := shouldStoreHistory(task, collect.Timestamp)
 	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
 		log.Printf("Failed to insert data points: %v", err)
 	}
-	if storeHistory {
-		task.lastStored = collect.Timestamp
-	}
+	c.markTaskCollected(task, collect.Timestamp, storeHistory)
 
 	// 阈值计算 & 报警、北向上传
 	c.handleThresholdAndNorthbound(collect)
@@ -277,28 +268,27 @@ func (c *Collector) SyncDeviceStatus() {
 	defer c.mu.Unlock()
 
 	for _, device := range devices {
-		task, exists := c.tasks[device.ID]
+		if device == nil {
+			continue
+		}
+		_, exists := c.tasks[device.ID]
 
 		if device.Enabled == 1 {
 			// 设备启用
 			if !exists {
 				// 新启用的设备，加入采集
-				newTask := newCollectTask(device, nil)
-				c.tasks[device.ID] = newTask
-				heap.Push(c.taskHeap, newTask)
+				c.upsertTaskLocked(device)
 				log.Printf("Device %s (ID:%d) enabled, added to collection", device.Name, device.ID)
 			} else {
 				// 已存在的设备，更新配置
-				updatedTask := newCollectTask(device, task)
-				c.tasks[device.ID] = updatedTask
-				heap.Push(c.taskHeap, updatedTask)
+				c.upsertTaskLocked(device)
 				log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
 			}
 		} else {
 			// 设备禁用
 			if exists {
 				// 从采集任务中移除
-				delete(c.tasks, device.ID)
+				c.removeTaskLocked(device.ID)
 				log.Printf("Device %s (ID:%d) disabled, removed from collection", device.Name, device.ID)
 			}
 		}
@@ -330,6 +320,10 @@ func (c *Collector) IsRunning() bool {
 
 // AddDevice 添加设备到采集任务
 func (c *Collector) AddDevice(device *models.Device) error {
+	if device == nil {
+		return fmt.Errorf("device is nil")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -337,10 +331,7 @@ func (c *Collector) AddDevice(device *models.Device) error {
 		return fmt.Errorf("device %d already in collector", device.ID)
 	}
 
-	task := newCollectTask(device, nil)
-
-	c.tasks[device.ID] = task
-	heap.Push(c.taskHeap, task)
+	c.upsertTaskLocked(device)
 	return nil
 }
 
@@ -349,23 +340,50 @@ func (c *Collector) RemoveDevice(deviceID int64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	delete(c.tasks, deviceID)
+	c.removeTaskLocked(deviceID)
 	return nil
 }
 
 // UpdateDevice 更新设备采集配置
 func (c *Collector) UpdateDevice(device *models.Device) error {
+	if device == nil {
+		return fmt.Errorf("device is nil")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	task, exists := c.tasks[device.ID]
+	_, exists := c.tasks[device.ID]
 	if !exists {
 		return fmt.Errorf("device %d not in collector", device.ID)
 	}
 
-	updatedTask := newCollectTask(device, task)
-	c.tasks[device.ID] = updatedTask
-	heap.Push(c.taskHeap, updatedTask)
+	c.upsertTaskLocked(device)
+	return nil
+}
+
+func (c *Collector) upsertTaskLocked(device *models.Device) bool {
+	if device == nil {
+		return false
+	}
+	current, exists := c.tasks[device.ID]
+	task := newCollectTask(device, current)
+	c.tasks[device.ID] = task
+	heap.Push(c.taskHeap, task)
+	return !exists
+}
+
+func (c *Collector) removeTaskLocked(deviceID int64) {
+	delete(c.tasks, deviceID)
+}
+
+func (c *Collector) popNextCurrentTaskLocked() *collectTask {
+	for len(*c.taskHeap) > 0 {
+		candidate := heap.Pop(c.taskHeap).(*collectTask)
+		if c.isTaskCurrentLocked(candidate) {
+			return candidate
+		}
+	}
 	return nil
 }
 
@@ -428,6 +446,10 @@ func resolveStorageInterval(seconds int) time.Duration {
 }
 
 func shouldStoreHistory(task *collectTask, collectedAt time.Time) bool {
+	if task == nil {
+		return false
+	}
+
 	interval := task.storageInterval
 	if interval <= 0 {
 		interval = resolveStorageInterval(0)
@@ -441,41 +463,69 @@ func shouldStoreHistory(task *collectTask, collectedAt time.Time) bool {
 	return collectedAt.Sub(task.lastStored) >= interval
 }
 
+func (c *Collector) markTaskCollected(task *collectTask, collectedAt time.Time, stored bool) {
+	if task == nil {
+		return
+	}
+	if collectedAt.IsZero() {
+		collectedAt = time.Now()
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.isTaskCurrentLocked(task) {
+		return
+	}
+
+	task.lastRun = collectedAt
+	if stored {
+		task.lastStored = collectedAt
+	}
+}
+
+func parseFloatFieldValue(fields map[string]string, field string) (float64, bool) {
+	if fields == nil {
+		return 0, false
+	}
+
+	valueStr, ok := fields[field]
+	if !ok {
+		return 0, false
+	}
+
+	value, err := strconv.ParseFloat(strings.TrimSpace(valueStr), 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return value, true
+}
+
 // checkThresholds 检查阈值
 func (c *Collector) checkThresholds(device *models.Device, data *models.CollectData) error {
+	if device == nil || data == nil {
+		return nil
+	}
+
 	thresholds, err := GetDeviceThresholds(device.ID)
 	if err != nil {
 		return err
 	}
 
+	checker := NewThresholdChecker()
+
 	for _, threshold := range thresholds {
-		valueStr, ok := data.Fields[threshold.FieldName]
+		if threshold == nil {
+			continue
+		}
+
+		value, ok := parseFloatFieldValue(data.Fields, threshold.FieldName)
 		if !ok {
 			continue
 		}
 
-		var value float64
-		if _, err := fmt.Sscanf(valueStr, "%f", &value); err != nil {
-			continue
-		}
-
-		triggered := false
-		switch threshold.Operator {
-		case ">":
-			triggered = value > threshold.Value
-		case "<":
-			triggered = value < threshold.Value
-		case ">=":
-			triggered = value >= threshold.Value
-		case "<=":
-			triggered = value <= threshold.Value
-		case "==":
-			triggered = value == threshold.Value
-		case "!=":
-			triggered = value != threshold.Value
-		}
-
-		if triggered {
+		if checker.Check(value, threshold.Operator, threshold.Value) {
 			c.handleAlarm(device, threshold, value)
 		}
 	}

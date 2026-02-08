@@ -153,3 +153,53 @@ func TestCollectorTaskIdentityChecks(t *testing.T) {
 		t.Fatalf("expected new task current")
 	}
 }
+
+func TestMarkTaskCollected_OnlyUpdatesCurrentTask(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	device := &models.Device{ID: 9, CollectInterval: 1000, StorageInterval: 60}
+	oldTask := newCollectTask(device, nil)
+	newTask := newCollectTask(device, oldTask)
+
+	c.mu.Lock()
+	c.tasks[device.ID] = newTask
+	c.mu.Unlock()
+
+	stamp := time.Now()
+	c.markTaskCollected(oldTask, stamp, true)
+	if !oldTask.lastRun.IsZero() || !oldTask.lastStored.IsZero() {
+		t.Fatalf("stale task should not be updated")
+	}
+
+	c.markTaskCollected(newTask, stamp, true)
+	if newTask.lastRun.IsZero() {
+		t.Fatalf("current task lastRun should be updated")
+	}
+	if newTask.lastStored.IsZero() {
+		t.Fatalf("current task lastStored should be updated when stored=true")
+	}
+}
+
+func TestParseFloatFieldValue(t *testing.T) {
+	if _, ok := parseFloatFieldValue(nil, "temp"); ok {
+		t.Fatalf("nil fields should return false")
+	}
+
+	fields := map[string]string{
+		"temp": "  12.5  ",
+		"bad":  "abc",
+	}
+
+	if v, ok := parseFloatFieldValue(fields, "temp"); !ok || v != 12.5 {
+		t.Fatalf("expected temp=12.5, got (%v, %v)", v, ok)
+	}
+
+	if _, ok := parseFloatFieldValue(fields, "missing"); ok {
+		t.Fatalf("missing field should return false")
+	}
+
+	if _, ok := parseFloatFieldValue(fields, "bad"); ok {
+		t.Fatalf("invalid float should return false")
+	}
+}
