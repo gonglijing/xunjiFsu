@@ -140,3 +140,20 @@ func TestParseAndPrepareNorthboundConfig_InvalidConfig(t *testing.T) {
 		t.Fatalf("code = %q, want %q", parsed.Code, apiErrNorthboundConfigInvalid.Code)
 	}
 }
+
+func TestValidateConfigBySchema_TrimmedRequiredString(t *testing.T) {
+	err := validateConfigBySchema("pandax", `{"serverUrl":"   ","username":"token"}`)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "MQTT 地址") {
+		t.Fatalf("error = %q, want contains %q", err.Error(), "MQTT 地址")
+	}
+}
+
+func TestValidateConfigBySchema_RequiredStringPass(t *testing.T) {
+	err := validateConfigBySchema("pandax", `{"serverUrl":"tcp://127.0.0.1:1883","username":"token"}`)
+	if err != nil {
+		t.Fatalf("validateConfigBySchema returned error: %v", err)
+	}
+}

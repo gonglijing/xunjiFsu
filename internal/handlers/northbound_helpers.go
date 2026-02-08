@@ -247,7 +247,10 @@ func validateConfigBySchema(nbType string, configJSON string) error {
 			continue
 		}
 		value, exists := config[field.Key]
-		if !exists || value == nil || value == "" {
+		if !exists || value == nil {
+			return fmt.Errorf("%s is required", field.Label)
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
 			return fmt.Errorf("%s is required", field.Label)
 		}
 	}
