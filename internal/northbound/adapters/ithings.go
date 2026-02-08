@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1129,90 +1128,15 @@ func parseIThingsConfig(configStr string) (*IThingsConfig, error) {
 }
 
 func iThingsPickString(data map[string]interface{}, keys ...string) string {
-	for _, key := range keys {
-		value, ok := data[key]
-		if !ok || value == nil {
-			continue
-		}
-		if text, ok := value.(string); ok {
-			trimmed := strings.TrimSpace(text)
-			if trimmed != "" {
-				return trimmed
-			}
-			continue
-		}
-		str := strings.TrimSpace(fmt.Sprintf("%v", value))
-		if str != "" {
-			return str
-		}
-	}
-	return ""
+	return pickConfigString(data, keys...)
 }
 
 func iThingsPickInt(data map[string]interface{}, fallback int, keys ...string) int {
-	for _, key := range keys {
-		value, ok := data[key]
-		if !ok || value == nil {
-			continue
-		}
-		switch v := value.(type) {
-		case int:
-			return v
-		case int8:
-			return int(v)
-		case int16:
-			return int(v)
-		case int32:
-			return int(v)
-		case int64:
-			return int(v)
-		case float32:
-			return int(v)
-		case float64:
-			return int(v)
-		case string:
-			trimmed := strings.TrimSpace(v)
-			if trimmed == "" {
-				continue
-			}
-			number, err := strconv.Atoi(trimmed)
-			if err == nil {
-				return number
-			}
-		}
-	}
-	return fallback
+	return pickConfigInt(data, fallback, keys...)
 }
 
 func iThingsPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
-	for _, key := range keys {
-		value, ok := data[key]
-		if !ok || value == nil {
-			continue
-		}
-		switch v := value.(type) {
-		case bool:
-			return v
-		case int:
-			return v != 0
-		case int64:
-			return v != 0
-		case float64:
-			return v != 0
-		case string:
-			trimmed := strings.TrimSpace(strings.ToLower(v))
-			if trimmed == "" {
-				continue
-			}
-			if trimmed == "true" || trimmed == "1" || trimmed == "yes" {
-				return true
-			}
-			if trimmed == "false" || trimmed == "0" || trimmed == "no" {
-				return false
-			}
-		}
-	}
-	return fallback
+	return pickConfigBool(data, fallback, keys...)
 }
 
 func parseIThingsDownTopic(topic string) (topicType, productID, deviceName string) {
