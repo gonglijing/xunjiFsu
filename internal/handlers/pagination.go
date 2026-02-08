@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 // PaginationParams 分页参数
@@ -100,6 +101,45 @@ func buildPaginationWindow(params PaginationParams, totalItems int) paginationWi
 	return paginationWindow{start: start, end: end}
 }
 
+func paginateDevices(devices []*models.Device, params PaginationParams) ([]interface{}, int) {
+	totalItems := len(devices)
+	window := buildPaginationWindow(params, totalItems)
+	if window.start >= window.end {
+		return []interface{}{}, totalItems
+	}
+
+	items := make([]interface{}, 0, window.end-window.start)
+	for _, device := range devices[window.start:window.end] {
+		items = append(items, device)
+	}
+
+	return items, totalItems
+}
+
+func parsePaginatedDeviceID(r *http.Request) (int64, error) {
+	deviceID, err := parseOptionalInt64Query(r, "device_id")
+	if err != nil || deviceID == nil {
+		return 0, err
+	}
+	return *deviceID, nil
+}
+
+func queryPaginatedDataPoints(deviceID int64, pageSize int) ([]*database.DataPoint, error) {
+	if deviceID > 0 {
+		return database.GetDataPointsByDevice(deviceID, pageSize)
+	}
+	return database.GetLatestDataPoints(pageSize)
+}
+
+func newDataPointsPage(points []*database.DataPoint, params PaginationParams) map[string]interface{} {
+	return map[string]interface{}{
+		"items":     points,
+		"page":      params.Page,
+		"page_size": params.PageSize,
+		"has_next":  len(points) == params.PageSize,
+	}
+}
+
 // GetPaginatedDevices 获取分页设备列表
 func GetPaginatedDevices(w http.ResponseWriter, r *http.Request) {
 	params := GetPagination(r, 20)
@@ -110,16 +150,7 @@ func GetPaginatedDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 计算分页
-	totalItems := len(devices)
-	window := buildPaginationWindow(params, totalItems)
-
-	var paginatedItems []interface{}
-	if window.start < window.end {
-		for _, d := range devices[window.start:window.end] {
-			paginatedItems = append(paginatedItems, d)
-		}
-	}
+	paginatedItems, totalItems := paginateDevices(devices, params)
 
 	WriteSuccess(w, NewPaginatedResponse(paginatedItems, params, totalItems))
 }
@@ -128,36 +159,17 @@ func GetPaginatedDevices(w http.ResponseWriter, r *http.Request) {
 func GetPaginatedDataPoints(w http.ResponseWriter, r *http.Request) {
 	params := GetPagination(r, 100)
 
-	deviceIDStr := r.URL.Query().Get("device_id")
-	var deviceID int64
-	if deviceIDStr != "" {
-		parsed, err := strconv.ParseInt(deviceIDStr, 10, 64)
-		if err != nil {
-			WriteBadRequestDef(w, apiErrInvalidDeviceID)
-			return
-		}
-		deviceID = parsed
+	deviceID, err := parsePaginatedDeviceID(r)
+	if err != nil {
+		WriteBadRequestDef(w, apiErrInvalidDeviceID)
+		return
 	}
 
-	var points []*database.DataPoint
-	var err error
-
-	if deviceID > 0 {
-		points, err = database.GetDataPointsByDevice(deviceID, params.PageSize)
-	} else {
-		points, err = database.GetLatestDataPoints(params.PageSize)
-	}
-
+	points, err := queryPaginatedDataPoints(deviceID, params.PageSize)
 	if err != nil {
 		writeServerErrorWithLog(w, apiErrListPaginatedDataPointsFailed, err)
 		return
 	}
 
-	// 简单返回，不计算总数
-	WriteSuccess(w, map[string]interface{}{
-		"items":     points,
-		"page":      params.Page,
-		"page_size": params.PageSize,
-		"has_next":  len(points) == params.PageSize,
-	})
+	WriteSuccess(w, newDataPointsPage(points, params))
 }

@@ -1,6 +1,12 @@
 package handlers
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/models"
+)
 
 func TestCalculateTotalPages(t *testing.T) {
 	tests := []struct {
@@ -45,5 +51,73 @@ func TestBuildPaginationWindow(t *testing.T) {
 				t.Fatalf("buildPaginationWindow() = {%d,%d}, want {%d,%d}", window.start, window.end, tt.start, tt.end)
 			}
 		})
+	}
+}
+
+func TestPaginateDevices(t *testing.T) {
+	devices := []*models.Device{{ID: 1}, {ID: 2}, {ID: 3}}
+	params := PaginationParams{Page: 2, PageSize: 2, Offset: 2}
+
+	items, total := paginateDevices(devices, params)
+	if total != 3 {
+		t.Fatalf("total = %d, want %d", total, 3)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want %d", len(items), 1)
+	}
+
+	device, ok := items[0].(*models.Device)
+	if !ok {
+		t.Fatalf("item type = %T, want *models.Device", items[0])
+	}
+	if device.ID != 3 {
+		t.Fatalf("device id = %d, want %d", device.ID, 3)
+	}
+}
+
+func TestParsePaginatedDeviceID(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/points?device_id=12", nil)
+		deviceID, err := parsePaginatedDeviceID(req)
+		if err != nil {
+			t.Fatalf("parsePaginatedDeviceID returned error: %v", err)
+		}
+		if deviceID != 12 {
+			t.Fatalf("deviceID = %d, want %d", deviceID, 12)
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/points", nil)
+		deviceID, err := parsePaginatedDeviceID(req)
+		if err != nil {
+			t.Fatalf("parsePaginatedDeviceID returned error: %v", err)
+		}
+		if deviceID != 0 {
+			t.Fatalf("deviceID = %d, want %d", deviceID, 0)
+		}
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/points?device_id=abc", nil)
+		if _, err := parsePaginatedDeviceID(req); err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+}
+
+func TestNewDataPointsPage(t *testing.T) {
+	points := []*database.DataPoint{{DeviceID: 1}, {DeviceID: 2}}
+	params := PaginationParams{Page: 1, PageSize: 2}
+
+	page := newDataPointsPage(points, params)
+	if page["page"].(int) != 1 {
+		t.Fatalf("page = %v, want %d", page["page"], 1)
+	}
+	if page["page_size"].(int) != 2 {
+		t.Fatalf("page_size = %v, want %d", page["page_size"], 2)
+	}
+	if page["has_next"].(bool) != true {
+		t.Fatalf("has_next = %v, want true", page["has_next"])
 	}
 }
