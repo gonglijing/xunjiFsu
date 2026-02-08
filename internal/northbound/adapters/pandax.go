@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -967,7 +969,12 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 	}
 
 	cfg := &PandaXConfig{}
-	cfg.ServerURL = strings.TrimSpace(pandaXPickString(raw, "serverUrl", "broker", "server_url"))
+	cfg.ServerURL = normalizePandaXServerURL(
+		pandaXPickString(raw, "serverUrl", "broker", "server_url"),
+		pandaXPickString(raw, "protocol"),
+		pandaXPickInt(raw, 0, "port"),
+	)
+
 	cfg.Username = strings.TrimSpace(pandaXPickString(raw, "username", "token", "deviceToken"))
 	cfg.Password = strings.TrimSpace(pandaXPickString(raw, "password"))
 	cfg.ClientID = strings.TrimSpace(pandaXPickString(raw, "clientId", "client_id"))
@@ -1003,7 +1010,7 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 		return nil, fmt.Errorf("serverUrl is required")
 	}
 	if cfg.Username == "" {
-		return nil, fmt.Errorf("username is required (device token)")
+		return nil, fmt.Errorf("username is required")
 	}
 	if !cfg.GatewayMode {
 		return nil, fmt.Errorf("PandaX adapter only supports gatewayMode=true")
@@ -1031,6 +1038,40 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func normalizePandaXServerURL(serverURL, protocol string, port int) string {
+	serverURL = strings.TrimSpace(serverURL)
+	if serverURL == "" {
+		return ""
+	}
+
+	if !strings.Contains(serverURL, "://") {
+		transport := strings.TrimSpace(protocol)
+		if transport == "" {
+			transport = "tcp"
+		}
+		serverURL = transport + "://" + serverURL
+	}
+
+	if port <= 0 {
+		return serverURL
+	}
+
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		return serverURL
+	}
+	if parsed.Port() != "" {
+		return serverURL
+	}
+
+	hostname := parsed.Hostname()
+	if hostname == "" {
+		return serverURL
+	}
+	parsed.Host = net.JoinHostPort(hostname, strconv.Itoa(port))
+	return parsed.String()
 }
 
 func pandaXPickString(data map[string]interface{}, keys ...string) string {

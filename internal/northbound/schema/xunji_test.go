@@ -52,6 +52,34 @@ func TestPandaXConfigSchemaSupported(t *testing.T) {
 	if len(fields) == 0 {
 		t.Fatalf("expected non-empty pandax schema")
 	}
+
+	hasServerURL := false
+	hasUsername := false
+	hasGatewayMode := false
+	hasPort := false
+	hasProtocol := false
+
+	for _, field := range fields {
+		switch field.Key {
+		case "serverUrl":
+			hasServerURL = true
+		case "username":
+			hasUsername = true
+		case "gatewayMode":
+			hasGatewayMode = true
+		case "port":
+			hasPort = true
+		case "protocol":
+			hasProtocol = true
+		}
+	}
+
+	if !hasServerURL || !hasUsername || !hasGatewayMode {
+		t.Fatalf("pandax schema missing required core fields")
+	}
+	if !hasPort || !hasProtocol {
+		t.Fatalf("pandax schema should support simplified connection fields")
+	}
 }
 
 func TestIThingsConfigSchemaSupported(t *testing.T) {

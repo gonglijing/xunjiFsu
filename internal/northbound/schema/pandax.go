@@ -3,6 +3,8 @@ package schema
 // PandaXConfigSchema is schema source for PandaX northbound config.
 var PandaXConfigSchema = []Field{
 	{Key: "serverUrl", Label: "MQTT 地址", Type: FieldTypeString, Required: true, Default: "", Description: "例如 tcp://127.0.0.1:1883"},
+	{Key: "port", Label: "端口", Type: FieldTypeInt, Optional: true, Default: 0, Description: "仅在 serverUrl 未带端口时生效"},
+	{Key: "protocol", Label: "协议", Type: FieldTypeString, Optional: true, Default: "tcp", Description: "仅在 serverUrl 未带协议时生效"},
 	{Key: "username", Label: "设备 Token", Type: FieldTypeString, Required: true, Default: "", Description: "PandaX 使用 MQTT Username 认证"},
 	{Key: "password", Label: "密码", Type: FieldTypeString, Optional: true, Default: "", Description: "默认可留空"},
 	{Key: "clientId", Label: "Client ID", Type: FieldTypeString, Optional: true, Default: "", Description: "可为空，自动生成"},
