@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gorilla/mux"
 )
 
 func TestIsGatewayIdentityNorthboundType(t *testing.T) {
@@ -75,5 +79,64 @@ func TestValidateNorthboundConfig_SchemaConfigBypassesLegacyRequiredFields(t *te
 
 	if err := validateNorthboundConfig(config); err != nil {
 		t.Fatalf("validateNorthboundConfig returned error: %v", err)
+	}
+}
+
+func TestWriteNorthboundConfigInvalid(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	writeNorthboundConfigInvalid(w, nil)
+
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusBadRequest)
+	}
+
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != apiErrNorthboundConfigInvalid.Code {
+		t.Fatalf("code = %q, want %q", parsed.Code, apiErrNorthboundConfigInvalid.Code)
+	}
+}
+
+func TestParseAndPrepareNorthboundConfig_InvalidBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/northbound", strings.NewReader(`{"name":`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	config, ok := parseAndPrepareNorthboundConfig(w, req)
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	if config != nil {
+		t.Fatalf("config = %#v, want nil", config)
+	}
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestParseAndPrepareNorthboundConfig_InvalidConfig(t *testing.T) {
+	body := `{"name":"demo","type":"mqtt"}`
+	req := httptest.NewRequest(http.MethodPost, "/northbound", strings.NewReader(body))
+	req = mux.SetURLVars(req, map[string]string{"id": "1"})
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	config, ok := parseAndPrepareNorthboundConfig(w, req)
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	if config != nil {
+		t.Fatalf("config = %#v, want nil", config)
+	}
+
+	var parsed parsedErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if parsed.Code != apiErrNorthboundConfigInvalid.Code {
+		t.Fatalf("code = %q, want %q", parsed.Code, apiErrNorthboundConfigInvalid.Code)
 	}
 }

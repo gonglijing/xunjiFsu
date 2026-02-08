@@ -26,31 +26,21 @@ func (h *Handler) GetNorthboundConfigs(w http.ResponseWriter, r *http.Request) {
 
 // CreateNorthboundConfig 创建北向配置
 func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request) {
-	var config models.NorthboundConfig
-	if !parseRequestOrWriteBadRequestDefault(w, r, &config) {
-		return
-	}
-	normalizeNorthboundConfig(&config)
-	if err := validateNorthboundConfig(&config); err != nil {
-		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
-		return
-	}
-	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
-		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
+	config, ok := parseAndPrepareNorthboundConfig(w, r)
+	if !ok {
 		return
 	}
 
 	if config.Enabled == 1 {
-		if err := h.registerNorthboundAdapter(&config); err != nil {
+		if err := h.registerNorthboundAdapter(config); err != nil {
 			WriteBadRequestCode(w, apiErrNorthboundInitializeFailed.Code, apiErrNorthboundInitializeFailed.Message+": "+err.Error())
 			return
 		}
-		h.northboundMgr.SetEnabled(config.Name, true)
 	}
 	h.northboundMgr.SetInterval(config.Name, time.Duration(config.UploadInterval)*time.Millisecond)
 	h.northboundMgr.SetEnabled(config.Name, config.Enabled == 1)
 
-	id, err := database.CreateNorthboundConfig(&config)
+	id, err := database.CreateNorthboundConfig(config)
 	if err != nil {
 		h.northboundMgr.RemoveAdapter(config.Name)
 		writeServerErrorWithLog(w, apiErrCreateNorthboundConfigFailed, err)
@@ -58,7 +48,7 @@ func (h *Handler) CreateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	config.ID = id
-	WriteCreated(w, h.buildNorthboundConfigView(&config))
+	WriteCreated(w, h.buildNorthboundConfigView(config))
 }
 
 // UpdateNorthboundConfig 更新北向配置
@@ -73,17 +63,8 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var config models.NorthboundConfig
-	if !parseRequestOrWriteBadRequestDefault(w, r, &config) {
-		return
-	}
-	normalizeNorthboundConfig(&config)
-	if err := validateNorthboundConfig(&config); err != nil {
-		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
-		return
-	}
-	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
-		WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
+	config, ok := parseAndPrepareNorthboundConfig(w, r)
+	if !ok {
 		return
 	}
 
@@ -91,25 +72,21 @@ func (h *Handler) UpdateNorthboundConfig(w http.ResponseWriter, r *http.Request)
 		h.northboundMgr.RemoveAdapter(oldConfig.Name)
 	}
 
-	if err := h.rebuildNorthboundRuntime(&config); err != nil {
-		if oldConfig != nil {
-			_ = h.rebuildNorthboundRuntime(oldConfig)
-		}
+	if err := h.rebuildNorthboundRuntime(config); err != nil {
+		h.rollbackNorthboundRuntime(oldConfig)
 		WriteBadRequestCode(w, apiErrNorthboundInitializeFailed.Code, apiErrNorthboundInitializeFailed.Message+": "+err.Error())
 		return
 	}
 
 	config.ID = id
-	if err := database.UpdateNorthboundConfig(&config); err != nil {
+	if err := database.UpdateNorthboundConfig(config); err != nil {
 		h.northboundMgr.RemoveAdapter(config.Name)
-		if oldConfig != nil {
-			_ = h.rebuildNorthboundRuntime(oldConfig)
-		}
+		h.rollbackNorthboundRuntime(oldConfig)
 		writeServerErrorWithLog(w, apiErrUpdateNorthboundConfigFailed, err)
 		return
 	}
 
-	WriteSuccess(w, h.buildNorthboundConfigView(&config))
+	WriteSuccess(w, h.buildNorthboundConfigView(config))
 }
 
 // DeleteNorthboundConfig 删除北向配置
@@ -130,4 +107,37 @@ func (h *Handler) DeleteNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	WriteDeleted(w)
+}
+
+func parseAndPrepareNorthboundConfig(w http.ResponseWriter, r *http.Request) (*models.NorthboundConfig, bool) {
+	var config models.NorthboundConfig
+	if !parseRequestOrWriteBadRequestDefault(w, r, &config) {
+		return nil, false
+	}
+
+	normalizeNorthboundConfig(&config)
+	if err := validateNorthboundConfig(&config); err != nil {
+		writeNorthboundConfigInvalid(w, err)
+		return nil, false
+	}
+	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
+		writeNorthboundConfigInvalid(w, err)
+		return nil, false
+	}
+
+	return &config, true
+}
+
+func writeNorthboundConfigInvalid(w http.ResponseWriter, err error) {
+	if err == nil {
+		WriteBadRequestDef(w, apiErrNorthboundConfigInvalid)
+		return
+	}
+	WriteBadRequestCode(w, apiErrNorthboundConfigInvalid.Code, apiErrNorthboundConfigInvalid.Message+": "+err.Error())
+}
+
+func (h *Handler) rollbackNorthboundRuntime(oldConfig *models.NorthboundConfig) {
+	if oldConfig != nil {
+		_ = h.rebuildNorthboundRuntime(oldConfig)
+	}
 }
