@@ -6,3 +6,4 @@
 	path = drvs
 	url = git@github.com:gonglijing/xunjiDrvs.git
 	branch = main
+	ignore = dirty

@@ -9,4 +9,6 @@ ui/static/dist/main.js
 plugin_north/northbound-*
 plugin_north/*.exe
 
+logs/*.log
+
 gogw
