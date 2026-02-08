@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -24,7 +23,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	requestFunc, pluginFunc, configFunc := normalizeExecuteFunction(req.Function)
+	_, pluginFunc, configFunc := normalizeExecuteFunction(req.Function)
 
 	device, err := database.GetDeviceByID(id)
 	if err != nil {
@@ -43,7 +42,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 	}
 	if !h.driverManager.IsLoaded(*device.DriverID) {
 		if err := h.driverManager.LoadDriverFromModel(driverModel, 0); err != nil {
-			WriteServerError(w, "driver load failed: "+err.Error())
+			writeServerErrorWithLog(w, apiErrLoadDriverFailed, err)
 			return
 		}
 	}
@@ -57,7 +56,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 	enrichExecuteIdentity(config, device)
 	if configFunc == "write" {
 		if err := normalizeWriteParams(config, req.Params); err != nil {
-			WriteBadRequest(w, err.Error())
+			WriteBadRequestCode(w, apiErrExecuteDriverParamInvalid.Code, apiErrExecuteDriverParamInvalid.Message+": "+err.Error())
 			return
 		}
 	}
@@ -81,7 +80,7 @@ func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) 
 			WriteBadRequestDef(w, apiErrDriverNotLoaded)
 			return
 		}
-		WriteServerError(w, fmt.Sprintf("Failed to execute %s: %v", requestFunc, err))
+		writeServerErrorWithLog(w, apiErrExecuteDriverFailed, err)
 		return
 	}
 

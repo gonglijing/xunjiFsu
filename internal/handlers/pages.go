@@ -132,7 +132,7 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 // StartCollector 启动采集器
 func (h *Handler) StartCollector(w http.ResponseWriter, r *http.Request) {
 	if err := h.collector.Start(); err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrStartCollectorFailed, err)
 		return
 	}
 	WriteSuccess(w, map[string]string{"status": "started"})

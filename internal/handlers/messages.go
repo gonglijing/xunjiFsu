@@ -271,4 +271,40 @@ var (
 		Code:    "E_SYNC_GATEWAY_IDENTITY_FAILED",
 		Message: "同步网关身份失败",
 	}
+	apiErrCreateDriversDirFailed = APIErrorDef{
+		Code:    "E_CREATE_DRIVERS_DIR_FAILED",
+		Message: "创建驱动目录失败",
+	}
+	apiErrSaveDriverFileFailed = APIErrorDef{
+		Code:    "E_SAVE_DRIVER_FILE_FAILED",
+		Message: "保存驱动文件失败",
+	}
+	apiErrWriteDriverFileFailed = APIErrorDef{
+		Code:    "E_WRITE_DRIVER_FILE_FAILED",
+		Message: "写入驱动文件失败",
+	}
+	apiErrListDriverFilesFailed = APIErrorDef{
+		Code:    "E_LIST_DRIVER_FILES_FAILED",
+		Message: "读取驱动目录失败",
+	}
+	apiErrExecuteDriverFailed = APIErrorDef{
+		Code:    "E_EXECUTE_DRIVER_FAILED",
+		Message: "执行驱动函数失败",
+	}
+	apiErrExecuteDriverParamInvalid = APIErrorDef{
+		Code:    "E_EXECUTE_DRIVER_PARAM_INVALID",
+		Message: "驱动执行参数无效",
+	}
+	apiErrStartCollectorFailed = APIErrorDef{
+		Code:    "E_START_COLLECTOR_FAILED",
+		Message: "启动采集器失败",
+	}
+	apiErrListPaginatedDevicesFailed = APIErrorDef{
+		Code:    "E_LIST_PAGINATED_DEVICES_FAILED",
+		Message: "分页查询设备失败",
+	}
+	apiErrListPaginatedDataPointsFailed = APIErrorDef{
+		Code:    "E_LIST_PAGINATED_DATA_POINTS_FAILED",
+		Message: "分页查询历史数据失败",
+	}
 )

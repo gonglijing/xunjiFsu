@@ -36,20 +36,20 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 		driversDir = "drivers"
 	}
 	if err := os.MkdirAll(driversDir, 0755); err != nil {
-		WriteServerError(w, "Failed to create drivers directory: "+err.Error())
+		writeServerErrorWithLog(w, apiErrCreateDriversDirFailed, err)
 		return
 	}
 
 	destPath := filepath.Join(driversDir, header.Filename)
 	destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		WriteServerError(w, "Failed to save file: "+err.Error())
+		writeServerErrorWithLog(w, apiErrSaveDriverFileFailed, err)
 		return
 	}
 	defer destFile.Close()
 
 	if _, err := io.Copy(destFile, file); err != nil {
-		WriteServerError(w, "Failed to write file: "+err.Error())
+		writeServerErrorWithLog(w, apiErrWriteDriverFileFailed, err)
 		return
 	}
 
@@ -114,7 +114,7 @@ func (h *Handler) ListDriverFiles(w http.ResponseWriter, r *http.Request) {
 			WriteSuccess(w, []interface{}{})
 			return
 		}
-		WriteServerError(w, "Failed to read drivers directory: "+err.Error())
+		writeServerErrorWithLog(w, apiErrListDriverFilesFailed, err)
 		return
 	}
 

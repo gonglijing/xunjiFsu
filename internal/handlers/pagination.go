@@ -106,7 +106,7 @@ func GetPaginatedDevices(w http.ResponseWriter, r *http.Request) {
 
 	devices, err := database.GetAllDevices()
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListPaginatedDevicesFailed, err)
 		return
 	}
 
@@ -149,7 +149,7 @@ func GetPaginatedDataPoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		WriteServerError(w, err.Error())
+		writeServerErrorWithLog(w, apiErrListPaginatedDataPointsFailed, err)
 		return
 	}
 
