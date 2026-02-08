@@ -14,6 +14,7 @@ type parsedErrorResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 func TestParseFormValue_StringOnlyField(t *testing.T) {
@@ -215,6 +216,9 @@ func TestWriteErrorDef(t *testing.T) {
 	if parsed.Code != def.Code || parsed.Error != def.Message {
 		t.Fatalf("response mismatch: got code=%q err=%q", parsed.Code, parsed.Error)
 	}
+	if parsed.Message != def.Message {
+		t.Fatalf("message mismatch: got %q, want %q", parsed.Message, def.Message)
+	}
 }
 
 func TestWriteBadRequestCode(t *testing.T) {
@@ -231,6 +235,9 @@ func TestWriteBadRequestCode(t *testing.T) {
 	}
 	if parsed.Code != "E_UNIT_BAD" || parsed.Error != "unit bad" {
 		t.Fatalf("response mismatch: code=%q err=%q", parsed.Code, parsed.Error)
+	}
+	if parsed.Message != "unit bad" {
+		t.Fatalf("response mismatch: message=%q", parsed.Message)
 	}
 }
 

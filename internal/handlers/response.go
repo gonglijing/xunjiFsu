@@ -82,6 +82,7 @@ func WriteErrorCode(w http.ResponseWriter, status int, code, message string) {
 		Success: false,
 		Error:   message,
 		Code:    code,
+		Message: message,
 	})
 }
 

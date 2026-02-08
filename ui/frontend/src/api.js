@@ -45,13 +45,61 @@ async function parseJSON(res) {
   }
 }
 
+function extractAPIError(payload, fallbackMessage) {
+  if (!payload || typeof payload !== 'object') {
+    return { message: fallbackMessage, code: '' };
+  }
+
+  return {
+    message: payload.error || payload.message || fallbackMessage,
+    code: payload.code || '',
+  };
+}
+
+async function parseError(res) {
+  const fallbackMessage = `${res.status} ${res.statusText}`;
+  if (res.status === 204) {
+    const err = new Error(fallbackMessage);
+    err.status = res.status;
+    err.code = '';
+    return err;
+  }
+
+  const text = await res.text();
+  if (!text) {
+    const err = new Error(fallbackMessage);
+    err.status = res.status;
+    err.code = '';
+    return err;
+  }
+
+  try {
+    const json = JSON.parse(text);
+    const parsed = extractAPIError(json, fallbackMessage);
+    const err = new Error(parsed.message);
+    err.status = res.status;
+    err.code = parsed.code;
+    return err;
+  } catch (_) {
+    const err = new Error(fallbackMessage);
+    err.status = res.status;
+    err.code = '';
+    return err;
+  }
+}
+
+async function ensureOK(res) {
+  if (res.ok || res.status === 204) return;
+  throw await parseError(res);
+}
+
 export function storeToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
 }
 
 export async function getJSON(url, options = {}) {
   const res = await authFetch(url, options);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await ensureOK(res);
   return parseJSON(res);
 }
 
@@ -62,7 +110,7 @@ export async function postJSON(url, body, options = {}) {
     body: JSON.stringify(body),
     ...options,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await ensureOK(res);
   return parseJSON(res);
 }
 
@@ -71,7 +119,7 @@ export async function post(url, options = {}) {
     method: 'POST',
     ...options,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await ensureOK(res);
   return parseJSON(res);
 }
 
@@ -82,13 +130,13 @@ export async function putJSON(url, body, options = {}) {
     body: JSON.stringify(body),
     ...options,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await ensureOK(res);
   return parseJSON(res);
 }
 
 export async function del(url) {
   const res = await authFetch(url, { method: 'DELETE' });
-  if (!res.ok && res.status !== 204) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok && res.status !== 204) throw await parseError(res);
   if (res.status === 204) return null;
   return parseJSON(res);
 }
@@ -100,7 +148,7 @@ export async function upload(url, formData, options = {}) {
     body: formData,
     ...options,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await ensureOK(res);
   return parseJSON(res);
 }
 
