@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,9 +76,61 @@ func (h *Handler) driverFilePath(driverName, filePath string) string {
 	if filePath != "" {
 		return filePath
 	}
-	dir := h.driversDir
-	if dir == "" {
-		dir = "drivers"
-	}
+	dir := h.resolvedDriversDir()
 	return filepath.Join(dir, driverName+".wasm")
+}
+
+func (h *Handler) resolvedDriversDir() string {
+	if strings.TrimSpace(h.driversDir) == "" {
+		return "drivers"
+	}
+	return h.driversDir
+}
+
+func isWasmFileName(filename string) bool {
+	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(filename)), ".wasm")
+}
+
+func saveDriverUploadFile(driversDir, filename string, source io.Reader) (string, error) {
+	if err := os.MkdirAll(driversDir, 0755); err != nil {
+		return "", err
+	}
+
+	destPath := filepath.Join(driversDir, filename)
+	destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return "", err
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, source); err != nil {
+		return "", err
+	}
+
+	return destPath, nil
+}
+
+func listDriverWasmFiles(driversDir string) ([]map[string]interface{}, error) {
+	entries, err := os.ReadDir(driversDir)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]map[string]interface{}, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !isWasmFileName(entry.Name()) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, map[string]interface{}{
+			"name":     entry.Name(),
+			"size":     info.Size(),
+			"modified": info.ModTime().Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	return files, nil
 }

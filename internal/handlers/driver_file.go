@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,29 +25,22 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	if !strings.HasSuffix(strings.ToLower(header.Filename), ".wasm") {
+	if !isWasmFileName(header.Filename) {
 		WriteBadRequest(w, errOnlyWasmFilesAllowedMessage)
 		return
 	}
 
-	driversDir := h.driversDir
-	if driversDir == "" {
-		driversDir = "drivers"
-	}
-	if err := os.MkdirAll(driversDir, 0755); err != nil {
-		writeServerErrorWithLog(w, apiErrCreateDriversDirFailed, err)
-		return
-	}
-
-	destPath := filepath.Join(driversDir, header.Filename)
-	destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	driversDir := h.resolvedDriversDir()
+	destPath, err := saveDriverUploadFile(driversDir, header.Filename, file)
 	if err != nil {
-		writeServerErrorWithLog(w, apiErrSaveDriverFileFailed, err)
-		return
-	}
-	defer destFile.Close()
-
-	if _, err := io.Copy(destFile, file); err != nil {
+		if os.IsPermission(err) {
+			writeServerErrorWithLog(w, apiErrSaveDriverFileFailed, err)
+			return
+		}
+		if os.IsNotExist(err) {
+			writeServerErrorWithLog(w, apiErrCreateDriversDirFailed, err)
+			return
+		}
 		writeServerErrorWithLog(w, apiErrWriteDriverFileFailed, err)
 		return
 	}
@@ -103,12 +95,8 @@ func (h *Handler) DownloadDriver(w http.ResponseWriter, r *http.Request) {
 
 // ListDriverFiles 列出驱动目录中的文件
 func (h *Handler) ListDriverFiles(w http.ResponseWriter, r *http.Request) {
-	driversDir := h.driversDir
-	if driversDir == "" {
-		driversDir = "drivers"
-	}
-
-	entries, err := os.ReadDir(driversDir)
+	driversDir := h.resolvedDriversDir()
+	files, err := listDriverWasmFiles(driversDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			WriteSuccess(w, []interface{}{})
@@ -116,18 +104,6 @@ func (h *Handler) ListDriverFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		writeServerErrorWithLog(w, apiErrListDriverFilesFailed, err)
 		return
-	}
-
-	var files []map[string]interface{}
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".wasm") {
-			info, _ := entry.Info()
-			files = append(files, map[string]interface{}{
-				"name":     entry.Name(),
-				"size":     info.Size(),
-				"modified": info.ModTime().Format("2006-01-02 15:04:05"),
-			})
-		}
 	}
 
 	WriteSuccess(w, files)
