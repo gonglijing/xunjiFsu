@@ -5,12 +5,24 @@ import { usePageLoader } from '../utils/pageLoader';
 import { getGatewayMetricsPollIntervalMs } from '../utils/runtimeConfig';
 
 const GATEWAY_METRICS_POLL_INTERVAL_MS = getGatewayMetricsPollIntervalMs();
+const NORTHBOUND_TYPE_ORDER = ['mqtt', 'pandax', 'ithings', 'xunji'];
+const NORTHBOUND_TYPE_LABELS = {
+  mqtt: 'MQTT',
+  pandax: 'PandaX',
+  ithings: 'iThings',
+  xunji: '寻迹',
+};
 
 export function GatewayStatus() {
   const [metrics, setMetrics] = createSignal(null);
+  const [northboundStatus, setNorthboundStatus] = createSignal([]);
   const { loading, run: runMetricsLoad } = usePageLoader(async () => {
-    const res = await api.metrics.getMetrics();
+    const [res, status] = await Promise.all([
+      api.metrics.getMetrics(),
+      api.northbound.listNorthboundStatus().catch(() => []),
+    ]);
     setMetrics(res || null);
+    setNorthboundStatus(Array.isArray(status) ? status : []);
   });
 
   const load = () => {
@@ -24,6 +36,34 @@ export function GatewayStatus() {
   });
 
   const m = () => metrics();
+  const northboundRuntime = () => {
+    const buckets = Object.fromEntries(
+      NORTHBOUND_TYPE_ORDER.map((type) => [type, {
+        type,
+        label: NORTHBOUND_TYPE_LABELS[type] || type,
+        total: 0,
+        connected: 0,
+        disconnected: 0,
+        disconnectedNames: [],
+      }]),
+    );
+
+    for (const item of northboundStatus() || []) {
+      const itemType = `${item?.type || ''}`.toLowerCase();
+      if (!item?.enabled || !buckets[itemType]) continue;
+
+      buckets[itemType].total += 1;
+      if (item?.connected) {
+        buckets[itemType].connected += 1;
+      } else {
+        buckets[itemType].disconnected += 1;
+        const name = `${item?.name || ''}`.trim();
+        if (name) buckets[itemType].disconnectedNames.push(name);
+      }
+    }
+
+    return NORTHBOUND_TYPE_ORDER.map((type) => buckets[type]);
+  };
 
   return (
     <Card
@@ -94,6 +134,27 @@ export function GatewayStatus() {
                 ，Data Idle：{m()?.database?.data_db_idle_conns ??
                   m()?.database?.DataDBIdleConns ??
                   0}
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-label">北向连接状态</div>
+              <div class="stat-card-value" style="font-size:1rem; line-height:1.6; display:flex; flex-direction:column; gap:2px;">
+                {northboundRuntime().map((item) => (
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <span>{item.label}</span>
+                    <span style={`font-weight:600; color:${item.disconnected > 0 ? 'var(--danger)' : 'var(--success)'};`}>
+                      {item.total > 0 ? `${item.connected}/${item.total}` : '--'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div class="text-xs text-muted" style="margin-top:4px;">
+                {northboundRuntime().some((item) => item.disconnected > 0)
+                  ? northboundRuntime()
+                    .filter((item) => item.disconnected > 0)
+                    .map((item) => `${item.label} 断开 ${item.disconnected} 个`)
+                    .join('，')
+                  : '已启用北向均连接正常'}
               </div>
             </div>
           </div>

@@ -114,6 +114,7 @@ func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 			"configured":      cfg != nil,
 			"registered":      h.northboundMgr.HasAdapter(name),
 			"enabled":         h.northboundMgr.IsEnabled(name),
+			"connected":       h.northboundMgr.IsConnected(name),
 			"upload_interval": h.northboundMgr.GetInterval(name).Milliseconds(),
 			"pending":         h.northboundMgr.HasPending(name),
 			"breaker_state":   h.northboundMgr.GetBreakerState(name).String(),

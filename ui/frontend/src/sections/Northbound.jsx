@@ -498,9 +498,16 @@ export function Northbound() {
                   const rt = runtimeByName()[n.name] || n.runtime || {};
                   const registered = rt.registered ? '已注册' : '未注册';
                   const breaker = rt.breaker_state || 'closed';
+                  const connected = !!rt.connected;
                   return (
                     <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
                       <div>{registered} / {rt.enabled ? '运行' : '停止'}</div>
+                      <div>
+                        北向连接: {' '}
+                        <span style={`color:${connected ? 'var(--success)' : 'var(--danger)'}; font-weight:600;`}>
+                          {connected ? '连接中' : '已断开'}
+                        </span>
+                      </div>
                       <div>熔断: {breaker}</div>
                     </div>
                   );

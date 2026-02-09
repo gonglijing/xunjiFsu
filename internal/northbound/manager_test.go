@@ -179,6 +179,25 @@ func TestNorthboundManager_Intervals(t *testing.T) {
 	}
 }
 
+func TestNorthboundManager_IsConnected(t *testing.T) {
+	mgr := NewNorthboundManager()
+	adapter := &fakeAdapter{name: "a1", connected: true}
+	mgr.RegisterAdapter("a1", adapter)
+
+	if !mgr.IsConnected("a1") {
+		t.Fatalf("expected connected=true when adapter connected and enabled")
+	}
+
+	mgr.SetEnabled("a1", false)
+	if mgr.IsConnected("a1") {
+		t.Fatalf("expected connected=false when adapter disabled")
+	}
+
+	if mgr.IsConnected("missing") {
+		t.Fatalf("expected connected=false for missing adapter")
+	}
+}
+
 func TestNorthboundManager_PullCommands(t *testing.T) {
 	mgr := NewNorthboundManager()
 	adapter := &fakeAdapter{

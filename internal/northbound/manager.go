@@ -190,6 +190,19 @@ func (m *NorthboundManager) IsEnabled(name string) bool {
 	return m.enabled[name]
 }
 
+// IsConnected 返回北向连接状态
+func (m *NorthboundManager) IsConnected(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	adapter, exists := m.adapters[name]
+	if !exists || !m.enabled[name] {
+		return false
+	}
+
+	return adapter.IsConnected()
+}
+
 // GetInterval 返回北向上传周期
 func (m *NorthboundManager) GetInterval(name string) time.Duration {
 	m.mu.RLock()
