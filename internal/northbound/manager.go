@@ -286,9 +286,14 @@ func (m *NorthboundManager) SendData(data *models.CollectData) {
 	}
 	m.mu.RUnlock()
 
+	log.Printf("NorthboundManager.SendData: adapterCount=%d, dataDeviceId=%d, dataDeviceKey=%s",
+		len(adapters), data.DeviceID, data.DeviceKey)
+
 	for i, adapter := range adapters {
 		name := names[i]
-		if !enabled[name] {
+		isEnabled := enabled[name]
+		log.Printf("NorthboundManager.SendData: checking adapter %s, enabled=%v", name, isEnabled)
+		if !isEnabled {
 			continue
 		}
 		// 内置适配器自己管理发送，不需要通过熔断器

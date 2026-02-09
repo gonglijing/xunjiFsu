@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -61,6 +62,11 @@ type PandaXConfig struct {
 	DeviceKey  string `json:"deviceKey"`
 }
 
+// SystemStatsProvider 系统属性提供者接口
+type SystemStatsProvider interface {
+	CollectSystemStatsOnce() *models.SystemStats
+}
+
 // PandaXAdapter PandaX 北向适配器
 type PandaXAdapter struct {
 	name   string
@@ -108,6 +114,9 @@ type PandaXAdapter struct {
 	connected   bool
 	lastSend    time.Time
 	seq         uint64
+
+	// 系统属性提供者
+	systemStatsProvider SystemStatsProvider
 }
 
 // NewPandaXAdapter 创建 PandaX 适配器
@@ -130,24 +139,42 @@ func (a *PandaXAdapter) Type() string {
 	return "pandax"
 }
 
+// SetSystemStatsProvider 设置系统属性提供者
+func (a *PandaXAdapter) SetSystemStatsProvider(provider SystemStatsProvider) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.systemStatsProvider = provider
+	log.Printf("[PandaX-%s] SetSystemStatsProvider: 系统属性提供者已设置", a.name)
+}
+
 func (a *PandaXAdapter) Initialize(configStr string) error {
+	log.Printf("[PandaX-%s] Initialize: 开始初始化", a.name)
+
 	cfg, err := parsePandaXConfig(configStr)
 	if err != nil {
+		log.Printf("[PandaX-%s] Initialize: 配置解析失败: %v", a.name, err)
 		return err
 	}
+	log.Printf("[PandaX-%s] Initialize: 配置解析成功, serverUrl=%s, username=%s, gatewayMode=%v",
+		a.name, cfg.ServerURL, cfg.Username, cfg.GatewayMode)
 
 	_ = a.Close()
 
 	broker := normalizeBroker(cfg.ServerURL)
+	log.Printf("[PandaX-%s] Initialize: broker=%s", a.name, broker)
+
 	clientID := strings.TrimSpace(cfg.ClientID)
 	if clientID == "" {
 		clientID = fmt.Sprintf("pandax-%s-%d", a.name, time.Now().UnixNano())
 	}
+	log.Printf("[PandaX-%s] Initialize: clientId=%s", a.name, clientID)
 
 	client, err := connectMQTT(broker, clientID, cfg.Username, cfg.Password, cfg.KeepAlive, cfg.Timeout)
 	if err != nil {
+		log.Printf("[PandaX-%s] Initialize: MQTT 连接失败: %v", a.name, err)
 		return fmt.Errorf("failed to connect MQTT: %w", err)
 	}
+	log.Printf("[PandaX-%s] Initialize: MQTT 连接成功", a.name)
 
 	topicTelemetry := pickFirstNonEmpty(cfg.TelemetryTopic, defaultPandaXTelemetryTopic)
 	topicAttributes := pickFirstNonEmpty(cfg.AttributesTopic, defaultPandaXAttributesTopic)
@@ -206,7 +233,8 @@ func (a *PandaXAdapter) Start() {
 		a.wg.Add(2)
 		go a.reportLoop()
 		go a.alarmLoop()
-		log.Printf("PandaX adapter started: %s", a.name)
+		log.Printf("[PandaX-%s] Start: 适配器已启动, reportInterval=%v, alarmInterval=%v",
+			a.name, a.reportEvery, a.alarmEvery)
 	}
 	a.mu.Unlock()
 }
@@ -219,10 +247,10 @@ func (a *PandaXAdapter) Stop() {
 			close(a.stopChan)
 			a.stopChan = nil
 		}
+		log.Printf("[PandaX-%s] Stop: 适配器已停止", a.name)
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
-	log.Printf("PandaX adapter stopped: %s", a.name)
 }
 
 func (a *PandaXAdapter) SetInterval(interval time.Duration) {
@@ -245,13 +273,19 @@ func (a *PandaXAdapter) IsConnected() bool {
 
 func (a *PandaXAdapter) Send(data *models.CollectData) error {
 	if data == nil {
+		log.Printf("[PandaX-%s] Send: data is nil", a.name)
 		return nil
 	}
 
+	log.Printf("[PandaX-%s] Send: deviceId=%d, deviceKey=%s, fields=%d",
+		a.name, data.DeviceID, data.DeviceKey, len(data.Fields))
+
 	a.dataMu.Lock()
 	a.enqueueRealtimeLocked(cloneCollectData(data))
+	queueLen := len(a.realtimeQueue)
 	a.dataMu.Unlock()
 
+	log.Printf("[PandaX-%s] Send: enqueued, queueLen=%d", a.name, queueLen)
 	return nil
 }
 
@@ -262,21 +296,22 @@ func (a *PandaXAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 
 	a.alarmMu.Lock()
 	a.enqueueAlarmLocked(cloneAlarmPayload(alarm))
-	needFlush := len(a.alarmQueue) >= a.alarmBatch
-	flushNow := a.flushNow
+	queueLen := len(a.alarmQueue)
 	a.alarmMu.Unlock()
 
-	if needFlush {
-		select {
-		case flushNow <- struct{}{}:
-		default:
-		}
+	log.Printf("[PandaX-%s] SendAlarm: deviceKey=%s, fieldName=%s, severity=%s, message=%s, queueLen=%d",
+		a.name, alarm.DeviceKey, alarm.FieldName, alarm.Severity, alarm.Message, queueLen)
+
+	if queueLen >= a.alarmBatch {
+		log.Printf("[PandaX-%s] SendAlarm: 触发批量上报, batchSize=%d", a.name, a.alarmBatch)
 	}
 
 	return nil
 }
 
 func (a *PandaXAdapter) Close() error {
+	log.Printf("[PandaX-%s] Close: 开始关闭", a.name)
+
 	a.Stop()
 
 	a.mu.Lock()
@@ -290,6 +325,7 @@ func (a *PandaXAdapter) Close() error {
 	_ = a.flushAlarmBatch()
 
 	if client != nil && client.IsConnected() {
+		log.Printf("[PandaX-%s] Close: 断开 MQTT 连接", a.name)
 		client.Disconnect(250)
 	}
 
@@ -303,6 +339,7 @@ func (a *PandaXAdapter) Close() error {
 	a.commandQueue = nil
 	a.mu.Unlock()
 
+	log.Printf("[PandaX-%s] Close: 已关闭", a.name)
 	return nil
 }
 
@@ -315,6 +352,7 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 	defer a.commandMu.Unlock()
 
 	if !a.isInitialized() {
+		log.Printf("[PandaX-%s] PullCommands: 适配器未初始化", a.name)
 		return nil, fmt.Errorf("adapter not initialized")
 	}
 
@@ -332,6 +370,7 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 		a.commandQueue = a.commandQueue[1:]
 	}
 
+	log.Printf("[PandaX-%s] PullCommands: 取出 %d 条命令", a.name, len(items))
 	return items, nil
 }
 
@@ -436,18 +475,134 @@ func (a *PandaXAdapter) reportLoop() {
 	stopChan := a.stopChan
 	a.mu.RUnlock()
 
+	log.Printf("[PandaX-%s] reportLoop: 启动, interval=%v (主动获取数据库最新数据)", a.name, interval)
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-stopChan:
+			log.Printf("[PandaX-%s] reportLoop: 退出", a.name)
 			return
 		case <-ticker.C:
-			if err := a.flushRealtime(); err != nil {
-				log.Printf("PandaX realtime flush failed: %v", err)
+			// 主动从数据库获取最新数据上报
+			if err := a.fetchAndPublishLatestData(); err != nil {
+				log.Printf("[PandaX-%s] reportLoop: fetchAndPublishLatestData 失败: %v", a.name, err)
 			}
 		}
+	}
+}
+
+// fetchAndPublishLatestData 从数据库获取所有设备的最新数据并上报
+func (a *PandaXAdapter) fetchAndPublishLatestData() error {
+	devices, err := database.GetAllDevicesLatestData()
+	if err != nil {
+		return fmt.Errorf("获取设备最新数据失败: %w", err)
+	}
+
+	log.Printf("[PandaX-%s] fetchAndPublishLatestData: 获取到 %d 条数据", a.name, len(devices))
+
+	// 获取网关身份
+	gwPK, gwDK := database.GetGatewayIdentity()
+
+	successCount := 0
+	systemStatsCount := 0
+
+	for _, dev := range devices {
+		if dev == nil || len(dev.Fields) == 0 {
+			continue
+		}
+
+		// 判断是否是网关系统数据
+		isSystemStats := dev.DeviceID == models.SystemStatsDeviceID
+
+		// 构建 CollectData
+		data := &models.CollectData{
+			DeviceID:    dev.DeviceID,
+			DeviceName: dev.DeviceName,
+			ProductKey:  gwPK,
+			DeviceKey:   gwDK,
+			Timestamp:   dev.CollectedAt,
+			Fields:     dev.Fields,
+		}
+
+		// 发送到队列
+		a.dataMu.Lock()
+		a.enqueueRealtimeLocked(data)
+		a.dataMu.Unlock()
+
+		if isSystemStats {
+			log.Printf("[PandaX-%s] fetchAndPublishLatestData: 网关系统属性 deviceId=%d, deviceName=%s, fields=%d",
+				a.name, dev.DeviceID, dev.DeviceName, len(dev.Fields))
+			systemStatsCount++
+		} else {
+			log.Printf("[PandaX-%s] fetchAndPublishLatestData: 设备 deviceId=%d, deviceName=%s, fields=%d",
+				a.name, dev.DeviceID, dev.DeviceName, len(dev.Fields))
+			successCount++
+		}
+	}
+
+	// 如果没有系统属性数据，尝试获取当前系统属性
+	if systemStatsCount == 0 {
+		if sysData := a.fetchCurrentSystemStats(gwPK, gwDK); sysData != nil {
+			a.dataMu.Lock()
+			a.enqueueRealtimeLocked(sysData)
+			queueLen := len(a.realtimeQueue)
+			a.dataMu.Unlock()
+			log.Printf("[PandaX-%s] fetchAndPublishLatestData: 当前系统属性, fields=%d, queueLen=%d",
+				a.name, len(sysData.Fields), queueLen)
+		}
+	}
+
+	// 触发一次发送
+	if err := a.flushRealtime(); err != nil {
+		log.Printf("[PandaX-%s] fetchAndPublishLatestData: flushRealtime 失败: %v", a.name, err)
+	}
+
+	log.Printf("[PandaX-%s] fetchAndPublishLatestData: 完成, 设备数=%d, 系统属性=%d",
+		a.name, successCount, systemStatsCount)
+	return nil
+}
+
+// fetchCurrentSystemStats 获取当前系统属性
+func (a *PandaXAdapter) fetchCurrentSystemStats(productKey, deviceKey string) *models.CollectData {
+	a.mu.RLock()
+	provider := a.systemStatsProvider
+	a.mu.RUnlock()
+
+	if provider == nil {
+		log.Printf("[PandaX-%s] fetchCurrentSystemStats: 系统属性提供者未设置", a.name)
+		return nil
+	}
+
+	// 采集当前系统属性
+	stats := provider.CollectSystemStatsOnce()
+	if stats == nil {
+		return nil
+	}
+
+	return &models.CollectData{
+		DeviceID:    models.SystemStatsDeviceID,
+		DeviceName: models.SystemStatsDeviceName,
+		ProductKey:  productKey,
+		DeviceKey:  deviceKey,
+		Timestamp:  time.Unix(0, stats.Timestamp*int64(time.Millisecond)),
+		Fields: map[string]string{
+			"cpu_usage":      fmt.Sprintf("%.2f", stats.CpuUsage),
+			"mem_total":      fmt.Sprintf("%.2f", stats.MemTotal),
+			"mem_used":       fmt.Sprintf("%.2f", stats.MemUsed),
+			"mem_usage":      fmt.Sprintf("%.2f", stats.MemUsage),
+			"mem_available": fmt.Sprintf("%.2f", stats.MemAvailable),
+			"disk_total":    fmt.Sprintf("%.2f", stats.DiskTotal),
+			"disk_used":      fmt.Sprintf("%.2f", stats.DiskUsed),
+			"disk_usage":    fmt.Sprintf("%.2f", stats.DiskUsage),
+			"disk_free":     fmt.Sprintf("%.2f", stats.DiskFree),
+			"uptime":        fmt.Sprintf("%d", stats.Uptime),
+			"load_1":        fmt.Sprintf("%.2f", stats.Load1),
+			"load_5":        fmt.Sprintf("%.2f", stats.Load5),
+			"load_15":       fmt.Sprintf("%.2f", stats.Load15),
+		},
 	}
 }
 
@@ -460,32 +615,37 @@ func (a *PandaXAdapter) alarmLoop() {
 	stopChan := a.stopChan
 	a.mu.RUnlock()
 
+	log.Printf("[PandaX-%s] alarmLoop: 启动, interval=%v, batch=%d", a.name, interval, a.alarmBatch)
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-stopChan:
+			log.Printf("[PandaX-%s] alarmLoop: 正在清空剩余报警队列...", a.name)
 			for {
 				if err := a.flushAlarmBatch(); err != nil {
-					log.Printf("PandaX alarm flush failed on close: %v", err)
+					log.Printf("[PandaX-%s] alarmLoop: flushAlarmBatch 失败: %v", a.name, err)
 					return
 				}
 				a.alarmMu.RLock()
 				empty := len(a.alarmQueue) == 0
 				a.alarmMu.RUnlock()
 				if empty {
+					log.Printf("[PandaX-%s] alarmLoop: 退出", a.name)
 					return
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
 		case <-ticker.C:
 			if err := a.flushAlarmBatch(); err != nil {
-				log.Printf("PandaX alarm flush failed: %v", err)
+				log.Printf("[PandaX-%s] alarmLoop: flushAlarmBatch 失败: %v", a.name, err)
 			}
 		case <-flushNow:
+			log.Printf("[PandaX-%s] alarmLoop: 收到 flush 信号", a.name)
 			if err := a.flushAlarmBatch(); err != nil {
-				log.Printf("PandaX alarm flush failed: %v", err)
+				log.Printf("[PandaX-%s] alarmLoop: flushAlarmBatch 失败: %v", a.name, err)
 			}
 		}
 	}
@@ -504,17 +664,76 @@ func (a *PandaXAdapter) flushRealtime() error {
 	a.realtimeQueue = a.realtimeQueue[:0]
 	a.dataMu.Unlock()
 
-	for _, item := range batch {
-		topic, body := a.buildRealtimePublish(item)
-		if err := a.publish(topic, body); err != nil {
-			a.dataMu.Lock()
-			a.prependRealtime(batch)
-			a.dataMu.Unlock()
-			return err
+	log.Printf("[PandaX-%s] flushRealtime: 开始发送 %d 条数据", a.name, len(batch))
+
+	// 批量构建 payload
+	topic, body := a.buildBatchRealtimePublish(batch)
+
+	// 发送批量数据
+	if err := a.publish(topic, body); err != nil {
+		log.Printf("[PandaX-%s] flushRealtime: 发送失败: %v", a.name, err)
+		// 将数据放回队列
+		a.dataMu.Lock()
+		a.prependRealtime(batch)
+		a.dataMu.Unlock()
+		return err
+	}
+
+	log.Printf("[PandaX-%s] flushRealtime: 发送成功 %d 条数据", a.name, len(batch))
+	return nil
+}
+
+// buildBatchRealtimePublish 批量构建网关遥测 payload
+// 格式: {"设备名1": {"ts": ts, "values": {...}}, "设备名2": {"ts": ts, "values": {...}}}
+func (a *PandaXAdapter) buildBatchRealtimePublish(batch []*models.CollectData) (string, []byte) {
+	a.mu.RLock()
+	topic := a.gatewayTelemetryTopic
+	a.mu.RUnlock()
+
+	if len(batch) == 0 {
+		return topic, []byte("{}")
+	}
+
+	// 构建批量 payload
+	payload := make(map[string]interface{}, len(batch))
+	for _, data := range batch {
+		if data == nil {
+			continue
+		}
+
+		// 获取子设备标识符
+		subToken := a.resolveSubDeviceToken(data)
+
+		// 构建 values
+		values := make(map[string]interface{}, len(data.Fields))
+		for key, value := range data.Fields {
+			values[key] = convertFieldValue(value)
+		}
+
+		// 获取时间戳（毫秒）
+		ts := data.Timestamp.UnixMilli()
+		if ts <= 0 {
+			ts = time.Now().UnixMilli()
+		}
+
+		payload[subToken] = map[string]interface{}{
+			"ts":      ts,
+			"values": values,
 		}
 	}
 
-	return nil
+	body, _ := json.Marshal(payload)
+	
+	// 记录 payload 预览
+	var preview string
+	if len(body) > 200 {
+		preview = string(body[:200]) + "..."
+	} else {
+		preview = string(body)
+	}
+	log.Printf("[PandaX-%s] buildBatchRealtimePublish: deviceCount=%d, payload=%s", a.name, len(payload), preview)
+
+	return topic, body
 }
 
 func (a *PandaXAdapter) flushAlarmBatch() error {
@@ -532,16 +751,23 @@ func (a *PandaXAdapter) flushAlarmBatch() error {
 	a.alarmQueue = a.alarmQueue[count:]
 	a.alarmMu.Unlock()
 
+	log.Printf("[PandaX-%s] flushAlarmBatch: 开始发送 %d 条报警", a.name, len(batch))
+
+	successCount := 0
 	for _, item := range batch {
 		topic, body := a.buildAlarmPublish(item)
 		if err := a.publish(topic, body); err != nil {
+			log.Printf("[PandaX-%s] flushAlarmBatch: 发送失败 deviceKey=%s field=%s: %v",
+				a.name, item.DeviceKey, item.FieldName, err)
 			a.alarmMu.Lock()
 			a.prependAlarms(batch)
 			a.alarmMu.Unlock()
 			return err
 		}
+		successCount++
 	}
 
+	log.Printf("[PandaX-%s] flushAlarmBatch: 发送成功 %d/%d", a.name, successCount, len(batch))
 	return nil
 }
 
@@ -609,28 +835,45 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 	a.mu.RUnlock()
 
 	if client == nil {
+		log.Printf("[PandaX-%s] publish: MQTT client 为 nil", a.name)
 		return fmt.Errorf("mqtt client is nil")
 	}
 
 	if !client.IsConnected() {
+		log.Printf("[PandaX-%s] publish: 重新连接 MQTT...", a.name)
 		token := client.Connect()
 		if !token.WaitTimeout(timeout) {
+			log.Printf("[PandaX-%s] publish: MQTT 连接超时", a.name)
 			return fmt.Errorf("mqtt connect timeout")
 		}
 		if err := token.Error(); err != nil {
+			log.Printf("[PandaX-%s] publish: MQTT 连接失败: %v", a.name, err)
 			a.mu.Lock()
 			a.connected = false
 			a.mu.Unlock()
 			return err
 		}
+		log.Printf("[PandaX-%s] publish: MQTT 重连成功", a.name)
 		a.subscribeRPCTopics(client)
 	}
 
+	// 记录 payload 大小
+	payloadSize := len(payload)
+	var payloadPreview string
+	if payloadSize > 100 {
+		payloadPreview = string(payload[:100]) + "..."
+	} else {
+		payloadPreview = string(payload)
+	}
+	log.Printf("[PandaX-%s] publish: topic=%s, size=%d, payload=%s", a.name, topic, payloadSize, payloadPreview)
+
 	token := client.Publish(topic, qos, retain, payload)
 	if !token.WaitTimeout(timeout) {
+		log.Printf("[PandaX-%s] publish: 发布超时", a.name)
 		return fmt.Errorf("mqtt publish timeout")
 	}
 	if err := token.Error(); err != nil {
+		log.Printf("[PandaX-%s] publish: 发布失败: %v", a.name, err)
 		a.mu.Lock()
 		a.connected = false
 		a.mu.Unlock()
@@ -642,6 +885,7 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 	a.connected = true
 	a.mu.Unlock()
 
+	log.Printf("[PandaX-%s] publish: 发送成功", a.name)
 	return nil
 }
 
@@ -660,24 +904,32 @@ func (a *PandaXAdapter) subscribeRPCTopics(client mqtt.Client) {
 		}
 	}
 
+	log.Printf("[PandaX-%s] subscribeRPCTopics: 开始订阅 topics=%v", a.name, topics)
+
 	for topic := range topics {
 		token := client.Subscribe(topic, qos, a.handleRPCRequest)
 		if !token.WaitTimeout(timeout) {
+			log.Printf("[PandaX-%s] subscribeRPCTopics: 订阅超时 topic=%s", a.name, topic)
 			continue
 		}
 		if err := token.Error(); err != nil {
-			log.Printf("PandaX subscribe failed topic=%s: %v", topic, err)
+			log.Printf("[PandaX-%s] subscribeRPCTopics: 订阅失败 topic=%s: %v", a.name, topic, err)
+		} else {
+			log.Printf("[PandaX-%s] subscribeRPCTopics: 订阅成功 topic=%s", a.name, topic)
 		}
 	}
 }
 
 func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
+	log.Printf("[PandaX-%s] handleRPCRequest: 收到 RPC topic=%s", a.name, message.Topic())
+
 	var req struct {
 		RequestID string      `json:"requestId"`
 		Method    string      `json:"method"`
 		Params    interface{} `json:"params"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
+		log.Printf("[PandaX-%s] handleRPCRequest: JSON 解析失败: %v", a.name, err)
 		return
 	}
 
@@ -685,8 +937,11 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 		req.RequestID = requestIDFromPandaXRPCTopic(message.Topic())
 	}
 
+	log.Printf("[PandaX-%s] handleRPCRequest: requestId=%s, method=%s", a.name, req.RequestID, req.Method)
+
 	commands := a.buildCommandsFromRPC(req.RequestID, req.Method, req.Params)
 	if len(commands) == 0 {
+		log.Printf("[PandaX-%s] handleRPCRequest: 无有效命令", a.name)
 		return
 	}
 
@@ -700,7 +955,10 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 		}
 		a.commandQueue = append(a.commandQueue, cmd)
 	}
+	queueLen := len(a.commandQueue)
 	a.commandMu.Unlock()
+
+	log.Printf("[PandaX-%s] handleRPCRequest: 入队 %d 条命令, queueLen=%d", a.name, len(commands), queueLen)
 }
 
 func (a *PandaXAdapter) buildCommandsFromRPC(requestID, method string, params interface{}) []*models.NorthboundCommand {

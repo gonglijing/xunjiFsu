@@ -269,3 +269,31 @@ type Event struct {
 	Value map[string]interface{} `json:"value"`
 	Time  int64                  `json:"time"`
 }
+
+// SystemStats FSU 本身系统属性（CPU、内存、硬盘等）
+type SystemStats struct {
+	// CPU
+	CpuUsage float64 `json:"cpu_usage"` // CPU 使用率 (%)
+	// 内存
+	MemTotal     float64 `json:"mem_total"`     // 内存总量 (MB)
+	MemUsed      float64 `json:"mem_used"`      // 已使用内存 (MB)
+	MemUsage     float64 `json:"mem_usage"`     // 内存使用率 (%)
+	MemAvailable float64 `json:"mem_available"` // 可用内存 (MB)
+	// 硬盘
+	DiskTotal   float64 `json:"disk_total"`   // 硬盘总量 (GB)
+	DiskUsed    float64 `json:"disk_used"`    // 已使用硬盘 (GB)
+	DiskUsage   float64 `json:"disk_usage"`   // 硬盘使用率 (%)
+	DiskFree    float64 `json:"disk_free"`    // 可用硬盘 (GB)
+	// 其他
+	Uptime      int64   `json:"uptime"`      // 运行时间 (秒)
+	Load1       float64 `json:"load_1"`       // 1分钟负载
+	Load5       float64 `json:"load_5"`       // 5分钟负载
+	Load15      float64 `json:"load_15"`      // 15分钟负载
+	Timestamp   int64   `json:"timestamp"`    // 采集时间戳
+}
+
+// SystemStatsDeviceID FSU 系统属性的固定设备 ID
+const SystemStatsDeviceID int64 = -1
+
+// SystemStatsDeviceName FSU 系统属性的设备名称
+const SystemStatsDeviceName string = "__system__"

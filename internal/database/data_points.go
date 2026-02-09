@@ -409,23 +409,112 @@ func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
 	return mergeDataPoints(memPoints, diskPoints, limit), nil
 }
 
+// LatestDeviceData 单个设备的最新数据
+type LatestDeviceData struct {
+	DeviceID    int64
+	DeviceName  string
+	Fields      map[string]string
+	CollectedAt time.Time
+}
+
+// GetAllDevicesLatestData 获取所有设备的最新数据（每个设备只保留最新值）
+func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
+	// 获取所有数据点
+	points, err := GetLatestDataPoints(10000)
+	if err != nil {
+		return nil, err
+	}
+
+	// 按设备 ID 和字段名聚合，只保留最新值
+	deviceDataMap := make(map[int64]*LatestDeviceData)
+	for _, point := range points {
+		if point == nil {
+			continue
+		}
+		data, exists := deviceDataMap[point.DeviceID]
+		if !exists {
+			data = &LatestDeviceData{
+				DeviceID:    point.DeviceID,
+				DeviceName: point.DeviceName,
+				Fields:     make(map[string]string),
+			}
+			deviceDataMap[point.DeviceID] = data
+		}
+		// 由于查询已按时间降序，第一个值就是最新值
+		if _, exists := data.Fields[point.FieldName]; !exists {
+			data.Fields[point.FieldName] = point.Value
+			data.CollectedAt = point.CollectedAt
+		}
+	}
+
+	// 转换为切片
+	result := make([]*LatestDeviceData, 0, len(deviceDataMap))
+	for _, data := range deviceDataMap {
+		if len(data.Fields) > 0 {
+			result = append(result, data)
+		}
+	}
+	return result, nil
+}
+
 // InsertCollectData 将采集数据写入缓存与历史库
 func InsertCollectData(data *models.CollectData) error {
 	return InsertCollectDataWithOptions(data, true)
 }
 
-// InsertCollectDataWithOptions 写入缓存，并可选写入历史
-func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) error {
+// SaveLatestDataPoint 保存最新数据点（使用 upsert，只保留最新值）
+func SaveLatestDataPoint(deviceID int64, deviceName, fieldName, value string) error {
+	_, err := DataDB.Exec(
+		`INSERT OR REPLACE INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		deviceID, deviceName, fieldName, value, "string",
+	)
+	return err
+}
+
+// BatchSaveLatestDataPoints 批量保存最新数据点（使用 upsert）
+func BatchSaveLatestDataPoints(entries []DataPointEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	tx, err := DataDB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO data_points
+		(device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, entry := range entries {
+		if _, err := stmt.Exec(entry.DeviceID, entry.DeviceName, entry.FieldName,
+			entry.Value, entry.ValueType); err != nil {
+			return fmt.Errorf("failed to upsert data point: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// InsertCollectDataWithOptions 写入缓存，并可选写入最新数据（upsert 模式）
+func InsertCollectDataWithOptions(data *models.CollectData, storeLatest bool) error {
 	if data == nil {
 		return fmt.Errorf("collect data is nil")
 	}
 
 	entries := make([]DataPointEntry, 0, len(data.Fields))
 	for field, value := range data.Fields {
+		// 保存到缓存（最新值）
 		if err := SaveDataCache(data.DeviceID, data.DeviceName, field, value, "string"); err != nil {
 			log.Printf("SaveDataCache error: %v", err)
 		}
-		if !storeHistory {
+		if !storeLatest {
 			continue
 		}
 		entries = append(entries, DataPointEntry{
@@ -437,8 +526,9 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 			CollectedAt: data.Timestamp,
 		})
 	}
-	if !storeHistory {
+	if !storeLatest {
 		return nil
 	}
-	return BatchSaveDataPoints(entries)
+	// 使用 upsert 模式，只保存最新值
+	return BatchSaveLatestDataPoints(entries)
 }

@@ -6,6 +6,39 @@ import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
 
+const auditFieldLabels = {
+  collector_device_sync_interval: '采集设备同步周期',
+  collector_command_poll_interval: '采集命令轮询周期',
+  northbound_mqtt_reconnect_interval: 'MQTT 重连间隔',
+  driver_serial_read_timeout: '串口读超时',
+  driver_tcp_dial_timeout: 'TCP 建连超时',
+  driver_tcp_read_timeout: 'TCP 读超时',
+  driver_serial_open_backoff: '串口打开退避',
+  driver_tcp_dial_backoff: 'TCP 建连退避',
+  driver_serial_open_retries: '串口打开重试次数',
+  driver_tcp_dial_retries: 'TCP 建连重试次数',
+};
+
+function renderAuditChanges(item) {
+  const changes = item?.changes;
+  if (!changes || typeof changes !== 'object') {
+    return item?.changes_raw || item?.changes || '-';
+  }
+
+  const lines = Object.entries(changes).map(([field, change]) => {
+    const label = auditFieldLabels[field] || field;
+    const from = change?.from ?? '-';
+    const to = change?.to ?? '-';
+    return `${label}: ${String(from)} → ${String(to)}`;
+  });
+
+  if (lines.length === 0) {
+    return item?.changes_raw || '-';
+  }
+
+  return lines.join('\n');
+}
+
 function GatewayPage() {
   const toast = useToast();
   const [form, setForm] = createSignal({
@@ -272,7 +305,7 @@ function GatewayPage() {
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">
                   #{item.id} · {item.created_at} · {item.operator_username || 'unknown'} · {item.source_ip || '-'}
                 </div>
-                <pre style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; color:var(--text-secondary);">{item.changes}</pre>
+                <pre style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; color:var(--text-secondary);">{renderAuditChanges(item)}</pre>
               </div>
             ))}
           </div>

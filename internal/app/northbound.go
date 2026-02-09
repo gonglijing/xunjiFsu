@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gonglijing/xunjiFsu/internal/collector"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -19,12 +20,15 @@ func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 		return
 	}
 
+	// 获取系统属性采集器
+	sysStatsCollector := collector.GetSystemStatsCollector()
+
 	enabledCount := 0
 	for _, config := range configs {
 		if config.Enabled != 1 {
 			continue
 		}
-		if err := registerNorthboundAdapter(northboundMgr, config); err != nil {
+		if err := registerNorthboundAdapter(northboundMgr, config, sysStatsCollector); err != nil {
 			logger.Warn("Failed to register northbound config", "name", config.Name, "error", err)
 			continue
 		}
@@ -38,7 +42,7 @@ func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 	logger.Info("Loaded enabled northbound configs", "count", enabledCount)
 }
 
-func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, config *models.NorthboundConfig) error {
+func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, config *models.NorthboundConfig, sysStatsCollector *collector.SystemStatsCollector) error {
 	// 从模型字段生成配置JSON
 	configJSON := adapters.BuildConfigFromModel(config)
 
@@ -55,6 +59,14 @@ func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, conf
 	// 设置上传周期
 	interval := time.Duration(config.UploadInterval) * time.Millisecond
 	adapter.SetInterval(interval)
+
+	// 对于 pandax 适配器，设置系统属性提供者
+	if config.Type == "pandax" && sysStatsCollector != nil {
+		if pandaxAdapter, ok := adapter.(*adapters.PandaXAdapter); ok {
+			pandaxAdapter.SetSystemStatsProvider(sysStatsCollector)
+			logger.Info("Set system stats provider for pandax adapter")
+		}
+	}
 
 	// 注册到管理器
 	northboundMgr.RegisterAdapter(config.Name, adapter)

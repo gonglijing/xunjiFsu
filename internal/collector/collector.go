@@ -39,6 +39,8 @@ type Collector struct {
 	// 设备采集任务
 	tasks    map[int64]*collectTask
 	taskHeap *taskHeap // 优先队列，按下次采集时间排序
+	// 最新值缓存（用于查询）
+	latestDataCache map[int64]*models.CollectData
 }
 
 // collectTask 采集任务
@@ -108,6 +110,7 @@ func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northbound
 		tasks:                make(map[int64]*collectTask),
 		taskHeap:             h,
 		resourceLock:         make(map[int64]chan struct{}),
+		latestDataCache:      make(map[int64]*models.CollectData),
 	}
 }
 
@@ -124,6 +127,7 @@ func (c *Collector) Start() error {
 	c.deviceSyncResetChan = make(chan time.Duration, 1)
 	c.commandPollResetChan = make(chan time.Duration, 1)
 	c.tasks = make(map[int64]*collectTask)
+	c.latestDataCache = make(map[int64]*models.CollectData)
 	h := &taskHeap{}
 	heap.Init(h)
 	c.taskHeap = h
@@ -249,14 +253,17 @@ func (c *Collector) collectOnce(task *collectTask) {
 
 	collect := driverResultToCollectData(device, result)
 
-	storeHistory := shouldStoreHistory(task, collect.Timestamp)
-	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
+	// 保存最新值到数据库（upsert 模式，只保存最新值）
+	if err := database.InsertCollectDataWithOptions(collect, true); err != nil {
 		log.Printf("Failed to insert data points: %v", err)
 	}
-	c.markTaskCollected(task, collect.Timestamp, storeHistory)
+	c.markTaskCollected(task, collect.Timestamp, true)
 
-	// 阈值计算 & 报警、北向上传
-	c.handleThresholdAndNorthbound(collect)
+	// 缓存最新值（用于周期上传）
+	c.cacheLatestData(collect)
+
+	// 阈值计算 & 报警（但不上传北向，北向由周期任务负责）
+	c.handleThreshold(collect)
 }
 
 // getResourceLock 返回该资源的串行锁
@@ -756,11 +763,6 @@ func (c *Collector) handleAlarm(device *models.Device, threshold *models.Thresho
 	c.northboundMgr.SendAlarm(payload)
 }
 
-// uploadToNorthbound 上传到北向
-func (c *Collector) uploadToNorthbound(data *models.CollectData) {
-	c.northboundMgr.SendData(data)
-}
-
 // driverResultToCollectData 转换驱动结果为采集数据
 func driverResultToCollectData(device *models.Device, res *driver.DriverResult) *models.CollectData {
 	fields := map[string]string{}
@@ -798,7 +800,7 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	}
 }
 
-// handleThresholdAndNorthbound 阈值 + 北向上传
+// handleThresholdAndNorthbound 阈值 + 北向上传（已废弃，使用周期上传模式）
 func (c *Collector) handleThresholdAndNorthbound(data *models.CollectData) {
 	device, err := database.GetDeviceByID(data.DeviceID)
 	if err == nil && device != nil {
@@ -806,8 +808,30 @@ func (c *Collector) handleThresholdAndNorthbound(data *models.CollectData) {
 			log.Printf("check thresholds error: %v", err)
 		}
 	}
-	// 当前策略：采集后即上传；后续可按设备/北向上传周期优化
-	c.uploadToNorthbound(data)
+	// 改为周期上传，不再立即上传
+}
+
+// handleThreshold 仅检查阈值（用于采集时触发报警，不发送北向）
+func (c *Collector) handleThreshold(data *models.CollectData) {
+	device, err := database.GetDeviceByID(data.DeviceID)
+	if err == nil && device != nil {
+		if err := c.checkThresholds(device, data); err != nil {
+			log.Printf("check thresholds error: %v", err)
+		}
+	}
+}
+
+// cacheLatestData 缓存最新数据（用于周期上传）
+func (c *Collector) cacheLatestData(data *models.CollectData) {
+	if data == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 更新或添加最新值
+	c.latestDataCache[data.DeviceID] = data
+	log.Printf("Collector: cached latest data for device %d (%d fields)", data.DeviceID, len(data.Fields))
 }
 
 func (c *Collector) processNorthboundCommands() {

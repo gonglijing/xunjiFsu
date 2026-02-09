@@ -55,9 +55,8 @@ func TestPandaXConfigSchemaSupported(t *testing.T) {
 
 	hasServerURL := false
 	hasUsername := false
-	hasGatewayMode := false
-	hasPort := false
-	hasProtocol := false
+	hasPassword := false
+	hasQOS := false
 
 	for _, field := range fields {
 		switch field.Key {
@@ -65,20 +64,18 @@ func TestPandaXConfigSchemaSupported(t *testing.T) {
 			hasServerURL = true
 		case "username":
 			hasUsername = true
-		case "gatewayMode":
-			hasGatewayMode = true
-		case "port":
-			hasPort = true
-		case "protocol":
-			hasProtocol = true
+		case "password":
+			hasPassword = true
+		case "qos":
+			hasQOS = true
 		}
 	}
 
-	if !hasServerURL || !hasUsername || !hasGatewayMode {
-		t.Fatalf("pandax schema missing required core fields")
+	if !hasServerURL || !hasUsername || !hasPassword || !hasQOS {
+		t.Fatalf("pandax schema missing required add-form fields")
 	}
-	if !hasPort || !hasProtocol {
-		t.Fatalf("pandax schema should support simplified connection fields")
+	if len(fields) != 4 {
+		t.Fatalf("pandax schema should only expose 4 add-form fields, got %d", len(fields))
 	}
 }
 

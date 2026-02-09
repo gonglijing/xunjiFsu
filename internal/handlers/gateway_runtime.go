@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,16 @@ type gatewayRuntimeConfig struct {
 type runtimeConfigChange struct {
 	From interface{} `json:"from"`
 	To   interface{} `json:"to"`
+}
+
+type runtimeConfigAuditView struct {
+	ID               int64                          `json:"id"`
+	OperatorUserID   int64                          `json:"operator_user_id"`
+	OperatorUsername string                         `json:"operator_username"`
+	SourceIP         string                         `json:"source_ip"`
+	CreatedAt        string                         `json:"created_at"`
+	Changes          map[string]runtimeConfigChange `json:"changes,omitempty"`
+	ChangesRaw       string                         `json:"changes_raw,omitempty"`
 }
 
 func (h *Handler) GetGatewayRuntimeConfig(w http.ResponseWriter, r *http.Request) {
@@ -90,56 +101,56 @@ func (h *Handler) applyGatewayRuntimeConfig(payload *gatewayRuntimeConfig) (map[
 	if interval, ok, err := parseOptionalDuration(payload.CollectorDeviceSyncInterval); err != nil {
 		return nil, err
 	} else if ok {
-		changes["collector_device_sync_interval"] = runtimeConfigChange{From: h.appConfig.CollectorDeviceSyncInterval.String(), To: interval.String()}
+		recordRuntimeConfigChange(changes, "collector_device_sync_interval", h.appConfig.CollectorDeviceSyncInterval.String(), interval.String())
 		h.appConfig.CollectorDeviceSyncInterval = interval
 	}
 
 	if interval, ok, err := parseOptionalDuration(payload.CollectorCommandPollInterval); err != nil {
 		return nil, err
 	} else if ok {
-		changes["collector_command_poll_interval"] = runtimeConfigChange{From: h.appConfig.CollectorCommandPollInterval.String(), To: interval.String()}
+		recordRuntimeConfigChange(changes, "collector_command_poll_interval", h.appConfig.CollectorCommandPollInterval.String(), interval.String())
 		h.appConfig.CollectorCommandPollInterval = interval
 	}
 
 	if interval, ok, err := parseOptionalDuration(payload.NorthboundMQTTReconnectInterval); err != nil {
 		return nil, err
 	} else if ok {
-		changes["northbound_mqtt_reconnect_interval"] = runtimeConfigChange{From: h.appConfig.NorthboundMQTTReconnectInterval.String(), To: interval.String()}
+		recordRuntimeConfigChange(changes, "northbound_mqtt_reconnect_interval", h.appConfig.NorthboundMQTTReconnectInterval.String(), interval.String())
 		h.appConfig.NorthboundMQTTReconnectInterval = interval
 	}
 
 	if timeout, ok, err := parseOptionalDuration(payload.DriverSerialReadTimeout); err != nil {
 		return nil, err
 	} else if ok {
-		changes["driver_serial_read_timeout"] = runtimeConfigChange{From: h.appConfig.DriverSerialReadTimeout.String(), To: timeout.String()}
+		recordRuntimeConfigChange(changes, "driver_serial_read_timeout", h.appConfig.DriverSerialReadTimeout.String(), timeout.String())
 		h.appConfig.DriverSerialReadTimeout = timeout
 	}
 
 	if timeout, ok, err := parseOptionalDuration(payload.DriverTCPDialTimeout); err != nil {
 		return nil, err
 	} else if ok {
-		changes["driver_tcp_dial_timeout"] = runtimeConfigChange{From: h.appConfig.DriverTCPDialTimeout.String(), To: timeout.String()}
+		recordRuntimeConfigChange(changes, "driver_tcp_dial_timeout", h.appConfig.DriverTCPDialTimeout.String(), timeout.String())
 		h.appConfig.DriverTCPDialTimeout = timeout
 	}
 
 	if timeout, ok, err := parseOptionalDuration(payload.DriverTCPReadTimeout); err != nil {
 		return nil, err
 	} else if ok {
-		changes["driver_tcp_read_timeout"] = runtimeConfigChange{From: h.appConfig.DriverTCPReadTimeout.String(), To: timeout.String()}
+		recordRuntimeConfigChange(changes, "driver_tcp_read_timeout", h.appConfig.DriverTCPReadTimeout.String(), timeout.String())
 		h.appConfig.DriverTCPReadTimeout = timeout
 	}
 
 	if backoff, ok, err := parseOptionalDuration(payload.DriverSerialOpenBackoff); err != nil {
 		return nil, err
 	} else if ok {
-		changes["driver_serial_open_backoff"] = runtimeConfigChange{From: h.appConfig.DriverSerialOpenBackoff.String(), To: backoff.String()}
+		recordRuntimeConfigChange(changes, "driver_serial_open_backoff", h.appConfig.DriverSerialOpenBackoff.String(), backoff.String())
 		h.appConfig.DriverSerialOpenBackoff = backoff
 	}
 
 	if backoff, ok, err := parseOptionalDuration(payload.DriverTCPDialBackoff); err != nil {
 		return nil, err
 	} else if ok {
-		changes["driver_tcp_dial_backoff"] = runtimeConfigChange{From: h.appConfig.DriverTCPDialBackoff.String(), To: backoff.String()}
+		recordRuntimeConfigChange(changes, "driver_tcp_dial_backoff", h.appConfig.DriverTCPDialBackoff.String(), backoff.String())
 		h.appConfig.DriverTCPDialBackoff = backoff
 	}
 
@@ -147,7 +158,7 @@ func (h *Handler) applyGatewayRuntimeConfig(payload *gatewayRuntimeConfig) (map[
 		if *payload.DriverSerialOpenRetries < 0 {
 			return nil, fmt.Errorf("driver_serial_open_retries must be >= 0")
 		}
-		changes["driver_serial_open_retries"] = runtimeConfigChange{From: h.appConfig.DriverSerialOpenRetries, To: *payload.DriverSerialOpenRetries}
+		recordRuntimeConfigChange(changes, "driver_serial_open_retries", h.appConfig.DriverSerialOpenRetries, *payload.DriverSerialOpenRetries)
 		h.appConfig.DriverSerialOpenRetries = *payload.DriverSerialOpenRetries
 	}
 
@@ -155,7 +166,7 @@ func (h *Handler) applyGatewayRuntimeConfig(payload *gatewayRuntimeConfig) (map[
 		if *payload.DriverTCPDialRetries < 0 {
 			return nil, fmt.Errorf("driver_tcp_dial_retries must be >= 0")
 		}
-		changes["driver_tcp_dial_retries"] = runtimeConfigChange{From: h.appConfig.DriverTCPDialRetries, To: *payload.DriverTCPDialRetries}
+		recordRuntimeConfigChange(changes, "driver_tcp_dial_retries", h.appConfig.DriverTCPDialRetries, *payload.DriverTCPDialRetries)
 		h.appConfig.DriverTCPDialRetries = *payload.DriverTCPDialRetries
 	}
 
@@ -190,7 +201,7 @@ func (h *Handler) GetGatewayRuntimeAudits(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	WriteSuccess(w, items)
+	WriteSuccess(w, buildRuntimeAuditViews(items))
 }
 
 func (h *Handler) recordRuntimeConfigAudit(r *http.Request, changes map[string]runtimeConfigChange) {
@@ -258,4 +269,49 @@ func parseOptionalDuration(raw string) (time.Duration, bool, error) {
 		return 0, false, fmt.Errorf("duration must be > 0: %s", raw)
 	}
 	return value, true, nil
+}
+
+func recordRuntimeConfigChange(changes map[string]runtimeConfigChange, field string, from, to interface{}) {
+	if changes == nil || strings.TrimSpace(field) == "" {
+		return
+	}
+	if reflect.DeepEqual(from, to) {
+		return
+	}
+	changes[field] = runtimeConfigChange{From: from, To: to}
+}
+
+func buildRuntimeAuditViews(items []*database.RuntimeConfigAudit) []*runtimeConfigAuditView {
+	if len(items) == 0 {
+		return []*runtimeConfigAuditView{}
+	}
+
+	views := make([]*runtimeConfigAuditView, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+
+		view := &runtimeConfigAuditView{
+			ID:               item.ID,
+			OperatorUserID:   item.OperatorUserID,
+			OperatorUsername: item.OperatorUsername,
+			SourceIP:         item.SourceIP,
+			CreatedAt:        item.CreatedAt,
+		}
+
+		raw := strings.TrimSpace(item.Changes)
+		if raw != "" {
+			parsed := make(map[string]runtimeConfigChange)
+			if err := json.Unmarshal([]byte(raw), &parsed); err == nil && len(parsed) > 0 {
+				view.Changes = parsed
+			} else {
+				view.ChangesRaw = item.Changes
+			}
+		}
+
+		views = append(views, view)
+	}
+
+	return views
 }

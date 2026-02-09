@@ -74,8 +74,15 @@ func Run(cfg *config.Config) error {
 		logger.Warn("Failed to start collector", "error", err)
 	}
 
+	// 启动系统属性采集器
+	sysCollector := collector.GetSystemStatsCollector()
+	sysCollector.SetNorthboundManager(northboundMgr)
+	if err := sysCollector.Start(); err != nil {
+		logger.Warn("Failed to start system stats collector", "error", err)
+	}
+
 	gracefulMgr := graceful.NewGracefulShutdown(30 * time.Second)
-	registerShutdown(gracefulMgr, collect, northboundMgr, cfg)
+	registerShutdown(gracefulMgr, collect, northboundMgr, sysCollector, cfg)
 	gracefulMgr.Start()
 
 	server := &http.Server{
@@ -155,10 +162,18 @@ func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error
 	return nil
 }
 
-func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector.Collector, northMgr *northbound.NorthboundManager, cfg *config.Config) {
+func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector.Collector, northMgr *northbound.NorthboundManager, sysCollector *collector.SystemStatsCollector, cfg *config.Config) {
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
 		logger.Info("Stopping collector...")
 		return collect.Stop()
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping system stats collector...")
+		if sysCollector != nil {
+			return sysCollector.Stop()
+		}
+		return nil
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
