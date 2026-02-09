@@ -25,6 +25,8 @@ const (
 	defaultPandaXRPCResponseTopic       = "v1/devices/me/rpc/response"
 	defaultPandaXEventPrefix            = "v1/devices/event"
 	defaultPandaXAlarmIdentifier        = "alarm"
+	defaultPandaXReconnectInterval      = 5 * time.Second
+	maxPandaXReconnectInterval          = 5 * time.Minute
 )
 
 // PandaXConfig PandaX 北向配置
@@ -104,16 +106,18 @@ type PandaXAdapter struct {
 	commandQueue []*models.NorthboundCommand
 	commandMu    sync.RWMutex
 
-	flushNow chan struct{}
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	flushNow     chan struct{}
+	stopChan     chan struct{}
+	reconnectNow chan struct{}
+	wg           sync.WaitGroup
 
-	mu          sync.RWMutex
-	initialized bool
-	enabled     bool
-	connected   bool
-	lastSend    time.Time
-	seq         uint64
+	mu                sync.RWMutex
+	initialized       bool
+	enabled           bool
+	connected         bool
+	reconnectInterval time.Duration
+	lastSend          time.Time
+	seq               uint64
 
 	// 系统属性提供者
 	systemStatsProvider SystemStatsProvider
@@ -122,12 +126,14 @@ type PandaXAdapter struct {
 // NewPandaXAdapter 创建 PandaX 适配器
 func NewPandaXAdapter(name string) *PandaXAdapter {
 	return &PandaXAdapter{
-		name:          name,
-		flushNow:      make(chan struct{}, 1),
-		stopChan:      make(chan struct{}),
-		realtimeQueue: make([]*models.CollectData, 0),
-		alarmQueue:    make([]*models.AlarmPayload, 0),
-		commandQueue:  make([]*models.NorthboundCommand, 0),
+		name:              name,
+		flushNow:          make(chan struct{}, 1),
+		stopChan:          make(chan struct{}),
+		reconnectNow:      make(chan struct{}, 1),
+		realtimeQueue:     make([]*models.CollectData, 0),
+		alarmQueue:        make([]*models.AlarmPayload, 0),
+		commandQueue:      make([]*models.NorthboundCommand, 0),
+		reconnectInterval: defaultPandaXReconnectInterval,
 	}
 }
 
@@ -169,7 +175,7 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 	}
 	log.Printf("[PandaX-%s] Initialize: clientId=%s", a.name, clientID)
 
-	client, err := connectMQTT(broker, clientID, cfg.Username, cfg.Password, cfg.KeepAlive, cfg.Timeout)
+	client, err := a.connectPandaXMQTT(broker, clientID, cfg.Username, cfg.Password, cfg.KeepAlive, cfg.Timeout)
 	if err != nil {
 		log.Printf("[PandaX-%s] Initialize: MQTT 连接失败: %v", a.name, err)
 		return fmt.Errorf("failed to connect MQTT: %w", err)
@@ -212,6 +218,7 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 	a.rpcResponseTopic = pickFirstNonEmpty(cfg.RPCResponseTopic, defaultPandaXRPCResponseTopic)
 	a.flushNow = make(chan struct{}, 1)
 	a.stopChan = make(chan struct{})
+	a.reconnectNow = make(chan struct{}, 1)
 	a.initialized = true
 	a.connected = true
 	a.enabled = false
@@ -224,19 +231,29 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 }
 
 func (a *PandaXAdapter) Start() {
+	needReconnect := false
 	a.mu.Lock()
 	if a.initialized && !a.enabled {
 		a.enabled = true
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
-		a.wg.Add(2)
+		if a.reconnectNow == nil {
+			a.reconnectNow = make(chan struct{}, 1)
+		}
+		needReconnect = !a.connected
+		a.wg.Add(3)
 		go a.reportLoop()
 		go a.alarmLoop()
+		go a.reconnectLoop()
 		log.Printf("[PandaX-%s] Start: 适配器已启动, reportInterval=%v, alarmInterval=%v",
 			a.name, a.reportEvery, a.alarmEvery)
 	}
 	a.mu.Unlock()
+
+	if needReconnect {
+		a.signalReconnect()
+	}
 }
 
 func (a *PandaXAdapter) Stop() {
@@ -256,6 +273,18 @@ func (a *PandaXAdapter) Stop() {
 func (a *PandaXAdapter) SetInterval(interval time.Duration) {
 	a.mu.Lock()
 	a.reportEvery = resolveInterval(int(interval.Milliseconds()), defaultReportInterval)
+	a.mu.Unlock()
+}
+
+func (a *PandaXAdapter) SetReconnectInterval(interval time.Duration) {
+	a.mu.Lock()
+	if interval <= 0 {
+		interval = defaultPandaXReconnectInterval
+	}
+	if interval > maxPandaXReconnectInterval {
+		interval = maxPandaXReconnectInterval
+	}
+	a.reconnectInterval = interval
 	a.mu.Unlock()
 }
 
@@ -334,6 +363,7 @@ func (a *PandaXAdapter) Close() error {
 	a.config = nil
 	a.flushNow = nil
 	a.stopChan = nil
+	a.reconnectNow = nil
 	a.realtimeQueue = nil
 	a.alarmQueue = nil
 	a.commandQueue = nil
@@ -519,11 +549,11 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 
 		// 构建 CollectData
 		data := &models.CollectData{
-			DeviceID:    dev.DeviceID,
+			DeviceID:   dev.DeviceID,
 			DeviceName: dev.DeviceName,
-			ProductKey:  gwPK,
-			DeviceKey:   gwDK,
-			Timestamp:   dev.CollectedAt,
+			ProductKey: gwPK,
+			DeviceKey:  gwDK,
+			Timestamp:  dev.CollectedAt,
 			Fields:     dev.Fields,
 		}
 
@@ -583,19 +613,19 @@ func (a *PandaXAdapter) fetchCurrentSystemStats(productKey, deviceKey string) *m
 	}
 
 	return &models.CollectData{
-		DeviceID:    models.SystemStatsDeviceID,
+		DeviceID:   models.SystemStatsDeviceID,
 		DeviceName: models.SystemStatsDeviceName,
-		ProductKey:  productKey,
+		ProductKey: productKey,
 		DeviceKey:  deviceKey,
 		Timestamp:  time.Unix(0, stats.Timestamp*int64(time.Millisecond)),
 		Fields: map[string]string{
-			"cpu_usage":      fmt.Sprintf("%.2f", stats.CpuUsage),
-			"mem_total":      fmt.Sprintf("%.2f", stats.MemTotal),
-			"mem_used":       fmt.Sprintf("%.2f", stats.MemUsed),
-			"mem_usage":      fmt.Sprintf("%.2f", stats.MemUsage),
+			"cpu_usage":     fmt.Sprintf("%.2f", stats.CpuUsage),
+			"mem_total":     fmt.Sprintf("%.2f", stats.MemTotal),
+			"mem_used":      fmt.Sprintf("%.2f", stats.MemUsed),
+			"mem_usage":     fmt.Sprintf("%.2f", stats.MemUsage),
 			"mem_available": fmt.Sprintf("%.2f", stats.MemAvailable),
 			"disk_total":    fmt.Sprintf("%.2f", stats.DiskTotal),
-			"disk_used":      fmt.Sprintf("%.2f", stats.DiskUsed),
+			"disk_used":     fmt.Sprintf("%.2f", stats.DiskUsed),
 			"disk_usage":    fmt.Sprintf("%.2f", stats.DiskUsage),
 			"disk_free":     fmt.Sprintf("%.2f", stats.DiskFree),
 			"uptime":        fmt.Sprintf("%d", stats.Uptime),
@@ -717,13 +747,13 @@ func (a *PandaXAdapter) buildBatchRealtimePublish(batch []*models.CollectData) (
 		}
 
 		payload[subToken] = map[string]interface{}{
-			"ts":      ts,
+			"ts":     ts,
 			"values": values,
 		}
 	}
 
 	body, _ := json.Marshal(payload)
-	
+
 	// 记录 payload 预览
 	var preview string
 	if len(body) > 200 {
@@ -836,25 +866,13 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 
 	if client == nil {
 		log.Printf("[PandaX-%s] publish: MQTT client 为 nil", a.name)
+		a.markDisconnected()
 		return fmt.Errorf("mqtt client is nil")
 	}
 
 	if !client.IsConnected() {
-		log.Printf("[PandaX-%s] publish: 重新连接 MQTT...", a.name)
-		token := client.Connect()
-		if !token.WaitTimeout(timeout) {
-			log.Printf("[PandaX-%s] publish: MQTT 连接超时", a.name)
-			return fmt.Errorf("mqtt connect timeout")
-		}
-		if err := token.Error(); err != nil {
-			log.Printf("[PandaX-%s] publish: MQTT 连接失败: %v", a.name, err)
-			a.mu.Lock()
-			a.connected = false
-			a.mu.Unlock()
-			return err
-		}
-		log.Printf("[PandaX-%s] publish: MQTT 重连成功", a.name)
-		a.subscribeRPCTopics(client)
+		a.markDisconnected()
+		return fmt.Errorf("mqtt client not connected")
 	}
 
 	// 记录 payload 大小
@@ -870,13 +888,12 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 	token := client.Publish(topic, qos, retain, payload)
 	if !token.WaitTimeout(timeout) {
 		log.Printf("[PandaX-%s] publish: 发布超时", a.name)
+		a.markDisconnected()
 		return fmt.Errorf("mqtt publish timeout")
 	}
 	if err := token.Error(); err != nil {
 		log.Printf("[PandaX-%s] publish: 发布失败: %v", a.name, err)
-		a.mu.Lock()
-		a.connected = false
-		a.mu.Unlock()
+		a.markDisconnected()
 		return err
 	}
 
@@ -887,6 +904,200 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 
 	log.Printf("[PandaX-%s] publish: 发送成功", a.name)
 	return nil
+}
+
+func (a *PandaXAdapter) connectPandaXMQTT(broker, clientID, username, password string, keepAliveSec, timeoutSec int) (mqtt.Client, error) {
+	opts := mqtt.NewClientOptions().AddBroker(broker)
+	opts.SetClientID(clientID)
+	if username != "" {
+		opts.SetUsername(username)
+	}
+	if password != "" {
+		opts.SetPassword(password)
+	}
+	opts.SetAutoReconnect(false)
+	opts.SetConnectRetry(false)
+	if keepAliveSec > 0 {
+		opts.SetKeepAlive(time.Duration(keepAliveSec) * time.Second)
+	}
+
+	timeout := 10 * time.Second
+	if timeoutSec > 0 {
+		timeout = time.Duration(timeoutSec) * time.Second
+	}
+	opts.SetConnectTimeout(timeout)
+
+	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
+		if err != nil {
+			log.Printf("[PandaX-%s] MQTT connection lost: %v", a.name, err)
+		} else {
+			log.Printf("[PandaX-%s] MQTT connection lost", a.name)
+		}
+		a.markDisconnected()
+	}
+	opts.OnConnect = func(_ mqtt.Client) {
+		log.Printf("[PandaX-%s] MQTT connected: %s", a.name, broker)
+		a.mu.Lock()
+		a.connected = true
+		a.mu.Unlock()
+	}
+
+	client := mqtt.NewClient(opts)
+	token := client.Connect()
+	if !token.WaitTimeout(timeout) {
+		return nil, fmt.Errorf("mqtt connect timeout")
+	}
+	if err := token.Error(); err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (a *PandaXAdapter) reconnectLoop() {
+	defer a.wg.Done()
+
+	a.mu.RLock()
+	stopChan := a.stopChan
+	reconnectNow := a.reconnectNow
+	a.mu.RUnlock()
+
+	if stopChan == nil || reconnectNow == nil {
+		return
+	}
+
+	for {
+		select {
+		case <-stopChan:
+			return
+		case <-reconnectNow:
+		}
+
+		failures := 0
+		for {
+			if !a.shouldReconnect() {
+				break
+			}
+
+			if err := a.reconnectOnce(); err != nil {
+				failures++
+				delay := pandaXReconnectDelay(a.currentReconnectInterval(), failures)
+				log.Printf("[PandaX-%s] reconnect failed (attempt=%d): %v, retry in %v", a.name, failures, err, delay)
+				select {
+				case <-stopChan:
+					return
+				case <-time.After(delay):
+				}
+				continue
+			}
+
+			log.Printf("[PandaX-%s] reconnect success", a.name)
+			break
+		}
+	}
+}
+
+func (a *PandaXAdapter) reconnectOnce() error {
+	a.mu.RLock()
+	client := a.client
+	timeout := a.timeout
+	a.mu.RUnlock()
+
+	if client == nil {
+		return fmt.Errorf("mqtt client is nil")
+	}
+
+	token := client.Connect()
+	if !token.WaitTimeout(timeout) {
+		a.markDisconnected()
+		return fmt.Errorf("mqtt reconnect timeout")
+	}
+	if err := token.Error(); err != nil {
+		a.markDisconnected()
+		return err
+	}
+
+	a.mu.Lock()
+	a.connected = true
+	a.mu.Unlock()
+	a.subscribeRPCTopics(client)
+
+	return nil
+}
+
+func (a *PandaXAdapter) shouldReconnect() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if !a.initialized || !a.enabled || a.client == nil {
+		return false
+	}
+
+	return !a.client.IsConnected()
+}
+
+func (a *PandaXAdapter) currentReconnectInterval() time.Duration {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.reconnectInterval <= 0 {
+		return defaultPandaXReconnectInterval
+	}
+	if a.reconnectInterval > maxPandaXReconnectInterval {
+		return maxPandaXReconnectInterval
+	}
+	return a.reconnectInterval
+}
+
+func (a *PandaXAdapter) signalReconnect() {
+	a.mu.RLock()
+	reconnectNow := a.reconnectNow
+	a.mu.RUnlock()
+
+	if reconnectNow == nil {
+		return
+	}
+
+	select {
+	case reconnectNow <- struct{}{}:
+	default:
+	}
+}
+
+func (a *PandaXAdapter) markDisconnected() {
+	a.mu.Lock()
+	a.connected = false
+	enabled := a.enabled
+	a.mu.Unlock()
+
+	if enabled {
+		a.signalReconnect()
+	}
+}
+
+func pandaXReconnectDelay(base time.Duration, failures int) time.Duration {
+	if base <= 0 {
+		base = defaultPandaXReconnectInterval
+	}
+	if base > maxPandaXReconnectInterval {
+		base = maxPandaXReconnectInterval
+	}
+	if failures <= 0 {
+		return base
+	}
+
+	delay := base
+	for attempt := 1; attempt < failures; attempt++ {
+		if delay >= maxPandaXReconnectInterval/2 {
+			return maxPandaXReconnectInterval
+		}
+		delay *= 2
+	}
+
+	if delay > maxPandaXReconnectInterval {
+		return maxPandaXReconnectInterval
+	}
+	return delay
 }
 
 func (a *PandaXAdapter) subscribeRPCTopics(client mqtt.Client) {
