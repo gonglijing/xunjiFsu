@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -11,60 +12,94 @@ import (
 
 const DefaultAlarmRepeatIntervalSeconds = 60
 
+var thresholdColumnsEnsureState struct {
+	mu        sync.Mutex
+	ensuredDB *sql.DB
+}
+
+var gatewayAlarmRepeatEnsureState struct {
+	mu        sync.Mutex
+	ensuredDB *sql.DB
+}
+
 func ensureThresholdColumns() error {
-	hasShielded, err := columnExists(ParamDB, "thresholds", "shielded")
+	db := ParamDB
+	if db == nil {
+		return fmt.Errorf("param db is nil")
+	}
+
+	thresholdColumnsEnsureState.mu.Lock()
+	defer thresholdColumnsEnsureState.mu.Unlock()
+	if thresholdColumnsEnsureState.ensuredDB == db {
+		return nil
+	}
+
+	hasShielded, err := columnExists(db, "thresholds", "shielded")
 	if err != nil {
 		return err
 	}
 	if !hasShielded {
-		if _, err := ParamDB.Exec("ALTER TABLE thresholds ADD COLUMN shielded INTEGER DEFAULT 0"); err != nil {
+		if _, err := db.Exec("ALTER TABLE thresholds ADD COLUMN shielded INTEGER DEFAULT 0"); err != nil {
 			return err
 		}
 	}
 
-	if _, err := ParamDB.Exec("UPDATE thresholds SET shielded = 0 WHERE shielded IS NULL"); err != nil {
+	if _, err := db.Exec("UPDATE thresholds SET shielded = 0 WHERE shielded IS NULL"); err != nil {
 		return err
 	}
 
-	hasEnabled, err := columnExists(ParamDB, "thresholds", "enabled")
+	hasEnabled, err := columnExists(db, "thresholds", "enabled")
 	if err != nil {
 		return err
 	}
 	if hasEnabled {
-		if _, err := ParamDB.Exec("DROP INDEX IF EXISTS idx_thresholds_device_enabled"); err != nil {
+		if _, err := db.Exec("DROP INDEX IF EXISTS idx_thresholds_device_enabled"); err != nil {
 			return err
 		}
-		if _, err := ParamDB.Exec("ALTER TABLE thresholds DROP COLUMN enabled"); err != nil {
+		if _, err := db.Exec("ALTER TABLE thresholds DROP COLUMN enabled"); err != nil {
 			return err
 		}
 	}
 
-	if _, err := ParamDB.Exec("CREATE INDEX IF NOT EXISTS idx_thresholds_device ON thresholds(device_id)"); err != nil {
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_thresholds_device ON thresholds(device_id)"); err != nil {
 		return err
 	}
 
+	thresholdColumnsEnsureState.ensuredDB = db
 	return nil
 }
 
 func ensureGatewayAlarmRepeatIntervalColumn() error {
+	db := ParamDB
+	if db == nil {
+		return fmt.Errorf("param db is nil")
+	}
+
+	gatewayAlarmRepeatEnsureState.mu.Lock()
+	defer gatewayAlarmRepeatEnsureState.mu.Unlock()
+	if gatewayAlarmRepeatEnsureState.ensuredDB == db {
+		return nil
+	}
+
 	if err := InitGatewayConfigTable(); err != nil {
 		return err
 	}
 
-	hasColumn, err := columnExists(ParamDB, "gateway_config", "alarm_repeat_interval_seconds")
+	hasColumn, err := columnExists(db, "gateway_config", "alarm_repeat_interval_seconds")
 	if err != nil {
 		return err
 	}
 	if !hasColumn {
-		if _, err := ParamDB.Exec("ALTER TABLE gateway_config ADD COLUMN alarm_repeat_interval_seconds INTEGER DEFAULT 60"); err != nil {
+		if _, err := db.Exec("ALTER TABLE gateway_config ADD COLUMN alarm_repeat_interval_seconds INTEGER DEFAULT 60"); err != nil {
 			return err
 		}
 	}
 
-	if _, err := ParamDB.Exec("UPDATE gateway_config SET alarm_repeat_interval_seconds = ? WHERE alarm_repeat_interval_seconds IS NULL OR alarm_repeat_interval_seconds <= 0", DefaultAlarmRepeatIntervalSeconds); err != nil {
+	if _, err := db.Exec("UPDATE gateway_config SET alarm_repeat_interval_seconds = ? WHERE alarm_repeat_interval_seconds IS NULL OR alarm_repeat_interval_seconds <= 0", DefaultAlarmRepeatIntervalSeconds); err != nil {
 		return err
 	}
 
+	gatewayAlarmRepeatEnsureState.ensuredDB = db
 	return nil
 }
 

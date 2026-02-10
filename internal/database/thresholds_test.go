@@ -9,9 +9,21 @@ import (
 
 func setupThresholdsTestDB(t *testing.T) {
 	t.Helper()
+	thresholdColumnsEnsureState.mu.Lock()
+	thresholdColumnsEnsureState.ensuredDB = nil
+	thresholdColumnsEnsureState.mu.Unlock()
+	gatewayAlarmRepeatEnsureState.mu.Lock()
+	gatewayAlarmRepeatEnsureState.ensuredDB = nil
+	gatewayAlarmRepeatEnsureState.mu.Unlock()
 
 	originalParamDB := ParamDB
 	t.Cleanup(func() {
+		thresholdColumnsEnsureState.mu.Lock()
+		thresholdColumnsEnsureState.ensuredDB = nil
+		thresholdColumnsEnsureState.mu.Unlock()
+		gatewayAlarmRepeatEnsureState.mu.Lock()
+		gatewayAlarmRepeatEnsureState.ensuredDB = nil
+		gatewayAlarmRepeatEnsureState.mu.Unlock()
 		if ParamDB != nil {
 			_ = ParamDB.Close()
 		}
@@ -59,6 +71,57 @@ func setupThresholdsTestDB(t *testing.T) {
 	_, err = ParamDB.Exec(`INSERT INTO gateway_config (product_key, device_key, gateway_name, data_retention_days) VALUES ('', '', 'gw', 30)`)
 	if err != nil {
 		t.Fatalf("insert gateway config row: %v", err)
+	}
+}
+
+func TestEnsureThresholdColumns_RecheckAfterDBSwitch(t *testing.T) {
+	setupThresholdsTestDB(t)
+
+	if err := ensureThresholdColumns(); err != nil {
+		t.Fatalf("ensureThresholdColumns first call: %v", err)
+	}
+
+	if err := ensureThresholdColumns(); err != nil {
+		t.Fatalf("ensureThresholdColumns second call(idempotent): %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	newDB, err := openSQLite(filepath.Join(tmpDir, "param_new.db"), 1, 1)
+	if err != nil {
+		t.Fatalf("open new param db: %v", err)
+	}
+	defer func() { _ = newDB.Close() }()
+
+	_, err = newDB.Exec(`CREATE TABLE thresholds (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		field_name TEXT NOT NULL,
+		operator TEXT NOT NULL,
+		value REAL NOT NULL,
+		severity TEXT DEFAULT 'warning',
+		enabled INTEGER DEFAULT 1,
+		message TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("create thresholds in new db: %v", err)
+	}
+
+	original := ParamDB
+	ParamDB = newDB
+	defer func() { ParamDB = original }()
+
+	if err := ensureThresholdColumns(); err != nil {
+		t.Fatalf("ensureThresholdColumns after db switch: %v", err)
+	}
+
+	hasEnabled, err := columnExists(ParamDB, "thresholds", "enabled")
+	if err != nil {
+		t.Fatalf("columnExists enabled after switch: %v", err)
+	}
+	if hasEnabled {
+		t.Fatalf("enabled column should be dropped after db switch")
 	}
 }
 
