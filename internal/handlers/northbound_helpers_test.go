@@ -60,18 +60,22 @@ func TestValidateNorthboundConfig_SchemaConfigBypassesLegacyRequiredFields(t *te
 	}
 }
 
-func TestValidateNorthboundConfig_NormalizesXunJiToSagoo(t *testing.T) {
+func TestValidateNorthboundConfig_RejectsLegacyXunJiType(t *testing.T) {
 	config := &models.NorthboundConfig{
 		Name:   "demo",
 		Type:   "xunji",
 		Config: `{"serverUrl":"tcp://127.0.0.1:1883","productKey":"pk","deviceKey":"dk"}`,
 	}
 
-	if err := validateNorthboundConfig(config); err != nil {
-		t.Fatalf("validateNorthboundConfig returned error: %v", err)
+	err := validateNorthboundConfig(config)
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
-	if config.Type != "sagoo" {
-		t.Fatalf("config.Type = %q, want %q", config.Type, "sagoo")
+	if !strings.Contains(err.Error(), "invalid type") {
+		t.Fatalf("error = %q, want invalid type", err.Error())
+	}
+	if config.Type != "xunji" {
+		t.Fatalf("config.Type = %q, want %q", config.Type, "xunji")
 	}
 }
 

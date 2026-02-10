@@ -45,7 +45,7 @@ func TestExtractCommandProperties_DirectParamsWithRootIdentity(t *testing.T) {
 }
 
 func TestEnqueueCommandFromPropertySet_UseRootIdentity(t *testing.T) {
-	adapter := NewXunJiAdapter("xunji-test")
+	adapter := NewSagooAdapter("sagoo-test")
 	adapter.commandCap = 10
 
 	adapter.enqueueCommandFromPropertySet(
@@ -70,7 +70,7 @@ func TestEnqueueCommandFromPropertySet_UseRootIdentity(t *testing.T) {
 }
 
 func TestEnqueueCommandFromPropertySet_SubDevicesCompatible(t *testing.T) {
-	adapter := NewXunJiAdapter("xunji-test")
+	adapter := NewSagooAdapter("sagoo-test")
 	adapter.commandCap = 10
 
 	adapter.enqueueCommandFromPropertySet(
@@ -116,7 +116,7 @@ func TestParseIdentityMap(t *testing.T) {
 	}
 }
 
-func TestParseXunJiConfig_SnakeCaseCompatibility(t *testing.T) {
+func TestParseSagooConfig_SnakeCaseCompatibility(t *testing.T) {
 	config := `{
 		"product_key": "pk",
 		"device_key": "dk",
@@ -132,9 +132,9 @@ func TestParseXunJiConfig_SnakeCaseCompatibility(t *testing.T) {
 		"realtime_queue_size": 200
 	}`
 
-	cfg, err := parseXunJiConfig(config)
+	cfg, err := parseSagooConfig(config)
 	if err != nil {
-		t.Fatalf("parseXunJiConfig() error = %v", err)
+		t.Fatalf("parseSagooConfig() error = %v", err)
 	}
 	if cfg.ProductKey != "pk" || cfg.DeviceKey != "dk" {
 		t.Fatalf("identity mismatch: %+v", cfg)
@@ -156,11 +156,11 @@ func TestParseXunJiConfig_SnakeCaseCompatibility(t *testing.T) {
 	}
 }
 
-func TestParseXunJiConfig_Defaults(t *testing.T) {
+func TestParseSagooConfig_Defaults(t *testing.T) {
 	config := `{"productKey":"pk","deviceKey":"dk","serverUrl":"tcp://127.0.0.1:1883"}`
-	cfg, err := parseXunJiConfig(config)
+	cfg, err := parseSagooConfig(config)
 	if err != nil {
-		t.Fatalf("parseXunJiConfig() error = %v", err)
+		t.Fatalf("parseSagooConfig() error = %v", err)
 	}
 
 	if cfg.KeepAlive != 60 || cfg.Timeout != 10 {

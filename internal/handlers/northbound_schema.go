@@ -28,7 +28,7 @@ func (h *Handler) GetNorthboundSchema(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"type":           nbType,
-		"schemaVersion":  northboundschema.XunJiSchemaVersion,
+		"schemaVersion":  northboundschema.SagooSchemaVersion,
 		"supportedTypes": northboundschema.SupportedNorthboundSchemaTypes,
 		"fields":         fields,
 	}

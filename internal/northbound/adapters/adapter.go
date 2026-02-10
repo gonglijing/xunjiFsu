@@ -59,7 +59,7 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 	case nbtype.TypeIThings:
 		return NewIThingsAdapter(name)
 	case nbtype.TypeSagoo:
-		return NewXunJiAdapter(name)
+		return NewSagooAdapter(name)
 	default:
 		return nil
 	}

@@ -3,13 +3,10 @@ export const NORTHBOUND_TYPE = Object.freeze({
   PANDAX: 'pandax',
   ITHINGS: 'ithings',
   SAGOO: 'sagoo',
-  LEGACY_XUNJI: 'xunji',
 });
 
 export function normalizeNorthboundType(type) {
-  const raw = `${type ?? ''}`.trim().toLowerCase();
-  if (raw === NORTHBOUND_TYPE.LEGACY_XUNJI) return NORTHBOUND_TYPE.SAGOO;
-  return raw;
+  return `${type ?? ''}`.trim().toLowerCase();
 }
 
 export function isSagooType(type) {

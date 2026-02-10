@@ -99,7 +99,7 @@ type DeviceDriverMapping struct {
 type NorthboundConfig struct {
 	ID      int64  `json:"id" db:"id"`
 	Name    string `json:"name" db:"name"`
-	Type    string `json:"type" db:"type"` // xunji, pandax, ithings, mqtt, http
+	Type    string `json:"type" db:"type"` // sagoo, pandax, ithings, mqtt, http
 	Enabled int    `json:"enabled" db:"enabled"`
 
 	// 基础配置
@@ -123,7 +123,7 @@ type NorthboundConfig struct {
 	KeepAlive int  `json:"keep_alive" db:"keep_alive"` // 心跳周期(秒)
 	Timeout   int  `json:"timeout" db:"timeout"`       // 连接超时(秒)
 
-	// XunJi 特定配置
+	// Sagoo 特定配置
 	ProductKey string `json:"product_key" db:"product_key"` // 产品密钥
 	DeviceKey  string `json:"device_key" db:"device_key"`   // 设备密钥
 
@@ -204,8 +204,8 @@ type AlarmPayload struct {
 	Message     string  `json:"message"`
 }
 
-// XunJiConfig 循迹北向配置
-type XunJiConfig struct {
+// SagooConfig 循迹北向配置
+type SagooConfig struct {
 	ProductKey string `json:"productKey"`
 	DeviceKey  string `json:"deviceKey"`
 	ServerURL  string `json:"serverUrl"` // MQTT服务器地址

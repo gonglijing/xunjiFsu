@@ -274,7 +274,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		builder.SetExtConfig(cfg.ExtConfig)
 
 	case nbtype.TypeSagoo:
-		// 构建XunJi配置
+		// 构建Sagoo配置
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(serverURL)
 		builder.SetProductKey(cfg.ProductKey)

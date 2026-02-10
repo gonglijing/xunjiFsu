@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestXunJiConfigSchemaSupported(t *testing.T) {
-	for _, tp := range []string{"sagoo", "xunji"} {
+func TestSagooConfigSchemaSupported(t *testing.T) {
+	for _, tp := range []string{"sagoo"} {
 		_, ok := FieldsByType(tp)
 		if !ok {
 			t.Fatalf("expected %s schema supported", tp)
@@ -14,7 +14,7 @@ func TestXunJiConfigSchemaSupported(t *testing.T) {
 	}
 }
 
-func TestXunJiConfigSchemaNonEmpty(t *testing.T) {
+func TestSagooConfigSchemaNonEmpty(t *testing.T) {
 	fields, _ := FieldsByType("sagoo")
 	if len(fields) == 0 {
 		t.Fatalf("expected non-empty sagoo schema fields")
@@ -22,11 +22,11 @@ func TestXunJiConfigSchemaNonEmpty(t *testing.T) {
 }
 
 func TestCloneFieldsImmutability(t *testing.T) {
-	originKey := XunJiConfigSchema[0].Key
+	originKey := SagooConfigSchema[0].Key
 	clone, _ := FieldsByType("sagoo")
 	clone[0].Key = "modified"
 
-	if XunJiConfigSchema[0].Key != originKey {
+	if SagooConfigSchema[0].Key != originKey {
 		t.Fatalf("schema source should not be mutated by returned slice")
 	}
 }

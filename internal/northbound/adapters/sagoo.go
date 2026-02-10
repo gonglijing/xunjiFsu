@@ -15,8 +15,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-// XunJiConfig 循迹北向配置（与 models.XunJiConfig 保持一致）
-type XunJiConfig struct {
+// SagooConfig 循迹北向配置（与 models.SagooConfig 保持一致）
+type SagooConfig struct {
 	ProductKey string `json:"productKey"`
 	DeviceKey  string `json:"deviceKey"`
 	ServerURL  string `json:"serverUrl"` // MQTT服务器地址
@@ -51,11 +51,11 @@ const (
 	defaultRealtimeQueue  = 1000
 )
 
-// XunJiAdapter 循迹北向适配器
-// 每个 XunJiAdapter 自己管理自己的状态和发送线程
-type XunJiAdapter struct {
+// SagooAdapter 循迹北向适配器
+// 每个 SagooAdapter 自己管理自己的状态和发送线程
+type SagooAdapter struct {
 	name        string
-	config      *XunJiConfig
+	config      *SagooConfig
 	client      mqtt.Client
 	topic       string
 	alarmTopic  string
@@ -94,9 +94,9 @@ type XunJiAdapter struct {
 	seq         uint64
 }
 
-// NewXunJiAdapter 创建循迹适配器
-func NewXunJiAdapter(name string) *XunJiAdapter {
-	return &XunJiAdapter{
+// NewSagooAdapter 创建循迹适配器
+func NewSagooAdapter(name string) *SagooAdapter {
+	return &SagooAdapter{
 		name:         name,
 		stopChan:     make(chan struct{}),
 		flushNow:     make(chan struct{}, 1),
@@ -107,18 +107,18 @@ func NewXunJiAdapter(name string) *XunJiAdapter {
 }
 
 // Name 获取名称
-func (a *XunJiAdapter) Name() string {
+func (a *SagooAdapter) Name() string {
 	return a.name
 }
 
 // Type 获取类型
-func (a *XunJiAdapter) Type() string {
+func (a *SagooAdapter) Type() string {
 	return "sagoo"
 }
 
 // Initialize 初始化
-func (a *XunJiAdapter) Initialize(configStr string) error {
-	cfg, err := parseXunJiConfig(configStr)
+func (a *SagooAdapter) Initialize(configStr string) error {
+	cfg, err := parseSagooConfig(configStr)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func (a *XunJiAdapter) Initialize(configStr string) error {
 	broker := normalizeBroker(cfg.ServerURL)
 	clientID := strings.TrimSpace(cfg.ClientID)
 	if clientID == "" {
-		clientID = fmt.Sprintf("xunji-%s-%s-%d", cfg.ProductKey, cfg.DeviceKey, time.Now().UnixNano())
+		clientID = fmt.Sprintf("sagoo-%s-%s-%d", cfg.ProductKey, cfg.DeviceKey, time.Now().UnixNano())
 	}
 
 	qos := clampQOS(cfg.QOS)
@@ -182,26 +182,26 @@ func (a *XunJiAdapter) Initialize(configStr string) error {
 	// 订阅命令主题
 	a.subscribeCommandTopics(client)
 
-	log.Printf("XunJi adapter initialized: %s (broker=%s, topic=%s)",
+	log.Printf("Sagoo adapter initialized: %s (broker=%s, topic=%s)",
 		a.name, broker, topic)
 	return nil
 }
 
 // Start 启动适配器的后台线程
-func (a *XunJiAdapter) Start() {
+func (a *SagooAdapter) Start() {
 	a.mu.Lock()
 	if a.initialized && !a.enabled {
 		a.enabled = true
 		a.wg.Add(2)
 		go a.reportLoop()
 		go a.alarmLoop()
-		log.Printf("XunJi adapter started: %s", a.name)
+		log.Printf("Sagoo adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
 }
 
 // Stop 停止适配器的后台线程
-func (a *XunJiAdapter) Stop() {
+func (a *SagooAdapter) Stop() {
 	a.mu.Lock()
 	if a.enabled {
 		a.enabled = false
@@ -209,32 +209,32 @@ func (a *XunJiAdapter) Stop() {
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
-	log.Printf("XunJi adapter stopped: %s", a.name)
+	log.Printf("Sagoo adapter stopped: %s", a.name)
 }
 
 // SetInterval 设置发送周期
-func (a *XunJiAdapter) SetInterval(interval time.Duration) {
+func (a *SagooAdapter) SetInterval(interval time.Duration) {
 	a.mu.Lock()
 	a.reportEvery = interval
 	a.mu.Unlock()
 }
 
 // IsEnabled 检查是否启用
-func (a *XunJiAdapter) IsEnabled() bool {
+func (a *SagooAdapter) IsEnabled() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.enabled
 }
 
 // IsConnected 检查连接状态
-func (a *XunJiAdapter) IsConnected() bool {
+func (a *SagooAdapter) IsConnected() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.connected && a.client != nil && a.client.IsConnected()
 }
 
 // Send 发送数据（加入缓冲队列）
-func (a *XunJiAdapter) Send(data *models.CollectData) error {
+func (a *SagooAdapter) Send(data *models.CollectData) error {
 	if data == nil {
 		return nil
 	}
@@ -247,7 +247,7 @@ func (a *XunJiAdapter) Send(data *models.CollectData) error {
 }
 
 // SendAlarm 发送报警
-func (a *XunJiAdapter) SendAlarm(alarm *models.AlarmPayload) error {
+func (a *SagooAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	if alarm == nil {
 		return nil
 	}
@@ -269,7 +269,7 @@ func (a *XunJiAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 }
 
 // Close 关闭
-func (a *XunJiAdapter) Close() error {
+func (a *SagooAdapter) Close() error {
 	a.Stop()
 
 	a.mu.Lock()
@@ -306,7 +306,7 @@ func (a *XunJiAdapter) Close() error {
 }
 
 // PullCommands 拉取待执行命令
-func (a *XunJiAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, error) {
+func (a *SagooAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -337,7 +337,7 @@ func (a *XunJiAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, err
 }
 
 // ReportCommandResult 上报命令执行结果
-func (a *XunJiAdapter) ReportCommandResult(result *models.NorthboundCommandResult) error {
+func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResult) error {
 	if result == nil {
 		return nil
 	}
@@ -382,7 +382,7 @@ func (a *XunJiAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 }
 
 // reportLoop 数据上报循环（独立线程）
-func (a *XunJiAdapter) reportLoop() {
+func (a *SagooAdapter) reportLoop() {
 	defer a.wg.Done()
 
 	a.mu.RLock()
@@ -398,14 +398,14 @@ func (a *XunJiAdapter) reportLoop() {
 			return
 		case <-ticker.C:
 			if err := a.flushLatestData(); err != nil {
-				log.Printf("XunJi report flush failed: %v", err)
+				log.Printf("Sagoo report flush failed: %v", err)
 			}
 		}
 	}
 }
 
 // alarmLoop 报警发送循环（独立线程）
-func (a *XunJiAdapter) alarmLoop() {
+func (a *SagooAdapter) alarmLoop() {
 	defer a.wg.Done()
 
 	a.mu.RLock()
@@ -422,7 +422,7 @@ func (a *XunJiAdapter) alarmLoop() {
 			// 关闭前发送剩余报警
 			for {
 				if err := a.flushAlarmBatch(); err != nil {
-					log.Printf("XunJi alarm flush failed on close: %v", err)
+					log.Printf("Sagoo alarm flush failed on close: %v", err)
 					return
 				}
 				a.alarmMu.RLock()
@@ -435,18 +435,18 @@ func (a *XunJiAdapter) alarmLoop() {
 			}
 		case <-ticker.C:
 			if err := a.flushAlarmBatch(); err != nil {
-				log.Printf("XunJi alarm flush failed: %v", err)
+				log.Printf("Sagoo alarm flush failed: %v", err)
 			}
 		case <-flushNow:
 			if err := a.flushAlarmBatch(); err != nil {
-				log.Printf("XunJi alarm flush failed: %v", err)
+				log.Printf("Sagoo alarm flush failed: %v", err)
 			}
 		}
 	}
 }
 
 // flushLatestData 发送实时数据
-func (a *XunJiAdapter) flushLatestData() error {
+func (a *SagooAdapter) flushLatestData() error {
 	a.dataMu.Lock()
 	if len(a.latestData) == 0 {
 		a.dataMu.Unlock()
@@ -474,7 +474,7 @@ func (a *XunJiAdapter) flushLatestData() error {
 }
 
 // flushAlarmBatch 发送报警批次
-func (a *XunJiAdapter) flushAlarmBatch() error {
+func (a *SagooAdapter) flushAlarmBatch() error {
 	a.alarmMu.Lock()
 	if len(a.alarmQueue) == 0 {
 		a.alarmMu.Unlock()
@@ -504,7 +504,7 @@ func (a *XunJiAdapter) flushAlarmBatch() error {
 }
 
 // buildMessage 构建循迹消息
-func (a *XunJiAdapter) buildMessage(data *models.CollectData) string {
+func (a *SagooAdapter) buildMessage(data *models.CollectData) string {
 	if data == nil {
 		return "{}"
 	}
@@ -552,7 +552,7 @@ func (a *XunJiAdapter) buildMessage(data *models.CollectData) string {
 }
 
 // buildAlarmMessage 构建报警消息
-func (a *XunJiAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
+func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
 	if alarm == nil {
 		return "{}"
 	}
@@ -604,7 +604,7 @@ func (a *XunJiAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
 }
 
 // publish 发布MQTT消息
-func (a *XunJiAdapter) publish(topic string, payload []byte) error {
+func (a *SagooAdapter) publish(topic string, payload []byte) error {
 	a.mu.RLock()
 	client := a.client
 	timeout := a.timeout
@@ -639,7 +639,7 @@ func (a *XunJiAdapter) publish(topic string, payload []byte) error {
 }
 
 // subscribeCommandTopics 订阅命令主题
-func (a *XunJiAdapter) subscribeCommandTopics(client mqtt.Client) {
+func (a *SagooAdapter) subscribeCommandTopics(client mqtt.Client) {
 	a.mu.RLock()
 	cfg := a.config
 	a.mu.RUnlock()
@@ -659,7 +659,7 @@ func (a *XunJiAdapter) subscribeCommandTopics(client mqtt.Client) {
 	a.subscribe(client, fmt.Sprintf("/sys/%s/%s/thing/config/push", pk, dk), a.handleConfigPush)
 }
 
-func (a *XunJiAdapter) subscribe(client mqtt.Client, topic string, handler mqtt.MessageHandler) {
+func (a *SagooAdapter) subscribe(client mqtt.Client, topic string, handler mqtt.MessageHandler) {
 	a.mu.RLock()
 	qos := a.qos
 	timeout := a.timeout
@@ -671,7 +671,7 @@ func (a *XunJiAdapter) subscribe(client mqtt.Client, topic string, handler mqtt.
 	}
 }
 
-func (a *XunJiAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
+func (a *SagooAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
 	pk, dk, ok := extractIdentity(message.Topic())
 	if !ok {
 		return
@@ -700,7 +700,7 @@ func (a *XunJiAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
 	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/service/property/set_reply", pk, dk), respBody)
 }
 
-func (a *XunJiAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
+func (a *SagooAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 	parts := splitTopic(message.Topic())
 	if len(parts) != 7 {
 		return
@@ -736,7 +736,7 @@ func (a *XunJiAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/service/%s_reply", pk, dk, svc), respBody)
 }
 
-func (a *XunJiAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
+func (a *SagooAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
 	pk, dk, ok := extractIdentity(message.Topic())
 	if !ok {
 		return
@@ -758,7 +758,7 @@ func (a *XunJiAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
 	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/config/push/reply", pk, dk), respBody)
 }
 
-func (a *XunJiAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}, rootIdentityPK, rootIdentityDK string) {
+func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}, rootIdentityPK, rootIdentityDK string) {
 	properties, identityPK, identityDK := extractCommandProperties(params)
 	if len(properties) == 0 {
 		return
@@ -794,7 +794,7 @@ func (a *XunJiAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 			DeviceKey:  dk,
 			FieldName:  key,
 			Value:      stringifyAny(raw),
-			Source:     "xunji.property.set",
+			Source:     "sagoo.property.set",
 		}
 		if len(a.commandQueue) >= a.commandCap && len(a.commandQueue) > 0 {
 			a.commandQueue = a.commandQueue[1:]
@@ -804,13 +804,13 @@ func (a *XunJiAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 }
 
 // 辅助函数
-func (a *XunJiAdapter) isInitialized() bool {
+func (a *SagooAdapter) isInitialized() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.initialized
 }
 
-func (a *XunJiAdapter) defaultIdentity() (string, string) {
+func (a *SagooAdapter) defaultIdentity() (string, string) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.config == nil {
@@ -819,12 +819,12 @@ func (a *XunJiAdapter) defaultIdentity() (string, string) {
 	return strings.TrimSpace(a.config.ProductKey), strings.TrimSpace(a.config.DeviceKey)
 }
 
-func (a *XunJiAdapter) nextID(prefix string) string {
+func (a *SagooAdapter) nextID(prefix string) string {
 	n := atomic.AddUint64(&a.seq, 1)
 	return fmt.Sprintf("%s_%d_%d", prefix, time.Now().UnixMilli(), n)
 }
 
-func (a *XunJiAdapter) enqueueRealtimeLocked(item *models.CollectData) {
+func (a *SagooAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 	if item == nil {
 		return
 	}
@@ -837,7 +837,7 @@ func (a *XunJiAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 	a.latestData = append(a.latestData, item)
 }
 
-func (a *XunJiAdapter) prependRealtime(items []*models.CollectData) {
+func (a *SagooAdapter) prependRealtime(items []*models.CollectData) {
 	if len(items) == 0 {
 		return
 	}
@@ -853,7 +853,7 @@ func (a *XunJiAdapter) prependRealtime(items []*models.CollectData) {
 	a.latestData = queue
 }
 
-func (a *XunJiAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
+func (a *SagooAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
 	if alarm == nil {
 		return
 	}
@@ -866,7 +866,7 @@ func (a *XunJiAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
 	a.alarmQueue = append(a.alarmQueue, alarm)
 }
 
-func (a *XunJiAdapter) prependAlarms(alarms []*models.AlarmPayload) {
+func (a *SagooAdapter) prependAlarms(alarms []*models.AlarmPayload) {
 	if len(alarms) == 0 {
 		return
 	}
@@ -883,7 +883,7 @@ func (a *XunJiAdapter) prependAlarms(alarms []*models.AlarmPayload) {
 }
 
 // GetStats 获取适配器统计信息
-func (a *XunJiAdapter) GetStats() map[string]interface{} {
+func (a *SagooAdapter) GetStats() map[string]interface{} {
 	a.mu.RLock()
 	productKey := ""
 	deviceKey := ""
@@ -921,47 +921,47 @@ func (a *XunJiAdapter) GetStats() map[string]interface{} {
 }
 
 // GetLastSendTime 获取最后发送时间（返回零值，因为是内部管理）
-func (a *XunJiAdapter) GetLastSendTime() time.Time {
+func (a *SagooAdapter) GetLastSendTime() time.Time {
 	return time.Time{}
 }
 
 // PendingCommandCount 获取待处理命令数量
-func (a *XunJiAdapter) PendingCommandCount() int {
+func (a *SagooAdapter) PendingCommandCount() int {
 	a.commandMu.RLock()
 	defer a.commandMu.RUnlock()
 	return len(a.commandQueue)
 }
 
 // 辅助函数
-func parseXunJiConfig(configStr string) (*XunJiConfig, error) {
+func parseSagooConfig(configStr string) (*SagooConfig, error) {
 	raw := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(configStr), &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	cfg := &XunJiConfig{}
-	cfg.ProductKey = strings.TrimSpace(xunjiPickString(raw, "productKey", "product_key", "productID", "product_id"))
-	cfg.DeviceKey = strings.TrimSpace(xunjiPickString(raw, "deviceKey", "device_key", "deviceName", "device_name"))
+	cfg := &SagooConfig{}
+	cfg.ProductKey = strings.TrimSpace(sagooPickString(raw, "productKey", "product_key", "productID", "product_id"))
+	cfg.DeviceKey = strings.TrimSpace(sagooPickString(raw, "deviceKey", "device_key", "deviceName", "device_name"))
 	cfg.ServerURL = normalizeServerURLWithPort(
-		xunjiPickString(raw, "serverUrl", "server_url", "broker"),
-		xunjiPickString(raw, "protocol"),
-		xunjiPickInt(raw, 0, "port"),
+		sagooPickString(raw, "serverUrl", "server_url", "broker"),
+		sagooPickString(raw, "protocol"),
+		sagooPickInt(raw, 0, "port"),
 	)
-	cfg.Username = strings.TrimSpace(xunjiPickString(raw, "username"))
-	cfg.Password = strings.TrimSpace(xunjiPickString(raw, "password"))
-	cfg.Topic = strings.TrimSpace(xunjiPickString(raw, "topic"))
-	cfg.AlarmTopic = strings.TrimSpace(xunjiPickString(raw, "alarmTopic", "alarm_topic"))
-	cfg.ClientID = strings.TrimSpace(xunjiPickString(raw, "clientId", "client_id"))
-	cfg.QOS = xunjiPickInt(raw, 0, "qos")
-	cfg.Retain = xunjiPickBool(raw, false, "retain")
-	cfg.KeepAlive = xunjiPickInt(raw, 60, "keepAlive", "keep_alive")
-	cfg.Timeout = xunjiPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout")
-	cfg.UploadIntervalMs = xunjiPickInt(raw, 5000, "uploadIntervalMs", "upload_interval_ms")
-	cfg.ReportIntervalMs = xunjiPickInt(raw, 0, "reportIntervalMs", "report_interval_ms")
-	cfg.AlarmFlushIntervalMs = xunjiPickInt(raw, 2000, "alarmFlushIntervalMs", "alarm_flush_interval_ms")
-	cfg.AlarmBatchSize = xunjiPickInt(raw, 20, "alarmBatchSize", "alarm_batch_size")
-	cfg.AlarmQueueSize = xunjiPickInt(raw, 1000, "alarmQueueSize", "alarm_queue_size")
-	cfg.RealtimeQueueSize = xunjiPickInt(raw, 1000, "realtimeQueueSize", "realtime_queue_size")
+	cfg.Username = strings.TrimSpace(sagooPickString(raw, "username"))
+	cfg.Password = strings.TrimSpace(sagooPickString(raw, "password"))
+	cfg.Topic = strings.TrimSpace(sagooPickString(raw, "topic"))
+	cfg.AlarmTopic = strings.TrimSpace(sagooPickString(raw, "alarmTopic", "alarm_topic"))
+	cfg.ClientID = strings.TrimSpace(sagooPickString(raw, "clientId", "client_id"))
+	cfg.QOS = sagooPickInt(raw, 0, "qos")
+	cfg.Retain = sagooPickBool(raw, false, "retain")
+	cfg.KeepAlive = sagooPickInt(raw, 60, "keepAlive", "keep_alive")
+	cfg.Timeout = sagooPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout")
+	cfg.UploadIntervalMs = sagooPickInt(raw, 5000, "uploadIntervalMs", "upload_interval_ms")
+	cfg.ReportIntervalMs = sagooPickInt(raw, 0, "reportIntervalMs", "report_interval_ms")
+	cfg.AlarmFlushIntervalMs = sagooPickInt(raw, 2000, "alarmFlushIntervalMs", "alarm_flush_interval_ms")
+	cfg.AlarmBatchSize = sagooPickInt(raw, 20, "alarmBatchSize", "alarm_batch_size")
+	cfg.AlarmQueueSize = sagooPickInt(raw, 1000, "alarmQueueSize", "alarm_queue_size")
+	cfg.RealtimeQueueSize = sagooPickInt(raw, 1000, "realtimeQueueSize", "realtime_queue_size")
 
 	if cfg.ProductKey == "" {
 		return nil, fmt.Errorf("productKey is required")
@@ -1004,15 +1004,15 @@ func parseXunJiConfig(configStr string) (*XunJiConfig, error) {
 	return cfg, nil
 }
 
-func xunjiPickString(data map[string]interface{}, keys ...string) string {
+func sagooPickString(data map[string]interface{}, keys ...string) string {
 	return pickConfigString(data, keys...)
 }
 
-func xunjiPickInt(data map[string]interface{}, fallback int, keys ...string) int {
+func sagooPickInt(data map[string]interface{}, fallback int, keys ...string) int {
 	return pickConfigInt(data, fallback, keys...)
 }
 
-func xunjiPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
+func sagooPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
 	return pickConfigBool(data, fallback, keys...)
 }
 
@@ -1114,7 +1114,7 @@ func extractCommandProperties(params map[string]interface{}) (map[string]interfa
 		}
 	}
 
-	// xunji 南向下发常见格式：params 直接是属性键值
+	// sagoo 南向下发常见格式：params 直接是属性键值
 	directProperties := make(map[string]interface{})
 	for key, raw := range params {
 		trimmedKey := strings.TrimSpace(key)

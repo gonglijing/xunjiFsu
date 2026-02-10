@@ -11,7 +11,7 @@ const (
 	FieldTypeBool   FieldType = "bool"
 )
 
-const XunJiSchemaVersion = "1.0.0"
+const SagooSchemaVersion = "1.0.0"
 
 var SupportedNorthboundSchemaTypes = []string{
 	nbtype.TypeMQTT,
@@ -31,9 +31,9 @@ type Field struct {
 	Description string      `json:"description"`
 }
 
-// XunJiConfigSchema is the single schema source for XUNJI northbound config.
+// SagooConfigSchema is the single schema source for SAGOO northbound config.
 // 只保留关键连接参数
-var XunJiConfigSchema = []Field{
+var SagooConfigSchema = []Field{
 	{Key: "productKey", Label: "ProductKey", Type: FieldTypeString, Required: true, Default: "", Description: "网关 ProductKey（必填）"},
 	{Key: "deviceKey", Label: "DeviceKey", Type: FieldTypeString, Required: true, Default: "", Description: "网关 DeviceKey（必填）"},
 	{Key: "serverUrl", Label: "MQTT 地址", Type: FieldTypeString, Required: true, Default: "", Description: "例如 tcp://192.168.1.100:1883"},
@@ -44,7 +44,7 @@ var XunJiConfigSchema = []Field{
 func FieldsByType(nbType string) ([]Field, bool) {
 	switch nbtype.Normalize(nbType) {
 	case "", nbtype.TypeSagoo:
-		return cloneFields(XunJiConfigSchema), true
+		return cloneFields(SagooConfigSchema), true
 	case nbtype.TypeMQTT:
 		return cloneFields(MQTTConfigSchema), true
 	case nbtype.TypePandaX:
