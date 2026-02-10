@@ -191,10 +191,11 @@ func (a *SagooAdapter) Initialize(configStr string) error {
 
 // Start 启动适配器的后台线程
 func (a *SagooAdapter) Start() {
+	transition := loopStateTransition{}
 	a.mu.Lock()
 	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		a.enabled = true
-		a.loopState = adapterLoopRunning
+		transition = updateLoopState(&a.loopState, adapterLoopRunning)
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -206,29 +207,36 @@ func (a *SagooAdapter) Start() {
 		log.Printf("Sagoo adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("sagoo", a.name, transition)
 }
 
 // Stop 停止适配器的后台线程
 func (a *SagooAdapter) Stop() {
+	transitionStopping := loopStateTransition{}
+	transitionStopped := loopStateTransition{}
+
 	a.mu.Lock()
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		a.loopState = adapterLoopStopping
+		transitionStopping = updateLoopState(&a.loopState, adapterLoopStopping)
 		if stopChan != nil {
 			close(stopChan)
 		}
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("sagoo", a.name, transitionStopping)
+
 	a.wg.Wait()
 	if stopChan != nil {
 		a.mu.Lock()
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
-		a.loopState = adapterLoopStopped
+		transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
 	}
+	logLoopStateTransition("sagoo", a.name, transitionStopped)
 	log.Printf("Sagoo adapter stopped: %s", a.name)
 }
 
@@ -292,13 +300,15 @@ func (a *SagooAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 func (a *SagooAdapter) Close() error {
 	a.Stop()
 
+	transitionStopped := loopStateTransition{}
 	a.mu.Lock()
 	client := a.client
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
-	a.loopState = adapterLoopStopped
+	transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 	a.mu.Unlock()
+	logLoopStateTransition("sagoo", a.name, transitionStopped)
 
 	// 刷新剩余数据
 	_ = a.flushLatestData()
@@ -399,8 +409,9 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 func (a *SagooAdapter) runLoop() {
 	defer func() {
 		a.mu.Lock()
-		a.loopState = adapterLoopStopped
+		transition := updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
+		logLoopStateTransition("sagoo", a.name, transition)
 		a.wg.Done()
 	}()
 

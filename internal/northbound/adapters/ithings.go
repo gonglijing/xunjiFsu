@@ -202,10 +202,11 @@ func (a *IThingsAdapter) Initialize(configStr string) error {
 }
 
 func (a *IThingsAdapter) Start() {
+	transition := loopStateTransition{}
 	a.mu.Lock()
 	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		a.enabled = true
-		a.loopState = adapterLoopRunning
+		transition = updateLoopState(&a.loopState, adapterLoopRunning)
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -217,28 +218,35 @@ func (a *IThingsAdapter) Start() {
 		log.Printf("iThings adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("ithings", a.name, transition)
 }
 
 func (a *IThingsAdapter) Stop() {
+	transitionStopping := loopStateTransition{}
+	transitionStopped := loopStateTransition{}
+
 	a.mu.Lock()
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		a.loopState = adapterLoopStopping
+		transitionStopping = updateLoopState(&a.loopState, adapterLoopStopping)
 		if stopChan != nil {
 			close(stopChan)
 		}
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("ithings", a.name, transitionStopping)
+
 	a.wg.Wait()
 	if stopChan != nil {
 		a.mu.Lock()
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
-		a.loopState = adapterLoopStopped
+		transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
 	}
+	logLoopStateTransition("ithings", a.name, transitionStopped)
 	log.Printf("iThings adapter stopped: %s", a.name)
 }
 
@@ -296,13 +304,15 @@ func (a *IThingsAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 func (a *IThingsAdapter) Close() error {
 	a.Stop()
 
+	transitionStopped := loopStateTransition{}
 	a.mu.Lock()
 	client := a.client
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
-	a.loopState = adapterLoopStopped
+	transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 	a.mu.Unlock()
+	logLoopStateTransition("ithings", a.name, transitionStopped)
 
 	_ = a.flushRealtime()
 	_ = a.flushAlarmBatch()
@@ -465,8 +475,9 @@ func (a *IThingsAdapter) PendingCommandCount() int {
 func (a *IThingsAdapter) runLoop() {
 	defer func() {
 		a.mu.Lock()
-		a.loopState = adapterLoopStopped
+		transition := updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
+		logLoopStateTransition("ithings", a.name, transition)
 		a.wg.Done()
 	}()
 

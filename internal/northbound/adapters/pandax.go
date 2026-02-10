@@ -235,10 +235,11 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 
 func (a *PandaXAdapter) Start() {
 	needReconnect := false
+	transition := loopStateTransition{}
 	a.mu.Lock()
 	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		a.enabled = true
-		a.loopState = adapterLoopRunning
+		transition = updateLoopState(&a.loopState, adapterLoopRunning)
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -255,6 +256,7 @@ func (a *PandaXAdapter) Start() {
 			a.name, a.reportEvery, a.alarmEvery)
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("pandax", a.name, transition)
 
 	if needReconnect {
 		a.signalReconnect()
@@ -262,26 +264,32 @@ func (a *PandaXAdapter) Start() {
 }
 
 func (a *PandaXAdapter) Stop() {
+	transitionStopping := loopStateTransition{}
+	transitionStopped := loopStateTransition{}
+
 	a.mu.Lock()
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		a.loopState = adapterLoopStopping
+		transitionStopping = updateLoopState(&a.loopState, adapterLoopStopping)
 		if stopChan != nil {
 			close(stopChan)
 		}
 		log.Printf("[PandaX-%s] Stop: 适配器已停止", a.name)
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("pandax", a.name, transitionStopping)
+
 	a.wg.Wait()
 	if stopChan != nil {
 		a.mu.Lock()
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
-		a.loopState = adapterLoopStopped
+		transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
 	}
+	logLoopStateTransition("pandax", a.name, transitionStopped)
 }
 
 func (a *PandaXAdapter) SetInterval(interval time.Duration) {
@@ -357,13 +365,15 @@ func (a *PandaXAdapter) Close() error {
 
 	a.Stop()
 
+	transitionStopped := loopStateTransition{}
 	a.mu.Lock()
 	client := a.client
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
-	a.loopState = adapterLoopStopped
+	transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 	a.mu.Unlock()
+	logLoopStateTransition("pandax", a.name, transitionStopped)
 
 	_ = a.flushRealtime()
 	_ = a.flushAlarmBatch()
@@ -515,8 +525,9 @@ func (a *PandaXAdapter) PendingCommandCount() int {
 func (a *PandaXAdapter) runLoop() {
 	defer func() {
 		a.mu.Lock()
-		a.loopState = adapterLoopStopped
+		transition := updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
+		logLoopStateTransition("pandax", a.name, transition)
 		a.wg.Done()
 	}()
 

@@ -268,6 +268,7 @@ func (a *MQTTAdapter) reconnectOnce() error {
 // Start 启动适配器的后台线程
 func (a *MQTTAdapter) Start() {
 	needReconnect := false
+	transition := loopStateTransition{}
 	a.mu.Lock()
 	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		if a.stopChan == nil {
@@ -280,13 +281,14 @@ func (a *MQTTAdapter) Start() {
 			a.reconnectNow = make(chan struct{}, 1)
 		}
 		a.enabled = true
-		a.loopState = adapterLoopRunning
+		transition = updateLoopState(&a.loopState, adapterLoopRunning)
 		needReconnect = !a.connected
 		a.wg.Add(1)
 		go a.runLoop()
 		log.Printf("MQTT adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("mqtt", a.name, transition)
 
 	if needReconnect {
 		a.signalReconnect()
@@ -295,25 +297,31 @@ func (a *MQTTAdapter) Start() {
 
 // Stop 停止适配器的后台线程
 func (a *MQTTAdapter) Stop() {
+	transitionStopping := loopStateTransition{}
+	transitionStopped := loopStateTransition{}
+
 	a.mu.Lock()
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		a.loopState = adapterLoopStopping
+		transitionStopping = updateLoopState(&a.loopState, adapterLoopStopping)
 		if stopChan != nil {
 			close(stopChan)
 		}
 	}
 	a.mu.Unlock()
+	logLoopStateTransition("mqtt", a.name, transitionStopping)
+
 	a.wg.Wait()
 	if stopChan != nil {
 		a.mu.Lock()
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
-		a.loopState = adapterLoopStopped
+		transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
 	}
+	logLoopStateTransition("mqtt", a.name, transitionStopped)
 	log.Printf("MQTT adapter stopped: %s", a.name)
 }
 
@@ -394,17 +402,19 @@ func (a *MQTTAdapter) Close() error {
 	a.flushPendingData()
 	_ = a.flushAlarms()
 
+	transitionStopped := loopStateTransition{}
 	a.mu.Lock()
 	client := a.client
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
-	a.loopState = adapterLoopStopped
+	transitionStopped = updateLoopState(&a.loopState, adapterLoopStopped)
 	a.client = nil
 	a.stopChan = nil
 	a.dataChan = nil
 	a.reconnectNow = nil
 	a.mu.Unlock()
+	logLoopStateTransition("mqtt", a.name, transitionStopped)
 
 	if client != nil && client.IsConnected() {
 		client.Disconnect(250)
@@ -417,8 +427,9 @@ func (a *MQTTAdapter) Close() error {
 func (a *MQTTAdapter) runLoop() {
 	defer func() {
 		a.mu.Lock()
-		a.loopState = adapterLoopStopped
+		transition := updateLoopState(&a.loopState, adapterLoopStopped)
 		a.mu.Unlock()
+		logLoopStateTransition("mqtt", a.name, transition)
 		a.wg.Done()
 	}()
 
