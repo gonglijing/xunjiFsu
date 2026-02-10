@@ -2,6 +2,7 @@ package collector
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,8 +58,8 @@ func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateK
 	}
 	return alarmStateKey{
 		DeviceID:       deviceID,
-		FieldName:      threshold.FieldName,
-		Operator:       threshold.Operator,
+		FieldName:      strings.ToLower(strings.TrimSpace(threshold.FieldName)),
+		Operator:       strings.TrimSpace(threshold.Operator),
 		ThresholdValue: threshold.Value,
 	}
 }

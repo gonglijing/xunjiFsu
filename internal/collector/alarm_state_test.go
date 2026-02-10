@@ -78,6 +78,30 @@ func TestBuildAlarmStateKey_UseThresholdIDAsPrimaryIdentity(t *testing.T) {
 	}
 }
 
+func TestBuildAlarmStateKey_WithoutIDNormalizesFieldAndOperator(t *testing.T) {
+	deviceID := int64(101)
+	thresholdA := &models.Threshold{
+		FieldName: " Humidity ",
+		Operator:  " > ",
+		Value:     50,
+	}
+	thresholdB := &models.Threshold{
+		FieldName: "humidity",
+		Operator:  ">",
+		Value:     50,
+	}
+
+	keyA := buildAlarmStateKey(deviceID, thresholdA)
+	keyB := buildAlarmStateKey(deviceID, thresholdB)
+
+	if keyA != keyB {
+		t.Fatalf("normalized keys should match, keyA=%+v keyB=%+v", keyA, keyB)
+	}
+	if keyA.FieldName != "humidity" || keyA.Operator != ">" {
+		t.Fatalf("expected normalized key fields, got %+v", keyA)
+	}
+}
+
 func TestPruneAlarmStatesLocked(t *testing.T) {
 	deviceID := int64(77)
 	threshold := &models.Threshold{ID: 7001}
