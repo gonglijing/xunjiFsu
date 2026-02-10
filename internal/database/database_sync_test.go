@@ -3,6 +3,8 @@ package database
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func TestSyncDataToDisk(t *testing.T) {
@@ -73,6 +75,64 @@ func TestSyncDataToDisk(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("expected 2 data points, got %d", count)
+	}
+}
+
+func TestSyncDataToDisk_NormalizesSystemDeviceName(t *testing.T) {
+	tmpDir := t.TempDir()
+	dataDBFile = filepath.Join(tmpDir, "data.db")
+
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+
+	var err error
+	DataDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open data db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = DataDB.Close()
+	})
+
+	_, _ = DataDB.Exec("PRAGMA foreign_keys = OFF")
+
+	_, err = DataDB.Exec(`CREATE TABLE data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(device_id, field_name, collected_at)
+	)`)
+	if err != nil {
+		t.Fatalf("create data_points: %v", err)
+	}
+
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now', '-1 minutes'))`, models.SystemStatsDeviceID, "-1", "cpu_usage", "20", "string")
+	if err != nil {
+		t.Fatalf("insert system point: %v", err)
+	}
+
+	if err := syncDataToDisk(); err != nil {
+		t.Fatalf("syncDataToDisk: %v", err)
+	}
+
+	diskDB, err := openSQLite(dataDBFile, 1, 1)
+	if err != nil {
+		t.Fatalf("open disk db: %v", err)
+	}
+	defer diskDB.Close()
+
+	var got string
+	if err := diskDB.QueryRow(`SELECT device_name FROM data_points WHERE device_id = ? AND field_name = ?`, models.SystemStatsDeviceID, "cpu_usage").Scan(&got); err != nil {
+		t.Fatalf("query disk system point: %v", err)
+	}
+	if got != models.SystemStatsDeviceName {
+		t.Fatalf("disk device_name = %q, want %q", got, models.SystemStatsDeviceName)
 	}
 }
 

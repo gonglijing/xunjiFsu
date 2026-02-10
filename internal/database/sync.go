@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 // 数据同步相关
@@ -95,6 +97,15 @@ func syncDataToDisk() error {
 		return nil
 	}
 
+	if _, err := DataDB.Exec(
+		`UPDATE data_points SET device_name = ? WHERE device_id = ? AND device_name <> ?`,
+		models.SystemStatsDeviceName,
+		models.SystemStatsDeviceID,
+		models.SystemStatsDeviceName,
+	); err != nil {
+		log.Printf("Failed to normalize system device_name in memory DB: %v", err)
+	}
+
 	// 1. 打开/创建磁盘数据库
 	diskDB, err := sql.Open("sqlite", dataDBFile)
 	if err != nil {
@@ -140,6 +151,7 @@ func syncDataToDisk() error {
 			tx.Rollback()
 			return err
 		}
+		deviceName = normalizeDeviceName(deviceID, deviceName)
 		if _, err := stmt.Exec(deviceID, deviceName, fieldName, value, valueType, collectedAt); err != nil {
 			tx.Rollback()
 			return err
@@ -180,6 +192,15 @@ func ensureDiskDataSchema(db *sql.DB) error {
 
 	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_data_points_device_time ON data_points(device_id, collected_at DESC)"); err != nil {
 		return fmt.Errorf("failed to ensure data_points index: %w", err)
+	}
+
+	if _, err := db.Exec(
+		`UPDATE data_points SET device_name = ? WHERE device_id = ? AND device_name <> ?`,
+		models.SystemStatsDeviceName,
+		models.SystemStatsDeviceID,
+		models.SystemStatsDeviceName,
+	); err != nil {
+		return fmt.Errorf("failed to normalize system device_name: %w", err)
 	}
 
 	return nil
