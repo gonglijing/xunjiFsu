@@ -933,11 +933,7 @@ func (a *IThingsAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 	if a.realtimeCap <= 0 {
 		a.realtimeCap = defaultRealtimeQueue
 	}
-	if len(a.realtimeQueue) >= a.realtimeCap {
-		a.realtimeQueue[0] = nil
-		a.realtimeQueue = a.realtimeQueue[1:]
-	}
-	a.realtimeQueue = append(a.realtimeQueue, item)
+	a.realtimeQueue = appendQueueItemWithCap(a.realtimeQueue, item, a.realtimeCap)
 }
 
 func (a *IThingsAdapter) prependRealtime(items []*models.CollectData) {
@@ -947,14 +943,7 @@ func (a *IThingsAdapter) prependRealtime(items []*models.CollectData) {
 	if a.realtimeCap <= 0 {
 		a.realtimeCap = defaultRealtimeQueue
 	}
-	queue := make([]*models.CollectData, 0, len(items)+len(a.realtimeQueue))
-	queue = append(queue, items...)
-	queue = append(queue, a.realtimeQueue...)
-	if len(queue) > a.realtimeCap {
-		clear(queue[a.realtimeCap:])
-		queue = queue[:a.realtimeCap]
-	}
-	a.realtimeQueue = queue[:len(queue):len(queue)]
+	a.realtimeQueue = prependQueueWithCap(a.realtimeQueue, items, a.realtimeCap)
 }
 
 func (a *IThingsAdapter) enqueueAlarmLocked(item *models.AlarmPayload) {
@@ -964,11 +953,7 @@ func (a *IThingsAdapter) enqueueAlarmLocked(item *models.AlarmPayload) {
 	if a.alarmCap <= 0 {
 		a.alarmCap = defaultAlarmQueue
 	}
-	if len(a.alarmQueue) >= a.alarmCap {
-		a.alarmQueue[0] = nil
-		a.alarmQueue = a.alarmQueue[1:]
-	}
-	a.alarmQueue = append(a.alarmQueue, item)
+	a.alarmQueue = appendQueueItemWithCap(a.alarmQueue, item, a.alarmCap)
 }
 
 func (a *IThingsAdapter) prependAlarms(items []*models.AlarmPayload) {
@@ -978,14 +963,7 @@ func (a *IThingsAdapter) prependAlarms(items []*models.AlarmPayload) {
 	if a.alarmCap <= 0 {
 		a.alarmCap = defaultAlarmQueue
 	}
-	queue := make([]*models.AlarmPayload, 0, len(items)+len(a.alarmQueue))
-	queue = append(queue, items...)
-	queue = append(queue, a.alarmQueue...)
-	if len(queue) > a.alarmCap {
-		clear(queue[a.alarmCap:])
-		queue = queue[:a.alarmCap]
-	}
-	a.alarmQueue = queue[:len(queue):len(queue)]
+	a.alarmQueue = prependQueueWithCap(a.alarmQueue, items, a.alarmCap)
 }
 
 func (a *IThingsAdapter) isInitialized() bool {

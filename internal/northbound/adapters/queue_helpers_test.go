@@ -36,3 +36,28 @@ func TestAppendCommandQueueWithCap_IgnoreNilIncoming(t *testing.T) {
 		t.Fatalf("unexpected queue order: %#v", out)
 	}
 }
+
+func TestAppendQueueItemWithCap_DropsOldest(t *testing.T) {
+	queue := []int{1, 2, 3}
+	out := appendQueueItemWithCap(queue, 4, 3)
+
+	if len(out) != 3 {
+		t.Fatalf("len(out)=%d, want=3", len(out))
+	}
+	if out[0] != 2 || out[1] != 3 || out[2] != 4 {
+		t.Fatalf("unexpected queue order: %#v", out)
+	}
+}
+
+func TestPrependQueueWithCap_KeepsNewestPrefix(t *testing.T) {
+	queue := []int{3, 4, 5}
+	items := []int{1, 2}
+	out := prependQueueWithCap(queue, items, 4)
+
+	if len(out) != 4 {
+		t.Fatalf("len(out)=%d, want=4", len(out))
+	}
+	if out[0] != 1 || out[1] != 2 || out[2] != 3 || out[3] != 4 {
+		t.Fatalf("unexpected queue order: %#v", out)
+	}
+}

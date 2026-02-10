@@ -825,11 +825,7 @@ func (a *SagooAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 	if a.realtimeCap <= 0 {
 		a.realtimeCap = defaultRealtimeQueue
 	}
-	if len(a.latestData) >= a.realtimeCap {
-		a.latestData[0] = nil
-		a.latestData = a.latestData[1:]
-	}
-	a.latestData = append(a.latestData, item)
+	a.latestData = appendQueueItemWithCap(a.latestData, item, a.realtimeCap)
 }
 
 func (a *SagooAdapter) prependRealtime(items []*models.CollectData) {
@@ -839,14 +835,7 @@ func (a *SagooAdapter) prependRealtime(items []*models.CollectData) {
 	if a.realtimeCap <= 0 {
 		a.realtimeCap = defaultRealtimeQueue
 	}
-	queue := make([]*models.CollectData, 0, len(items)+len(a.latestData))
-	queue = append(queue, items...)
-	queue = append(queue, a.latestData...)
-	if len(queue) > a.realtimeCap {
-		clear(queue[a.realtimeCap:])
-		queue = queue[:a.realtimeCap]
-	}
-	a.latestData = queue[:len(queue):len(queue)]
+	a.latestData = prependQueueWithCap(a.latestData, items, a.realtimeCap)
 }
 
 func (a *SagooAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
@@ -856,11 +845,7 @@ func (a *SagooAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
 	if a.alarmCap <= 0 {
 		a.alarmCap = defaultAlarmQueue
 	}
-	if len(a.alarmQueue) >= a.alarmCap {
-		a.alarmQueue[0] = nil
-		a.alarmQueue = a.alarmQueue[1:]
-	}
-	a.alarmQueue = append(a.alarmQueue, alarm)
+	a.alarmQueue = appendQueueItemWithCap(a.alarmQueue, alarm, a.alarmCap)
 }
 
 func (a *SagooAdapter) prependAlarms(alarms []*models.AlarmPayload) {
@@ -870,14 +855,7 @@ func (a *SagooAdapter) prependAlarms(alarms []*models.AlarmPayload) {
 	if a.alarmCap <= 0 {
 		a.alarmCap = defaultAlarmQueue
 	}
-	queue := make([]*models.AlarmPayload, 0, len(alarms)+len(a.alarmQueue))
-	queue = append(queue, alarms...)
-	queue = append(queue, a.alarmQueue...)
-	if len(queue) > a.alarmCap {
-		clear(queue[a.alarmCap:])
-		queue = queue[:a.alarmCap]
-	}
-	a.alarmQueue = queue[:len(queue):len(queue)]
+	a.alarmQueue = prependQueueWithCap(a.alarmQueue, alarms, a.alarmCap)
 }
 
 // GetStats 获取适配器统计信息
