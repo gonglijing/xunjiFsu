@@ -28,6 +28,11 @@ type MQTTConfig struct {
 	UploadInterval int    `json:"upload_interval"`
 }
 
+const (
+	mqttPendingDataCap  = 1000
+	mqttPendingAlarmCap = 100
+)
+
 // MQTTAdapter MQTT北向适配器
 // 每个 MQTTAdapter 自己管理自己的状态和发送线程
 type MQTTAdapter struct {
@@ -357,11 +362,7 @@ func (a *MQTTAdapter) Send(data *models.CollectData) error {
 	}
 
 	a.pendingMu.Lock()
-	a.pendingData = append(a.pendingData, data)
-	// 限制队列大小
-	if len(a.pendingData) > 1000 {
-		a.pendingData = a.pendingData[1:]
-	}
+	a.pendingData = appendQueueItemWithCap(a.pendingData, data, mqttPendingDataCap)
 	a.pendingMu.Unlock()
 
 	// 触发发送
@@ -380,11 +381,7 @@ func (a *MQTTAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	}
 
 	a.alarmMu.Lock()
-	a.pendingAlarms = append(a.pendingAlarms, alarm)
-	// 限制队列大小
-	if len(a.pendingAlarms) > 100 {
-		a.pendingAlarms = a.pendingAlarms[1:]
-	}
+	a.pendingAlarms = appendQueueItemWithCap(a.pendingAlarms, alarm, mqttPendingAlarmCap)
 	a.alarmMu.Unlock()
 
 	select {
@@ -532,22 +529,25 @@ func (a *MQTTAdapter) flushPendingData() {
 		a.pendingMu.Unlock()
 		return
 	}
-	// 复制数据并清空队列
-	batch := make([]*models.CollectData, len(a.pendingData))
-	copy(batch, a.pendingData)
+	batch := a.pendingData
 	a.pendingData = a.pendingData[:0]
 	a.pendingMu.Unlock()
 
-	// 发送每个数据点
-	for _, data := range batch {
+	for idx, data := range batch {
 		if err := a.publish(a.topic, data); err != nil {
 			log.Printf("MQTT [%s] send data failed: %v", a.name, err)
-			// 断线重连
+			remaining := batch[idx:]
+			a.pendingMu.Lock()
+			a.pendingData = prependQueueWithCap(a.pendingData, remaining, mqttPendingDataCap)
+			a.pendingMu.Unlock()
 			if !a.IsConnected() {
 				a.signalReconnect()
 			}
+			clear(batch)
+			return
 		}
 	}
+	clear(batch)
 }
 
 // flushAlarms 发送报警
@@ -557,22 +557,26 @@ func (a *MQTTAdapter) flushAlarms() error {
 		a.alarmMu.Unlock()
 		return nil
 	}
-	// 复制报警并清空队列
-	batch := make([]*models.AlarmPayload, len(a.pendingAlarms))
-	copy(batch, a.pendingAlarms)
+	batch := a.pendingAlarms
 	a.pendingAlarms = a.pendingAlarms[:0]
 	a.alarmMu.Unlock()
 
-	for _, alarm := range batch {
+	for idx, alarm := range batch {
 		if err := a.publish(a.alarmTopic, alarm); err != nil {
 			log.Printf("MQTT [%s] send alarm failed: %v", a.name, err)
-			// 断线重连
+			remaining := batch[idx:]
+			a.alarmMu.Lock()
+			a.pendingAlarms = prependQueueWithCap(a.pendingAlarms, remaining, mqttPendingAlarmCap)
+			a.alarmMu.Unlock()
 			if !a.IsConnected() {
 				a.signalReconnect()
 			}
+			clear(batch)
+			return err
 		}
 	}
 
+	clear(batch)
 	return nil
 }
 
