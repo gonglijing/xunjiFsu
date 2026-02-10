@@ -116,6 +116,8 @@ func DefaultConfig() *Config {
 	}
 }
 
+var defaultEnvConfig = *DefaultConfig()
+
 // Load 从配置文件和环境变量加载配置
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
@@ -278,193 +280,148 @@ func loadFromFile(cfg *Config) error {
 
 // loadFromEnv 从环境变量加载配置（会覆盖文件配置）
 func loadFromEnv(cfg *Config) {
-	defaultCfg := DefaultConfig()
-
-	// 服务器配置
-	if v := os.Getenv("LISTEN_ADDR"); v != "" {
-		cfg.ListenAddr = v
+	if cfg == nil {
+		return
 	}
 
-	// HTTP超时配置
-	if v := os.Getenv("HTTP_READ_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.HTTPReadTimeout = timeout
-		} else if cfg.HTTPReadTimeout == 0 {
-			// 解析失败时回退到默认值
-			cfg.HTTPReadTimeout = defaultCfg.HTTPReadTimeout
-		}
-	}
-	if v := os.Getenv("HTTP_WRITE_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.HTTPWriteTimeout = timeout
-		} else if cfg.HTTPWriteTimeout == 0 {
-			cfg.HTTPWriteTimeout = defaultCfg.HTTPWriteTimeout
-		}
-	}
-	if v := os.Getenv("HTTP_IDLE_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.HTTPIdleTimeout = timeout
-		}
-	}
+	defaults := defaultEnvConfig
 
-	// 数据库配置
-	if v := os.Getenv("DB_PATH"); v != "" {
-		cfg.DBPath = v
-	}
-	if v := os.Getenv("PARAM_DB_PATH"); v != "" {
-		cfg.ParamDBPath = v
-	}
-	if v := os.Getenv("DATA_DB_PATH"); v != "" {
-		cfg.DataDBPath = v
-	}
+	setStringFromEnv(&cfg.ListenAddr, "LISTEN_ADDR")
 
-	// TLS
-	if v := os.Getenv("TLS_CERT_FILE"); v != "" {
-		cfg.TLSCertFile = v
-	}
-	if v := os.Getenv("TLS_KEY_FILE"); v != "" {
-		cfg.TLSKeyFile = v
-	}
-	if v := os.Getenv("TLS_AUTO"); strings.ToLower(v) == "true" || v == "1" {
+	setDurationFromEnvWithFallback(&cfg.HTTPReadTimeout, "HTTP_READ_TIMEOUT", defaults.HTTPReadTimeout, false)
+	setDurationFromEnvWithFallback(&cfg.HTTPWriteTimeout, "HTTP_WRITE_TIMEOUT", defaults.HTTPWriteTimeout, false)
+	setDurationFromEnv(&cfg.HTTPIdleTimeout, "HTTP_IDLE_TIMEOUT")
+
+	setStringFromEnv(&cfg.DBPath, "DB_PATH")
+	setStringFromEnv(&cfg.ParamDBPath, "PARAM_DB_PATH")
+	setStringFromEnv(&cfg.DataDBPath, "DATA_DB_PATH")
+
+	setStringFromEnv(&cfg.TLSCertFile, "TLS_CERT_FILE")
+	setStringFromEnv(&cfg.TLSKeyFile, "TLS_KEY_FILE")
+	if v, ok := envValue("TLS_AUTO"); ok && (strings.EqualFold(v, "true") || v == "1") {
 		cfg.TLSAuto = true
 	}
-	if v := os.Getenv("TLS_DOMAIN"); v != "" {
-		cfg.TLSDomain = v
-	}
-	if v := os.Getenv("TLS_CACHE_DIR"); v != "" {
-		cfg.TLSCacheDir = v
-	}
+	setStringFromEnv(&cfg.TLSDomain, "TLS_DOMAIN")
+	setStringFromEnv(&cfg.TLSCacheDir, "TLS_CACHE_DIR")
 
-	// 会话配置
-	if v := os.Getenv("SESSION_SECRET"); v != "" {
-		cfg.SessionSecret = v
-	}
+	setStringFromEnv(&cfg.SessionSecret, "SESSION_SECRET")
+	setStringFromEnv(&cfg.AllowedOrigins, "ALLOWED_ORIGINS")
 
-	// CORS配置
-	if v := os.Getenv("ALLOWED_ORIGINS"); v != "" {
-		cfg.AllowedOrigins = v
-	}
+	setStringFromEnv(&cfg.LogLevel, "LOG_LEVEL")
+	setBoolFromEnv(&cfg.LogJSON, "LOG_JSON")
 
-	// 日志配置
-	if v := os.Getenv("LOG_LEVEL"); v != "" {
-		cfg.LogLevel = v
-	}
-	if v := os.Getenv("LOG_JSON"); v != "" {
-		cfg.LogJSON = strings.ToLower(v) == "true"
-	}
+	setBoolFromEnv(&cfg.CollectorEnabled, "COLLECTOR_ENABLED")
+	setIntFromEnvWithFallback(&cfg.CollectorWorkers, "COLLECTOR_WORKERS", defaults.CollectorWorkers)
+	setDurationFromEnvWithFallback(&cfg.SyncInterval, "SYNC_INTERVAL", defaults.SyncInterval, false)
+	setDurationFromEnvWithFallback(&cfg.CollectorDeviceSyncInterval, "COLLECTOR_DEVICE_SYNC_INTERVAL", defaults.CollectorDeviceSyncInterval, true)
+	setDurationFromEnvWithFallback(&cfg.CollectorCommandPollInterval, "COLLECTOR_COMMAND_POLL_INTERVAL", defaults.CollectorCommandPollInterval, true)
 
-	// 采集器配置
-	if v := os.Getenv("COLLECTOR_ENABLED"); v != "" {
-		cfg.CollectorEnabled = strings.ToLower(v) == "true"
-	}
-	if v := os.Getenv("COLLECTOR_WORKERS"); v != "" {
-		if workers, err := strconv.Atoi(v); err == nil {
-			cfg.CollectorWorkers = workers
-		} else if cfg.CollectorWorkers == 0 {
-			// 无效值时保持默认
-			cfg.CollectorWorkers = defaultCfg.CollectorWorkers
-		}
-	}
-	if v := os.Getenv("SYNC_INTERVAL"); v != "" {
-		if interval, err := time.ParseDuration(v); err == nil {
-			cfg.SyncInterval = interval
-		} else if cfg.SyncInterval == 0 {
-			cfg.SyncInterval = defaultCfg.SyncInterval
-		}
-	}
-	if v := os.Getenv("COLLECTOR_DEVICE_SYNC_INTERVAL"); v != "" {
-		if interval, err := time.ParseDuration(v); err == nil && interval > 0 {
-			cfg.CollectorDeviceSyncInterval = interval
-		} else if cfg.CollectorDeviceSyncInterval == 0 {
-			cfg.CollectorDeviceSyncInterval = defaultCfg.CollectorDeviceSyncInterval
-		}
-	}
-	if v := os.Getenv("COLLECTOR_COMMAND_POLL_INTERVAL"); v != "" {
-		if interval, err := time.ParseDuration(v); err == nil && interval > 0 {
-			cfg.CollectorCommandPollInterval = interval
-		} else if cfg.CollectorCommandPollInterval == 0 {
-			cfg.CollectorCommandPollInterval = defaultCfg.CollectorCommandPollInterval
-		}
-	}
+	setStringFromEnv(&cfg.DriversDir, "DRIVERS_DIR")
+	setStringFromEnv(&cfg.NorthboundPluginsDir, "NORTHBOUND_PLUGINS_DIR")
+	setDurationFromEnvWithFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
 
-	// 驱动目录
-	if v := os.Getenv("DRIVERS_DIR"); v != "" {
-		cfg.DriversDir = v
-	}
-	if v := os.Getenv("NORTHBOUND_PLUGINS_DIR"); v != "" {
-		cfg.NorthboundPluginsDir = v
-	}
-	if v := os.Getenv("NORTHBOUND_MQTT_RECONNECT_INTERVAL"); v != "" {
-		if interval, err := time.ParseDuration(v); err == nil && interval > 0 {
-			cfg.NorthboundMQTTReconnectInterval = interval
-		} else if cfg.NorthboundMQTTReconnectInterval == 0 {
-			cfg.NorthboundMQTTReconnectInterval = defaultCfg.NorthboundMQTTReconnectInterval
-		}
-	}
+	setDurationFromEnv(&cfg.DriverCallTimeout, "DRIVER_CALL_TIMEOUT")
+	setDurationFromEnv(&cfg.DriverSerialReadTimeout, "DRIVER_SERIAL_READ_TIMEOUT")
+	setIntFromEnv(&cfg.DriverSerialOpenRetries, "DRIVER_SERIAL_OPEN_RETRIES")
+	setDurationFromEnv(&cfg.DriverSerialOpenBackoff, "DRIVER_SERIAL_OPEN_BACKOFF")
+	setDurationFromEnv(&cfg.DriverTCPDialTimeout, "DRIVER_TCP_DIAL_TIMEOUT")
+	setIntFromEnv(&cfg.DriverTCPDialRetries, "DRIVER_TCP_DIAL_RETRIES")
+	setDurationFromEnv(&cfg.DriverTCPDialBackoff, "DRIVER_TCP_DIAL_BACKOFF")
+	setDurationFromEnv(&cfg.DriverTCPReadTimeout, "DRIVER_TCP_READ_TIMEOUT")
 
-	// 驱动执行配置
-	if v := os.Getenv("DRIVER_CALL_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.DriverCallTimeout = timeout
-		}
-	}
-	if v := os.Getenv("DRIVER_SERIAL_READ_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.DriverSerialReadTimeout = timeout
-		}
-	}
-	if v := os.Getenv("DRIVER_SERIAL_OPEN_RETRIES"); v != "" {
-		if retries, err := strconv.Atoi(v); err == nil {
-			cfg.DriverSerialOpenRetries = retries
-		}
-	}
-	if v := os.Getenv("DRIVER_SERIAL_OPEN_BACKOFF"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.DriverSerialOpenBackoff = timeout
-		}
-	}
-	if v := os.Getenv("DRIVER_TCP_DIAL_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.DriverTCPDialTimeout = timeout
-		}
-	}
-	if v := os.Getenv("DRIVER_TCP_DIAL_RETRIES"); v != "" {
-		if retries, err := strconv.Atoi(v); err == nil {
-			cfg.DriverTCPDialRetries = retries
-		}
-	}
-	if v := os.Getenv("DRIVER_TCP_DIAL_BACKOFF"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.DriverTCPDialBackoff = timeout
-		}
-	}
-	if v := os.Getenv("DRIVER_TCP_READ_TIMEOUT"); v != "" {
-		if timeout, err := time.ParseDuration(v); err == nil {
-			cfg.DriverTCPReadTimeout = timeout
-		}
-	}
+	setBoolFromEnv(&cfg.ThresholdCacheEnabled, "THRESHOLD_CACHE_ENABLED")
+	setDurationFromEnv(&cfg.ThresholdCacheTTL, "THRESHOLD_CACHE_TTL")
 
-	// 阈值缓存配置
-	if v := os.Getenv("THRESHOLD_CACHE_ENABLED"); v != "" {
-		cfg.ThresholdCacheEnabled = strings.ToLower(v) == "true"
-	}
-	if v := os.Getenv("THRESHOLD_CACHE_TTL"); v != "" {
-		if ttl, err := time.ParseDuration(v); err == nil {
-			cfg.ThresholdCacheTTL = ttl
-		}
-	}
+	setIntFromEnv(&cfg.MaxDataPoints, "MAX_DATA_POINTS")
+	setIntFromEnv(&cfg.MaxDataCache, "MAX_DATA_CACHE")
+}
 
-	// 内存数据库限制
-	if v := os.Getenv("MAX_DATA_POINTS"); v != "" {
-		if max, err := strconv.Atoi(v); err == nil {
-			cfg.MaxDataPoints = max
+func setStringFromEnv(dst *string, key string) {
+	if dst == nil {
+		return
+	}
+	if value, ok := envValue(key); ok {
+		*dst = value
+	}
+}
+
+func setBoolFromEnv(dst *bool, key string) {
+	if dst == nil {
+		return
+	}
+	if value, ok := envValue(key); ok {
+		*dst = strings.EqualFold(value, "true")
+	}
+}
+
+func setIntFromEnv(dst *int, key string) {
+	if dst == nil {
+		return
+	}
+	value, ok := envValue(key)
+	if !ok {
+		return
+	}
+	if parsed, err := strconv.Atoi(value); err == nil {
+		*dst = parsed
+	}
+}
+
+func setIntFromEnvWithFallback(dst *int, key string, fallback int) {
+	if dst == nil {
+		return
+	}
+	value, ok := envValue(key)
+	if !ok {
+		return
+	}
+	if parsed, err := strconv.Atoi(value); err == nil {
+		*dst = parsed
+		return
+	}
+	if *dst == 0 {
+		*dst = fallback
+	}
+}
+
+func setDurationFromEnv(dst *time.Duration, key string) {
+	if dst == nil {
+		return
+	}
+	value, ok := envValue(key)
+	if !ok {
+		return
+	}
+	if parsed, err := time.ParseDuration(value); err == nil {
+		*dst = parsed
+	}
+}
+
+func setDurationFromEnvWithFallback(dst *time.Duration, key string, fallback time.Duration, mustPositive bool) {
+	if dst == nil {
+		return
+	}
+	value, ok := envValue(key)
+	if !ok {
+		return
+	}
+	if parsed, err := time.ParseDuration(value); err == nil {
+		if !mustPositive || parsed > 0 {
+			*dst = parsed
+			return
 		}
 	}
-	if v := os.Getenv("MAX_DATA_CACHE"); v != "" {
-		if max, err := strconv.Atoi(v); err == nil {
-			cfg.MaxDataCache = max
-		}
+	if *dst == 0 {
+		*dst = fallback
 	}
+}
+
+func envValue(key string) (string, bool) {
+	value := os.Getenv(key)
+	if value == "" {
+		return "", false
+	}
+	return value, true
 }
 
 // GetAllowedOrigins 获取允许的跨域来源列表
