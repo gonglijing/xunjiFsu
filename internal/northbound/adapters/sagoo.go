@@ -348,8 +348,8 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 		return nil
 	}
 
-	pk := pickFirstNonEmpty(strings.TrimSpace(cfg.ProductKey), result.ProductKey)
-	dk := pickFirstNonEmpty(strings.TrimSpace(cfg.DeviceKey), result.DeviceKey)
+	pk := pickFirstNonEmpty2(strings.TrimSpace(cfg.ProductKey), result.ProductKey)
+	dk := pickFirstNonEmpty2(strings.TrimSpace(cfg.DeviceKey), result.DeviceKey)
 	if pk == "" || dk == "" {
 		return nil
 	}
@@ -586,8 +586,8 @@ func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) []byte {
 			"subDevices": []interface{}{
 				map[string]interface{}{
 					"identity": map[string]string{
-						"productKey": pickFirstNonEmpty(alarm.ProductKey, defaultPK),
-						"deviceKey":  pickFirstNonEmpty(alarm.DeviceKey, defaultDK),
+						"productKey": pickFirstNonEmpty2(alarm.ProductKey, defaultPK),
+						"deviceKey":  pickFirstNonEmpty2(alarm.DeviceKey, defaultDK),
 					},
 					"properties": map[string]interface{}{},
 					"events":     events,
@@ -761,8 +761,8 @@ func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 		return
 	}
 
-	pk := pickFirstNonEmpty(rootIdentityPK, identityPK, defaultPK)
-	dk := pickFirstNonEmpty(rootIdentityDK, identityDK, defaultDK)
+	pk := pickFirstNonEmpty3(rootIdentityPK, identityPK, defaultPK)
+	dk := pickFirstNonEmpty3(rootIdentityDK, identityDK, defaultDK)
 	if pk == "" || dk == "" {
 		return
 	}
@@ -1223,6 +1223,20 @@ func pickFirstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func pickFirstNonEmpty2(left, right string) string {
+	if v := strings.TrimSpace(left); v != "" {
+		return v
+	}
+	return strings.TrimSpace(right)
+}
+
+func pickFirstNonEmpty3(first, second, third string) string {
+	if v := pickFirstNonEmpty2(first, second); v != "" {
+		return v
+	}
+	return strings.TrimSpace(third)
 }
 
 func resolveInterval(ms int, fallback time.Duration) time.Duration {

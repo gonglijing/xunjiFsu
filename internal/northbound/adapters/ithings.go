@@ -610,8 +610,8 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 	}
 	topic := renderIThingsTopic(upPropertyTpl, gatewayProductID, gatewayDeviceName)
 
-	subProductID := pickFirstNonEmpty(strings.TrimSpace(data.ProductKey), gatewayProductID)
-	subDeviceName := pickFirstNonEmpty(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode))
+	subProductID := pickFirstNonEmpty2(strings.TrimSpace(data.ProductKey), gatewayProductID)
+	subDeviceName := pickFirstNonEmpty2(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode))
 	if subDeviceName == "" {
 		subDeviceName = virtualDeviceName(data.DeviceID)
 	}
@@ -663,8 +663,8 @@ func (a *IThingsAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, 
 	}
 	topic := renderIThingsTopic(upEventTpl, gatewayProductID, gatewayDeviceName)
 
-	subProductID := pickFirstNonEmpty(strings.TrimSpace(alarm.ProductKey), gatewayProductID)
-	subDeviceName := pickFirstNonEmpty(a.resolveAlarmDeviceName(alarm, deviceNameMode))
+	subProductID := pickFirstNonEmpty2(strings.TrimSpace(alarm.ProductKey), gatewayProductID)
+	subDeviceName := strings.TrimSpace(a.resolveAlarmDeviceName(alarm, deviceNameMode))
 	if subDeviceName == "" {
 		subDeviceName = virtualDeviceName(alarm.DeviceID)
 	}
@@ -976,14 +976,16 @@ func (a *IThingsAdapter) resolveCollectDeviceName(data *models.CollectData, mode
 	if data == nil {
 		return ""
 	}
+	deviceName := strings.TrimSpace(data.DeviceName)
+	deviceKey := strings.TrimSpace(data.DeviceKey)
 	m := strings.ToLower(strings.TrimSpace(mode))
 	switch m {
 	case "devicename", "device_name":
-		return pickFirstNonEmpty(strings.TrimSpace(data.DeviceName), strings.TrimSpace(data.DeviceKey))
+		return pickFirstNonEmpty2(deviceName, deviceKey)
 	case "devicekey", "device_key", "":
-		return pickFirstNonEmpty(strings.TrimSpace(data.DeviceKey), strings.TrimSpace(data.DeviceName))
+		return pickFirstNonEmpty2(deviceKey, deviceName)
 	default:
-		return pickFirstNonEmpty(strings.TrimSpace(data.DeviceKey), strings.TrimSpace(data.DeviceName))
+		return pickFirstNonEmpty2(deviceKey, deviceName)
 	}
 }
 
@@ -991,14 +993,16 @@ func (a *IThingsAdapter) resolveAlarmDeviceName(alarm *models.AlarmPayload, mode
 	if alarm == nil {
 		return ""
 	}
+	deviceName := strings.TrimSpace(alarm.DeviceName)
+	deviceKey := strings.TrimSpace(alarm.DeviceKey)
 	m := strings.ToLower(strings.TrimSpace(mode))
 	switch m {
 	case "devicename", "device_name":
-		return pickFirstNonEmpty(strings.TrimSpace(alarm.DeviceName), strings.TrimSpace(alarm.DeviceKey))
+		return pickFirstNonEmpty2(deviceName, deviceKey)
 	case "devicekey", "device_key", "":
-		return pickFirstNonEmpty(strings.TrimSpace(alarm.DeviceKey), strings.TrimSpace(alarm.DeviceName))
+		return pickFirstNonEmpty2(deviceKey, deviceName)
 	default:
-		return pickFirstNonEmpty(strings.TrimSpace(alarm.DeviceKey), strings.TrimSpace(alarm.DeviceName))
+		return pickFirstNonEmpty2(deviceKey, deviceName)
 	}
 }
 

@@ -1316,9 +1316,9 @@ func (a *PandaXAdapter) resolveSubDeviceToken(data *models.CollectData) string {
 		return defaultDeviceToken(data.DeviceID)
 	}
 
-	pk := pickFirstNonEmpty(data.ProductKey, cfg.ProductKey)
-	name := pickFirstNonEmpty(data.DeviceName, data.DeviceKey)
-	dk := pickFirstNonEmpty(data.DeviceKey, data.DeviceName)
+	pk := pickFirstNonEmpty2(data.ProductKey, cfg.ProductKey)
+	name := pickFirstNonEmpty2(data.DeviceName, data.DeviceKey)
+	dk := pickFirstNonEmpty2(data.DeviceKey, data.DeviceName)
 
 	switch strings.ToLower(strings.TrimSpace(cfg.SubDeviceTokenMode)) {
 	case "devicekey", "device_key":
