@@ -154,14 +154,14 @@ export function Thresholds() {
               onInput={(e) => setRepeatIntervalMinutes(Number(e.target.value || 0))}
             />
             <button
-              class="btn"
+              class="btn btn-soft-primary btn-sm"
               onClick={saveRepeatInterval}
               disabled={savingRepeatInterval() || loading()}
             >
               {savingRepeatInterval() ? '保存中...' : '保存间隔'}
             </button>
             <button
-              class="btn btn-primary"
+              class="btn btn-primary btn-pill btn-sm"
               onClick={() => { setForm(empty); setErr(''); setShowModal(true); }}
             >
               新增阈值
@@ -202,10 +202,10 @@ export function Thresholds() {
                     </td>
                     <td>
                       <div style="display:flex; gap:8px; align-items:center;">
-                        <button class="btn" onClick={() => toggleShield(item)}>
+                        <button class="btn btn-outline-primary btn-sm" onClick={() => toggleShield(item)}>
                           {item.shielded === 1 ? '取消屏蔽' : '屏蔽'}
                         </button>
-                        <button class="btn btn-danger-muted" onClick={() => remove(item.id)}>删除</button>
+                        <button class="btn btn-outline-danger btn-sm" onClick={() => remove(item.id)}>删除</button>
                       </div>
                     </td>
                   </tr>
