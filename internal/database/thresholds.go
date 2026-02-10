@@ -26,6 +26,23 @@ func ensureThresholdColumns() error {
 		return err
 	}
 
+	hasEnabled, err := columnExists(ParamDB, "thresholds", "enabled")
+	if err != nil {
+		return err
+	}
+	if hasEnabled {
+		if _, err := ParamDB.Exec("DROP INDEX IF EXISTS idx_thresholds_device_enabled"); err != nil {
+			return err
+		}
+		if _, err := ParamDB.Exec("ALTER TABLE thresholds DROP COLUMN enabled"); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ParamDB.Exec("CREATE INDEX IF NOT EXISTS idx_thresholds_device ON thresholds(device_id)"); err != nil {
+		return err
+	}
+
 	return nil
 }
 

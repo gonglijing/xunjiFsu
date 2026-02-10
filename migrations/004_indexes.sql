@@ -10,7 +10,7 @@ CREATE INDEX IF NOT EXISTS idx_alarm_logs_device_time ON alarm_logs(device_id, t
 CREATE INDEX IF NOT EXISTS idx_alarm_logs_unacked ON alarm_logs(acknowledged, triggered_at DESC);
 
 -- 阈值表索引
-CREATE INDEX IF NOT EXISTS idx_thresholds_device_enabled ON thresholds(device_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_thresholds_device ON thresholds(device_id);
 
 -- 设备表索引
 CREATE INDEX IF NOT EXISTS idx_devices_enabled ON devices(enabled);

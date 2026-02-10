@@ -94,7 +94,6 @@ CREATE TABLE IF NOT EXISTS thresholds (
     operator TEXT NOT NULL CHECK(operator IN ('>', '<', '>=', '<=', '==', '!=')),
     value REAL NOT NULL,
     severity TEXT DEFAULT 'warning' CHECK(severity IN ('info', 'warning', 'error', 'critical')),
-    enabled INTEGER DEFAULT 1,
     shielded INTEGER DEFAULT 0,
     message TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
