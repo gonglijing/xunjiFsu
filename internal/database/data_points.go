@@ -670,27 +670,29 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 
 	deviceName := normalizeDeviceName(data.DeviceID, data.DeviceName)
 
-	entries := make([]DataPointEntry, 0, len(data.Fields))
+	cacheEntries := make([]DataPointEntry, 0, len(data.Fields))
+	historyEntries := make([]DataPointEntry, 0, len(data.Fields))
 	for field, value := range data.Fields {
-		// 保存到缓存（最新值）
-		if err := SaveDataCache(data.DeviceID, deviceName, field, value, "string"); err != nil {
-			log.Printf("SaveDataCache error: %v", err)
-		}
-		if !storeHistory {
-			continue
-		}
-		entries = append(entries, DataPointEntry{
+		entry := DataPointEntry{
 			DeviceID:    data.DeviceID,
 			DeviceName:  deviceName,
 			FieldName:   field,
 			Value:       value,
 			ValueType:   "string",
 			CollectedAt: data.Timestamp,
-		})
+		}
+		cacheEntries = append(cacheEntries, entry)
+		if storeHistory {
+			historyEntries = append(historyEntries, entry)
+		}
+	}
+
+	if err := BatchSaveDataCacheEntries(cacheEntries); err != nil {
+		return fmt.Errorf("batch save data cache failed: %w", err)
 	}
 	if !storeHistory {
 		return nil
 	}
 	// 使用 upsert 模式写入 data_points（按采集时间形成历史序列）
-	return BatchSaveLatestDataPoints(entries)
+	return BatchSaveLatestDataPoints(historyEntries)
 }

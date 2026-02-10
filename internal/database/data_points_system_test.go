@@ -3,6 +3,7 @@ package database
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -166,5 +167,82 @@ func TestGetAllDevicesLatestData_FallbackWhenDiskMissing(t *testing.T) {
 	}
 	if got := items[0].Fields["humidity"]; got != "77" {
 		t.Fatalf("expected humidity=77, got %q", got)
+	}
+}
+
+func TestBatchSaveDataCacheEntries_UpsertLatestValue(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := []DataPointEntry{
+		{DeviceID: 1, FieldName: "humidity", Value: "50", ValueType: "string"},
+		{DeviceID: 1, FieldName: "temperature", Value: "20", ValueType: "string"},
+		{DeviceID: 1, FieldName: "humidity", Value: "55", ValueType: "string"},
+	}
+	if err := BatchSaveDataCacheEntries(entries); err != nil {
+		t.Fatalf("BatchSaveDataCacheEntries: %v", err)
+	}
+
+	rows, err := GetDataCacheByDeviceID(1)
+	if err != nil {
+		t.Fatalf("GetDataCacheByDeviceID: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 cache rows, got %d", len(rows))
+	}
+
+	values := make(map[string]string, len(rows))
+	for _, row := range rows {
+		values[row.FieldName] = row.Value
+	}
+	if got := values["humidity"]; got != "55" {
+		t.Fatalf("expected humidity latest value 55, got %q", got)
+	}
+	if got := values["temperature"]; got != "20" {
+		t.Fatalf("expected temperature value 20, got %q", got)
+	}
+}
+
+func TestInsertCollectDataWithOptions_StoreHistoryFlag(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	collectedAt := time.Now()
+	data := &models.CollectData{
+		DeviceID:   2,
+		DeviceName: "dev-2",
+		Timestamp:  collectedAt,
+		Fields: map[string]string{
+			"humidity":    "66",
+			"temperature": "18",
+		},
+	}
+
+	if err := InsertCollectDataWithOptions(data, false); err != nil {
+		t.Fatalf("InsertCollectDataWithOptions(storeHistory=false): %v", err)
+	}
+
+	var cacheCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_cache WHERE device_id = ?", data.DeviceID).Scan(&cacheCount); err != nil {
+		t.Fatalf("count data_cache: %v", err)
+	}
+	if cacheCount != 2 {
+		t.Fatalf("expected cache count 2, got %d", cacheCount)
+	}
+
+	var historyCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ?", data.DeviceID).Scan(&historyCount); err != nil {
+		t.Fatalf("count data_points: %v", err)
+	}
+	if historyCount != 0 {
+		t.Fatalf("expected history count 0 when storeHistory=false, got %d", historyCount)
+	}
+
+	if err := InsertCollectDataWithOptions(data, true); err != nil {
+		t.Fatalf("InsertCollectDataWithOptions(storeHistory=true): %v", err)
+	}
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ?", data.DeviceID).Scan(&historyCount); err != nil {
+		t.Fatalf("count data_points after history write: %v", err)
+	}
+	if historyCount != 2 {
+		t.Fatalf("expected history count 2 when storeHistory=true, got %d", historyCount)
 	}
 }

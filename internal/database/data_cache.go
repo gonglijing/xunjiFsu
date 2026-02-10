@@ -40,6 +40,43 @@ func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType strin
 	return nil
 }
 
+// BatchSaveDataCacheEntries 批量保存实时数据缓存（内存）
+func BatchSaveDataCacheEntries(entries []DataPointEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	tx, err := DataDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(device_id, field_name) DO UPDATE SET
+			value = excluded.value,
+			value_type = excluded.value_type,
+			collected_at = CURRENT_TIMESTAMP`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, entry := range entries {
+		if _, err := stmt.Exec(entry.DeviceID, entry.FieldName, entry.Value, entry.ValueType); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	maybeEnforceDataCacheLimit()
+	return nil
+}
+
 func maybeEnforceDataCacheLimit() {
 	if maxDataCacheLimit <= 0 {
 		return
