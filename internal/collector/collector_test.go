@@ -505,6 +505,46 @@ func TestShouldRefreshCollectTask(t *testing.T) {
 	}
 }
 
+func TestRemoveTaskLocked_ReleasesUnusedResourceLock(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	resourceID := int64(9)
+	device := &models.Device{ID: 201, Enabled: 1, ResourceID: &resourceID, CollectInterval: 1000, StorageInterval: 60}
+
+	c.mu.Lock()
+	c.tasks[device.ID] = newCollectTask(device, nil)
+	c.resourceLock[resourceID] = make(chan struct{}, 1)
+	c.removeTaskLocked(device.ID)
+	_, exists := c.resourceLock[resourceID]
+	c.mu.Unlock()
+
+	if exists {
+		t.Fatalf("unused resource lock should be removed")
+	}
+}
+
+func TestRemoveTaskLocked_KeepSharedResourceLock(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	resourceID := int64(10)
+	device1 := &models.Device{ID: 202, Enabled: 1, ResourceID: &resourceID, CollectInterval: 1000, StorageInterval: 60}
+	device2 := &models.Device{ID: 203, Enabled: 1, ResourceID: &resourceID, CollectInterval: 1000, StorageInterval: 60}
+
+	c.mu.Lock()
+	c.tasks[device1.ID] = newCollectTask(device1, nil)
+	c.tasks[device2.ID] = newCollectTask(device2, nil)
+	c.resourceLock[resourceID] = make(chan struct{}, 1)
+	c.removeTaskLocked(device1.ID)
+	_, exists := c.resourceLock[resourceID]
+	c.mu.Unlock()
+
+	if !exists {
+		t.Fatalf("shared resource lock should be kept")
+	}
+}
+
 func TestStartAdjustableTickerWorker_NilWorker(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)

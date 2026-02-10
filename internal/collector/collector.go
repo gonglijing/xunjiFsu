@@ -263,10 +263,7 @@ func (c *Collector) collectOnce(task *collectTask) {
 
 // getResourceLock 返回该资源的串行锁
 func (c *Collector) getResourceLock(resourceID *int64) chan struct{} {
-	key := int64(0)
-	if resourceID != nil {
-		key = *resourceID
-	}
+	key := resourceLockKey(resourceID)
 	c.mu.Lock()
 	ch, ok := c.resourceLock[key]
 	if !ok {
@@ -442,6 +439,13 @@ func sameOptionalInt64(a, b *int64) bool {
 	return *a == *b
 }
 
+func resourceLockKey(resourceID *int64) int64 {
+	if resourceID == nil {
+		return 0
+	}
+	return *resourceID
+}
+
 func sameTaskDeviceConfig(current, next *models.Device) bool {
 	if current == nil || next == nil {
 		return false
@@ -513,8 +517,30 @@ func (c *Collector) logDeviceSyncAction(device *models.Device, action deviceSync
 }
 
 func (c *Collector) removeTaskLocked(deviceID int64) {
+	removedTask, exists := c.tasks[deviceID]
 	delete(c.tasks, deviceID)
+	if exists && removedTask != nil && removedTask.device != nil {
+		c.releaseResourceLockIfUnusedLocked(removedTask.device.ResourceID)
+	}
 	clearAlarmStateForDevice(deviceID)
+}
+
+func (c *Collector) releaseResourceLockIfUnusedLocked(resourceID *int64) {
+	key := resourceLockKey(resourceID)
+	if _, exists := c.resourceLock[key]; !exists {
+		return
+	}
+
+	for _, task := range c.tasks {
+		if task == nil || task.device == nil {
+			continue
+		}
+		if sameOptionalInt64(task.device.ResourceID, resourceID) {
+			return
+		}
+	}
+
+	delete(c.resourceLock, key)
 }
 
 func (c *Collector) notifyTaskChangedLocked() {
