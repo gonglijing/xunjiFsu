@@ -1040,14 +1040,30 @@ func cloneAlarmPayload(alarm *models.AlarmPayload) *models.AlarmPayload {
 }
 
 func splitTopic(topic string) []string {
-	raw := strings.Split(strings.TrimSpace(topic), "/")
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		if item != "" {
-			out = append(out, item)
+	trimmed := strings.TrimSpace(topic)
+	if trimmed == "" {
+		return make([]string, 0)
+	}
+
+	parts := make([]string, 0, 1+strings.Count(trimmed, "/"))
+	segmentStart := -1
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] == '/' {
+			if segmentStart >= 0 {
+				parts = append(parts, trimmed[segmentStart:i])
+				segmentStart = -1
+			}
+			continue
+		}
+		if segmentStart < 0 {
+			segmentStart = i
 		}
 	}
-	return out
+	if segmentStart >= 0 {
+		parts = append(parts, trimmed[segmentStart:])
+	}
+
+	return parts
 }
 
 func extractIdentity(topic string) (string, string, bool) {

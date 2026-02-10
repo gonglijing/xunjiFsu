@@ -216,3 +216,45 @@ func TestIsReservedCommandKeyNormalized(t *testing.T) {
 		t.Fatal("unexpected reserved key: temperature")
 	}
 }
+
+func TestSplitTopic_IgnoreEmptySegments(t *testing.T) {
+	cases := []struct {
+		name  string
+		topic string
+		want  []string
+	}{
+		{name: "empty", topic: "", want: []string{}},
+		{name: "spaces", topic: "   ", want: []string{}},
+		{name: "normal", topic: "/sys/pk/dk/thing", want: []string{"sys", "pk", "dk", "thing"}},
+		{name: "extra slash", topic: " //sys//pk///dk/thing// ", want: []string{"sys", "pk", "dk", "thing"}},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitTopic(tt.topic)
+			if len(got) != len(tt.want) {
+				t.Fatalf("len(got)=%d, want=%d, got=%v", len(got), len(tt.want), got)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("got[%d]=%q, want=%q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestExtractIdentity_FromTopic(t *testing.T) {
+	productKey, deviceKey, ok := extractIdentity(" /sys/pk1/dk1/thing/service/property/set ")
+	if !ok {
+		t.Fatal("extractIdentity() ok=false, want=true")
+	}
+	if productKey != "pk1" || deviceKey != "dk1" {
+		t.Fatalf("identity mismatch: %q/%q", productKey, deviceKey)
+	}
+
+	_, _, ok = extractIdentity("/bad/pk/dk")
+	if ok {
+		t.Fatal("extractIdentity() ok=true, want=false")
+	}
+}
