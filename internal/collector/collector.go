@@ -163,7 +163,7 @@ func (c *Collector) loadEnabledDevices() error {
 		if device == nil || device.Enabled != 1 {
 			continue
 		}
-		if c.upsertTaskLocked(device) {
+		if c.upsertTaskLocked(device) == deviceSyncActionAdded {
 			loadedCount++
 		}
 	}
@@ -375,8 +375,10 @@ func (c *Collector) AddDevice(device *models.Device) error {
 		return fmt.Errorf("device %d already in collector", device.ID)
 	}
 
-	c.upsertTaskLocked(device)
-	c.notifyTaskChangedLocked()
+	action := c.upsertTaskLocked(device)
+	if action != deviceSyncActionNone {
+		c.notifyTaskChangedLocked()
+	}
 	c.mu.Unlock()
 	return nil
 }
@@ -407,21 +409,74 @@ func (c *Collector) UpdateDevice(device *models.Device) error {
 		return fmt.Errorf("device %d not in collector", device.ID)
 	}
 
-	c.upsertTaskLocked(device)
-	c.notifyTaskChangedLocked()
+	action := c.upsertTaskLocked(device)
+	if action != deviceSyncActionNone {
+		c.notifyTaskChangedLocked()
+	}
 	c.mu.Unlock()
 	return nil
 }
 
-func (c *Collector) upsertTaskLocked(device *models.Device) bool {
+func (c *Collector) upsertTaskLocked(device *models.Device) deviceSyncAction {
 	if device == nil {
-		return false
+		return deviceSyncActionNone
 	}
 	current, exists := c.tasks[device.ID]
+	if exists && !shouldRefreshCollectTask(current, device) {
+		return deviceSyncActionNone
+	}
+
 	task := newCollectTask(device, current)
 	c.tasks[device.ID] = task
 	heap.Push(c.taskHeap, task)
-	return !exists
+	if exists {
+		return deviceSyncActionUpdated
+	}
+	return deviceSyncActionAdded
+}
+
+func sameOptionalInt64(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func sameTaskDeviceConfig(current, next *models.Device) bool {
+	if current == nil || next == nil {
+		return false
+	}
+
+	return current.Name == next.Name &&
+		current.Description == next.Description &&
+		current.ProductKey == next.ProductKey &&
+		current.DeviceKey == next.DeviceKey &&
+		current.DriverType == next.DriverType &&
+		current.SerialPort == next.SerialPort &&
+		current.BaudRate == next.BaudRate &&
+		current.DataBits == next.DataBits &&
+		current.StopBits == next.StopBits &&
+		current.Parity == next.Parity &&
+		current.IPAddress == next.IPAddress &&
+		current.PortNum == next.PortNum &&
+		current.DeviceAddress == next.DeviceAddress &&
+		current.CollectInterval == next.CollectInterval &&
+		current.StorageInterval == next.StorageInterval &&
+		current.Timeout == next.Timeout &&
+		sameOptionalInt64(current.DriverID, next.DriverID) &&
+		sameOptionalInt64(current.ResourceID, next.ResourceID) &&
+		current.Enabled == next.Enabled
+}
+
+func shouldRefreshCollectTask(current *collectTask, nextDevice *models.Device) bool {
+	if current == nil || nextDevice == nil {
+		return true
+	}
+	if current.interval != resolveCollectInterval(nextDevice.CollectInterval) ||
+		current.storageInterval != resolveStorageInterval(nextDevice.StorageInterval) {
+		return true
+	}
+	return !sameTaskDeviceConfig(current.device, nextDevice)
 }
 
 func (c *Collector) syncDeviceTaskLocked(device *models.Device) deviceSyncAction {
@@ -431,11 +486,7 @@ func (c *Collector) syncDeviceTaskLocked(device *models.Device) deviceSyncAction
 
 	_, exists := c.tasks[device.ID]
 	if device.Enabled == 1 {
-		created := c.upsertTaskLocked(device)
-		if created {
-			return deviceSyncActionAdded
-		}
-		return deviceSyncActionUpdated
+		return c.upsertTaskLocked(device)
 	}
 
 	if exists {

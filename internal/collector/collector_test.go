@@ -385,8 +385,8 @@ func TestSyncDeviceTaskLocked(t *testing.T) {
 	c.mu.Lock()
 	action = c.syncDeviceTaskLocked(device)
 	c.mu.Unlock()
-	if action != deviceSyncActionUpdated {
-		t.Fatalf("expected updated action, got %v", action)
+	if action != deviceSyncActionNone {
+		t.Fatalf("expected none action for unchanged config, got %v", action)
 	}
 
 	device.Enabled = 0
@@ -402,6 +402,106 @@ func TestSyncDeviceTaskLocked(t *testing.T) {
 	c.mu.Unlock()
 	if action != deviceSyncActionNone {
 		t.Fatalf("expected none action, got %v", action)
+	}
+}
+
+func TestUpsertTaskLocked_UnchangedDeviceDoesNotGrowHeap(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	now := time.Now()
+	device := &models.Device{
+		ID:              101,
+		Enabled:         1,
+		Name:            "d-101",
+		CollectInterval: 1000,
+		StorageInterval: 60,
+		UpdatedAt:       now,
+	}
+
+	c.mu.Lock()
+	action1 := c.upsertTaskLocked(device)
+	heapLen1 := len(*c.taskHeap)
+	action2 := c.upsertTaskLocked(device)
+	heapLen2 := len(*c.taskHeap)
+	c.mu.Unlock()
+
+	if action1 != deviceSyncActionAdded {
+		t.Fatalf("expected first upsert added, got %v", action1)
+	}
+	if action2 != deviceSyncActionNone {
+		t.Fatalf("expected second upsert none for unchanged device, got %v", action2)
+	}
+	if heapLen1 != 1 || heapLen2 != 1 {
+		t.Fatalf("heap should not grow for unchanged device, got len1=%d len2=%d", heapLen1, heapLen2)
+	}
+}
+
+func TestUpsertTaskLocked_ConfigChangedCreatesNewTask(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	now := time.Now()
+	device := &models.Device{ID: 102, Enabled: 1, Name: "d-102", CollectInterval: 1000, StorageInterval: 60, UpdatedAt: now}
+
+	c.mu.Lock()
+	action1 := c.upsertTaskLocked(device)
+	oldTask := c.tasks[device.ID]
+	device2 := *device
+	device2.CollectInterval = 2000
+	device2.UpdatedAt = now.Add(time.Second)
+	action2 := c.upsertTaskLocked(&device2)
+	newTask := c.tasks[device.ID]
+	heapLen := len(*c.taskHeap)
+	c.mu.Unlock()
+
+	if action1 != deviceSyncActionAdded {
+		t.Fatalf("expected first upsert added, got %v", action1)
+	}
+	if action2 != deviceSyncActionUpdated {
+		t.Fatalf("expected second upsert updated, got %v", action2)
+	}
+	if oldTask == newTask {
+		t.Fatalf("expected changed config to replace task")
+	}
+	if heapLen != 2 {
+		t.Fatalf("expected heap len 2 with stale+current task before prune, got %d", heapLen)
+	}
+}
+
+func TestShouldRefreshCollectTask(t *testing.T) {
+	now := time.Now()
+	baseDevice := &models.Device{
+		ID:              103,
+		Enabled:         1,
+		Name:            "d-103",
+		CollectInterval: 1000,
+		StorageInterval: 60,
+		UpdatedAt:       now,
+	}
+	task := newCollectTask(baseDevice, nil)
+
+	if shouldRefreshCollectTask(task, baseDevice) {
+		t.Fatalf("unchanged device should not require refresh")
+	}
+
+	changedInterval := *baseDevice
+	changedInterval.CollectInterval = 1500
+	if !shouldRefreshCollectTask(task, &changedInterval) {
+		t.Fatalf("collect interval change should require refresh")
+	}
+
+	changedUpdatedAt := *baseDevice
+	changedUpdatedAt.UpdatedAt = now.Add(time.Second)
+	if shouldRefreshCollectTask(task, &changedUpdatedAt) {
+		t.Fatalf("updated_at only change should not require refresh")
+	}
+
+	changedName := *baseDevice
+	changedName.Name = "d-103-new"
+	changedName.UpdatedAt = now
+	if !shouldRefreshCollectTask(task, &changedName) {
+		t.Fatalf("device config change should require refresh")
 	}
 }
 
