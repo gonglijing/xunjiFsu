@@ -217,15 +217,22 @@ func (a *IThingsAdapter) Start() {
 
 func (a *IThingsAdapter) Stop() {
 	a.mu.Lock()
+	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		if a.stopChan != nil {
-			close(a.stopChan)
-			a.stopChan = nil
+		if stopChan != nil {
+			close(stopChan)
 		}
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
+	if stopChan != nil {
+		a.mu.Lock()
+		if a.stopChan == stopChan {
+			a.stopChan = nil
+		}
+		a.mu.Unlock()
+	}
 	log.Printf("iThings adapter stopped: %s", a.name)
 }
 

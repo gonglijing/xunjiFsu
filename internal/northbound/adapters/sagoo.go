@@ -207,15 +207,22 @@ func (a *SagooAdapter) Start() {
 // Stop 停止适配器的后台线程
 func (a *SagooAdapter) Stop() {
 	a.mu.Lock()
+	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		if a.stopChan != nil {
-			close(a.stopChan)
-			a.stopChan = nil
+		if stopChan != nil {
+			close(stopChan)
 		}
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
+	if stopChan != nil {
+		a.mu.Lock()
+		if a.stopChan == stopChan {
+			a.stopChan = nil
+		}
+		a.mu.Unlock()
+	}
 	log.Printf("Sagoo adapter stopped: %s", a.name)
 }
 

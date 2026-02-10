@@ -238,14 +238,15 @@ func (a *PandaXAdapter) Start() {
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
+		if a.flushNow == nil {
+			a.flushNow = make(chan struct{}, 1)
+		}
 		if a.reconnectNow == nil {
 			a.reconnectNow = make(chan struct{}, 1)
 		}
 		needReconnect = !a.connected
-		a.wg.Add(3)
-		go a.reportLoop()
-		go a.alarmLoop()
-		go a.reconnectLoop()
+		a.wg.Add(1)
+		go a.runLoop()
 		log.Printf("[PandaX-%s] Start: 适配器已启动, reportInterval=%v, alarmInterval=%v",
 			a.name, a.reportEvery, a.alarmEvery)
 	}
@@ -258,16 +259,23 @@ func (a *PandaXAdapter) Start() {
 
 func (a *PandaXAdapter) Stop() {
 	a.mu.Lock()
+	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		if a.stopChan != nil {
-			close(a.stopChan)
-			a.stopChan = nil
+		if stopChan != nil {
+			close(stopChan)
 		}
 		log.Printf("[PandaX-%s] Stop: 适配器已停止", a.name)
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
+	if stopChan != nil {
+		a.mu.Lock()
+		if a.stopChan == stopChan {
+			a.stopChan = nil
+		}
+		a.mu.Unlock()
+	}
 }
 
 func (a *PandaXAdapter) SetInterval(interval time.Duration) {
@@ -496,29 +504,128 @@ func (a *PandaXAdapter) PendingCommandCount() int {
 	return len(a.commandQueue)
 }
 
-func (a *PandaXAdapter) reportLoop() {
+func (a *PandaXAdapter) runLoop() {
 	defer a.wg.Done()
 
 	a.mu.RLock()
-	interval := a.reportEvery
+	reportInterval := a.reportEvery
+	alarmInterval := a.alarmEvery
+	flushNow := a.flushNow
+	reconnectNow := a.reconnectNow
 	stopChan := a.stopChan
 	a.mu.RUnlock()
 
-	log.Printf("[PandaX-%s] reportLoop: 启动, interval=%v (主动获取数据库最新数据)", a.name, interval)
+	if reportInterval <= 0 {
+		reportInterval = defaultReportInterval
+	}
+	if alarmInterval <= 0 {
+		alarmInterval = defaultAlarmInterval
+	}
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	log.Printf("[PandaX-%s] runLoop: 启动, report=%v, alarm=%v", a.name, reportInterval, alarmInterval)
+
+	reportTicker := time.NewTicker(reportInterval)
+	alarmTicker := time.NewTicker(alarmInterval)
+	defer reportTicker.Stop()
+	defer alarmTicker.Stop()
+
+	var reconnectTimer *time.Timer
+	var reconnectTimerCh <-chan time.Time
+	reconnectFailures := 0
+
+	scheduleReconnect := func(delay time.Duration) {
+		if reconnectTimer == nil {
+			reconnectTimer = time.NewTimer(delay)
+			reconnectTimerCh = reconnectTimer.C
+			return
+		}
+		if !reconnectTimer.Stop() {
+			select {
+			case <-reconnectTimer.C:
+			default:
+			}
+		}
+		reconnectTimer.Reset(delay)
+		reconnectTimerCh = reconnectTimer.C
+	}
+
+	stopReconnect := func() {
+		if reconnectTimer == nil {
+			reconnectTimerCh = nil
+			reconnectFailures = 0
+			return
+		}
+		if !reconnectTimer.Stop() {
+			select {
+			case <-reconnectTimer.C:
+			default:
+			}
+		}
+		reconnectTimerCh = nil
+		reconnectFailures = 0
+	}
+
+	defer func() {
+		if reconnectTimer != nil {
+			if !reconnectTimer.Stop() {
+				select {
+				case <-reconnectTimer.C:
+				default:
+				}
+			}
+		}
+	}()
 
 	for {
 		select {
 		case <-stopChan:
-			log.Printf("[PandaX-%s] reportLoop: 退出", a.name)
-			return
-		case <-ticker.C:
-			// 主动从数据库获取最新数据上报
-			if err := a.fetchAndPublishLatestData(); err != nil {
-				log.Printf("[PandaX-%s] reportLoop: fetchAndPublishLatestData 失败: %v", a.name, err)
+			log.Printf("[PandaX-%s] runLoop: 停止并清空报警", a.name)
+			stopReconnect()
+			for {
+				if err := a.flushAlarmBatch(); err != nil {
+					log.Printf("[PandaX-%s] runLoop: flushAlarmBatch 失败: %v", a.name, err)
+					return
+				}
+				a.alarmMu.RLock()
+				empty := len(a.alarmQueue) == 0
+				a.alarmMu.RUnlock()
+				if empty {
+					log.Printf("[PandaX-%s] runLoop: 已退出", a.name)
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
+		case <-reportTicker.C:
+			if err := a.fetchAndPublishLatestData(); err != nil {
+				log.Printf("[PandaX-%s] runLoop: fetchAndPublishLatestData 失败: %v", a.name, err)
+			}
+		case <-alarmTicker.C:
+			if err := a.flushAlarmBatch(); err != nil {
+				log.Printf("[PandaX-%s] runLoop: flushAlarmBatch 失败: %v", a.name, err)
+			}
+		case <-flushNow:
+			if err := a.flushAlarmBatch(); err != nil {
+				log.Printf("[PandaX-%s] runLoop: flushAlarmBatch 失败: %v", a.name, err)
+			}
+		case <-reconnectNow:
+			if a.shouldReconnect() {
+				reconnectFailures = 0
+				scheduleReconnect(0)
+			}
+		case <-reconnectTimerCh:
+			if !a.shouldReconnect() {
+				stopReconnect()
+				continue
+			}
+			if err := a.reconnectOnce(); err != nil {
+				reconnectFailures++
+				delay := pandaXReconnectDelay(a.currentReconnectInterval(), reconnectFailures)
+				log.Printf("[PandaX-%s] reconnect failed (attempt=%d): %v, retry in %v", a.name, reconnectFailures, err, delay)
+				scheduleReconnect(delay)
+				continue
+			}
+			log.Printf("[PandaX-%s] reconnect success", a.name)
+			stopReconnect()
 		}
 	}
 }
@@ -625,51 +732,6 @@ func (a *PandaXAdapter) fetchCurrentSystemStats() *models.CollectData {
 			"load_5":        formatMetricFloat2(stats.Load5),
 			"load_15":       formatMetricFloat2(stats.Load15),
 		},
-	}
-}
-
-func (a *PandaXAdapter) alarmLoop() {
-	defer a.wg.Done()
-
-	a.mu.RLock()
-	interval := a.alarmEvery
-	flushNow := a.flushNow
-	stopChan := a.stopChan
-	a.mu.RUnlock()
-
-	log.Printf("[PandaX-%s] alarmLoop: 启动, interval=%v, batch=%d", a.name, interval, a.alarmBatch)
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-stopChan:
-			log.Printf("[PandaX-%s] alarmLoop: 正在清空剩余报警队列...", a.name)
-			for {
-				if err := a.flushAlarmBatch(); err != nil {
-					log.Printf("[PandaX-%s] alarmLoop: flushAlarmBatch 失败: %v", a.name, err)
-					return
-				}
-				a.alarmMu.RLock()
-				empty := len(a.alarmQueue) == 0
-				a.alarmMu.RUnlock()
-				if empty {
-					log.Printf("[PandaX-%s] alarmLoop: 退出", a.name)
-					return
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-		case <-ticker.C:
-			if err := a.flushAlarmBatch(); err != nil {
-				log.Printf("[PandaX-%s] alarmLoop: flushAlarmBatch 失败: %v", a.name, err)
-			}
-		case <-flushNow:
-			log.Printf("[PandaX-%s] alarmLoop: 收到 flush 信号", a.name)
-			if err := a.flushAlarmBatch(); err != nil {
-				log.Printf("[PandaX-%s] alarmLoop: flushAlarmBatch 失败: %v", a.name, err)
-			}
-		}
 	}
 }
 
@@ -898,49 +960,6 @@ func (a *PandaXAdapter) connectPandaXMQTT(broker, clientID, username, password s
 	}
 
 	return client, nil
-}
-
-func (a *PandaXAdapter) reconnectLoop() {
-	defer a.wg.Done()
-
-	a.mu.RLock()
-	stopChan := a.stopChan
-	reconnectNow := a.reconnectNow
-	a.mu.RUnlock()
-
-	if stopChan == nil || reconnectNow == nil {
-		return
-	}
-
-	for {
-		select {
-		case <-stopChan:
-			return
-		case <-reconnectNow:
-		}
-
-		failures := 0
-		for {
-			if !a.shouldReconnect() {
-				break
-			}
-
-			if err := a.reconnectOnce(); err != nil {
-				failures++
-				delay := pandaXReconnectDelay(a.currentReconnectInterval(), failures)
-				log.Printf("[PandaX-%s] reconnect failed (attempt=%d): %v, retry in %v", a.name, failures, err, delay)
-				select {
-				case <-stopChan:
-					return
-				case <-time.After(delay):
-				}
-				continue
-			}
-
-			log.Printf("[PandaX-%s] reconnect success", a.name)
-			break
-		}
-	}
 }
 
 func (a *PandaXAdapter) reconnectOnce() error {
