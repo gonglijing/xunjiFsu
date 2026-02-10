@@ -298,3 +298,19 @@ func TestExtractCommandProperties_SubDeviceSnakeCase(t *testing.T) {
 		t.Fatalf("unexpected properties: %+v", properties)
 	}
 }
+
+func TestSagooSingleLoop_StopThenCloseSafe(t *testing.T) {
+	adapter := NewSagooAdapter("sagoo-test")
+	adapter.initialized = true
+	adapter.reportEvery = time.Hour
+	adapter.alarmEvery = time.Hour
+
+	adapter.Start()
+	adapter.Stop()
+	if err := adapter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if adapter.IsEnabled() {
+		t.Fatal("adapter should be disabled after Close")
+	}
+}

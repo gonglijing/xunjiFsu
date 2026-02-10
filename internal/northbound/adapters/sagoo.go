@@ -191,9 +191,14 @@ func (a *SagooAdapter) Start() {
 	a.mu.Lock()
 	if a.initialized && !a.enabled {
 		a.enabled = true
-		a.wg.Add(2)
-		go a.reportLoop()
-		go a.alarmLoop()
+		if a.stopChan == nil {
+			a.stopChan = make(chan struct{})
+		}
+		if a.flushNow == nil {
+			a.flushNow = make(chan struct{}, 1)
+		}
+		a.wg.Add(1)
+		go a.runLoop()
 		log.Printf("Sagoo adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
@@ -204,7 +209,10 @@ func (a *SagooAdapter) Stop() {
 	a.mu.Lock()
 	if a.enabled {
 		a.enabled = false
-		close(a.stopChan)
+		if a.stopChan != nil {
+			close(a.stopChan)
+			a.stopChan = nil
+		}
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
@@ -272,16 +280,11 @@ func (a *SagooAdapter) Close() error {
 	a.Stop()
 
 	a.mu.Lock()
-	stopChan := a.stopChan
 	client := a.client
 	a.initialized = false
 	a.connected = false
+	a.enabled = false
 	a.mu.Unlock()
-
-	if stopChan != nil {
-		close(stopChan)
-		a.wg.Wait()
-	}
 
 	// 刷新剩余数据
 	_ = a.flushLatestData()
@@ -378,45 +381,32 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 	return a.publish(topic, body)
 }
 
-// reportLoop 数据上报循环（独立线程）
-func (a *SagooAdapter) reportLoop() {
+// runLoop 单协程事件循环（实时与报警）
+func (a *SagooAdapter) runLoop() {
 	defer a.wg.Done()
 
 	a.mu.RLock()
-	interval := a.reportEvery
-	a.mu.RUnlock()
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-a.stopChan:
-			return
-		case <-ticker.C:
-			if err := a.flushLatestData(); err != nil {
-				log.Printf("Sagoo report flush failed: %v", err)
-			}
-		}
-	}
-}
-
-// alarmLoop 报警发送循环（独立线程）
-func (a *SagooAdapter) alarmLoop() {
-	defer a.wg.Done()
-
-	a.mu.RLock()
-	interval := a.alarmEvery
+	reportInterval := a.reportEvery
+	alarmInterval := a.alarmEvery
 	flushNow := a.flushNow
+	stopChan := a.stopChan
 	a.mu.RUnlock()
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	if reportInterval <= 0 {
+		reportInterval = defaultReportInterval
+	}
+	if alarmInterval <= 0 {
+		alarmInterval = defaultAlarmInterval
+	}
+
+	reportTicker := time.NewTicker(reportInterval)
+	alarmTicker := time.NewTicker(alarmInterval)
+	defer reportTicker.Stop()
+	defer alarmTicker.Stop()
 
 	for {
 		select {
-		case <-a.stopChan:
-			// 关闭前发送剩余报警
+		case <-stopChan:
 			for {
 				if err := a.flushAlarmBatch(); err != nil {
 					log.Printf("Sagoo alarm flush failed on close: %v", err)
@@ -430,7 +420,11 @@ func (a *SagooAdapter) alarmLoop() {
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-		case <-ticker.C:
+		case <-reportTicker.C:
+			if err := a.flushLatestData(); err != nil {
+				log.Printf("Sagoo report flush failed: %v", err)
+			}
+		case <-alarmTicker.C:
 			if err := a.flushAlarmBatch(); err != nil {
 				log.Printf("Sagoo alarm flush failed: %v", err)
 			}
