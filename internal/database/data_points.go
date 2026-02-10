@@ -500,86 +500,66 @@ type latestDeviceFieldRow struct {
 	CollectedAt time.Time
 }
 
-func queryLatestDeviceFieldRows(db *sql.DB) ([]latestDeviceFieldRow, error) {
-	if db == nil {
-		return nil, fmt.Errorf("db is nil")
+const latestDeviceFieldRowsQuery = `SELECT p.device_id, p.device_name, p.field_name, p.value, p.collected_at
+	FROM data_points p
+	INNER JOIN (
+		SELECT device_id, field_name, MAX(collected_at) AS max_collected_at
+		FROM data_points
+		GROUP BY device_id, field_name
+	) latest
+	ON p.device_id = latest.device_id
+		AND p.field_name = latest.field_name
+		AND p.collected_at = latest.max_collected_at
+	ORDER BY p.device_id ASC, p.collected_at DESC`
+
+func upsertLatestDeviceFieldRow(merged map[latestDeviceFieldKey]latestDeviceFieldRow, row latestDeviceFieldRow) {
+	if merged == nil {
+		return
 	}
 
-	rows, err := db.Query(`SELECT p.device_id, p.device_name, p.field_name, p.value, p.collected_at
-		FROM data_points p
-		INNER JOIN (
-			SELECT device_id, field_name, MAX(collected_at) AS max_collected_at
-			FROM data_points
-			GROUP BY device_id, field_name
-		) latest
-		ON p.device_id = latest.device_id
-			AND p.field_name = latest.field_name
-			AND p.collected_at = latest.max_collected_at
-		ORDER BY p.device_id ASC, p.collected_at DESC`)
+	row.FieldName = strings.TrimSpace(row.FieldName)
+	if row.DeviceID == 0 || row.FieldName == "" {
+		return
+	}
+
+	key := latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}
+	existing, ok := merged[key]
+	if !ok || row.CollectedAt.After(existing.CollectedAt) ||
+		(row.CollectedAt.Equal(existing.CollectedAt) && existing.DeviceName == "" && row.DeviceName != "") {
+		merged[key] = row
+	}
+}
+
+func mergeLatestDeviceFieldRowsFromDB(db *sql.DB, merged map[latestDeviceFieldKey]latestDeviceFieldRow) error {
+	if db == nil {
+		return fmt.Errorf("db is nil")
+	}
+	if merged == nil {
+		return fmt.Errorf("merged map is nil")
+	}
+
+	rows, err := db.Query(latestDeviceFieldRowsQuery)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
-	result := make([]latestDeviceFieldRow, 0, 256)
 	for rows.Next() {
 		var item latestDeviceFieldRow
 		if err := rows.Scan(&item.DeviceID, &item.DeviceName, &item.FieldName, &item.Value, &item.CollectedAt); err != nil {
-			return nil, err
+			return err
 		}
-		result = append(result, item)
+		upsertLatestDeviceFieldRow(merged, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return err
 	}
-	return result, nil
+	return nil
 }
 
-func getDiskLatestDeviceFieldRows() ([]latestDeviceFieldRow, error) {
-	db, err := openDataDiskDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	return queryLatestDeviceFieldRows(db)
-}
-
-func mergeLatestDeviceFieldRows(primary, secondary []latestDeviceFieldRow) []latestDeviceFieldRow {
-	if len(secondary) == 0 {
-		return primary
-	}
-	if len(primary) == 0 {
-		return secondary
-	}
-
-	merged := make(map[latestDeviceFieldKey]latestDeviceFieldRow, len(primary)+len(secondary))
-	for _, row := range primary {
-		if row.DeviceID == 0 || row.FieldName == "" {
-			continue
-		}
-		merged[latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}] = row
-	}
-	for _, row := range secondary {
-		if row.DeviceID == 0 || row.FieldName == "" {
-			continue
-		}
-		key := latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}
-		existing, ok := merged[key]
-		if !ok || row.CollectedAt.After(existing.CollectedAt) {
-			merged[key] = row
-		}
-	}
-
-	result := make([]latestDeviceFieldRow, 0, len(merged))
+func buildLatestDeviceData(merged map[latestDeviceFieldKey]latestDeviceFieldRow) []*LatestDeviceData {
+	deviceDataMap := make(map[int64]*LatestDeviceData, len(merged)/2+1)
 	for _, row := range merged {
-		result = append(result, row)
-	}
-	return result
-}
-
-func buildLatestDeviceData(rows []latestDeviceFieldRow) []*LatestDeviceData {
-	deviceDataMap := make(map[int64]*LatestDeviceData, len(rows)/2+1)
-	for _, row := range rows {
 		if row.DeviceID == 0 || row.FieldName == "" {
 			continue
 		}
@@ -614,21 +594,26 @@ func buildLatestDeviceData(rows []latestDeviceFieldRow) []*LatestDeviceData {
 
 // GetAllDevicesLatestData 获取所有设备的最新数据（每个设备每个字段仅保留最新值）
 func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
-	memRows, err := queryLatestDeviceFieldRows(DataDB)
-	if err != nil {
+	merged := make(map[latestDeviceFieldKey]latestDeviceFieldRow, 256)
+	if err := mergeLatestDeviceFieldRowsFromDB(DataDB, merged); err != nil {
 		return nil, err
 	}
 
-	diskRows, err := getDiskLatestDeviceFieldRows()
+	diskDB, err := openDataDiskDB()
 	if err != nil {
 		if !os.IsNotExist(err) {
 			log.Printf("Failed to read latest device fields from disk: %v", err)
 		}
-		return buildLatestDeviceData(memRows), nil
+		return buildLatestDeviceData(merged), nil
+	}
+	defer diskDB.Close()
+
+	if err := mergeLatestDeviceFieldRowsFromDB(diskDB, merged); err != nil {
+		log.Printf("Failed to query latest device fields from disk: %v", err)
+		return buildLatestDeviceData(merged), nil
 	}
 
-	rows := mergeLatestDeviceFieldRows(memRows, diskRows)
-	return buildLatestDeviceData(rows), nil
+	return buildLatestDeviceData(merged), nil
 }
 
 // InsertCollectData 将采集数据写入缓存与历史库
