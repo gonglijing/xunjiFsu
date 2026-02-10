@@ -37,11 +37,14 @@ func TestShouldEmitAlarm_EdgeAndRateLimit(t *testing.T) {
 	alarmStates.mu.Lock()
 	_, exists := alarmStates.data[key]
 	alarmStates.mu.Unlock()
-	if exists {
-		t.Fatal("state should be released when threshold recovers")
+	if !exists {
+		t.Fatal("state should be retained after recovery for repeat suppression")
 	}
-	if !shouldEmitAlarm(deviceID, threshold, true, now.Add(71*time.Second), time.Minute) {
-		t.Fatal("matched again after recovery should emit immediately")
+	if shouldEmitAlarm(deviceID, threshold, true, now.Add(71*time.Second), time.Minute) {
+		t.Fatal("matched again within repeat interval should still be suppressed")
+	}
+	if !shouldEmitAlarm(deviceID, threshold, true, now.Add(122*time.Second), time.Minute) {
+		t.Fatal("matched again after repeat interval should emit")
 	}
 }
 

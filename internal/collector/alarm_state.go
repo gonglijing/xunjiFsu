@@ -96,8 +96,8 @@ func InvalidateAlarmRepeatIntervalCache() {
 // shouldEmitAlarm 更新阈值状态并返回是否应当发出新报警。
 // 规则：
 // 1) 首次进入报警态立即触发
-// 2) 持续报警态按 repeatInterval 限频重发
-// 3) 未命中阈值时退出报警态
+// 2) 同一阈值按 repeatInterval 限频重发
+// 3) 未命中阈值时不触发，且保留最后触发时间（保证窗口内最多一次）
 func shouldEmitAlarm(deviceID int64, threshold *models.Threshold, matched bool, now time.Time, repeatInterval time.Duration) bool {
 	if threshold == nil {
 		return false
@@ -117,7 +117,6 @@ func shouldEmitAlarm(deviceID int64, threshold *models.Threshold, matched bool, 
 	state, exists := alarmStates.data[key]
 
 	if !matched {
-		delete(alarmStates.data, key)
 		return false
 	}
 
