@@ -41,9 +41,8 @@ var alarmStates = struct {
 var alarmStateCheckCounter uint64
 
 var alarmRepeatIntervalCache = struct {
-	mu        sync.Mutex
-	value     time.Duration
-	expiresAt time.Time
+	valueNS     int64
+	expiresAtNS int64
 }{}
 
 func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateKey {
@@ -65,15 +64,12 @@ func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateK
 }
 
 func resolveAlarmRepeatInterval() time.Duration {
-	now := time.Now()
+	nowNS := time.Now().UnixNano()
 
-	alarmRepeatIntervalCache.mu.Lock()
-	cached := alarmRepeatIntervalCache.value
-	expiresAt := alarmRepeatIntervalCache.expiresAt
-	alarmRepeatIntervalCache.mu.Unlock()
-
-	if cached > 0 && now.Before(expiresAt) {
-		return cached
+	cachedNS := atomic.LoadInt64(&alarmRepeatIntervalCache.valueNS)
+	expiresAtNS := atomic.LoadInt64(&alarmRepeatIntervalCache.expiresAtNS)
+	if cachedNS > 0 && nowNS < expiresAtNS {
+		return time.Duration(cachedNS)
 	}
 
 	resolved := defaultAlarmRepeatInterval
@@ -84,10 +80,8 @@ func resolveAlarmRepeatInterval() time.Duration {
 		resolved = time.Duration(seconds) * time.Second
 	}
 
-	alarmRepeatIntervalCache.mu.Lock()
-	alarmRepeatIntervalCache.value = resolved
-	alarmRepeatIntervalCache.expiresAt = now.Add(alarmRepeatIntervalRefreshWindow)
-	alarmRepeatIntervalCache.mu.Unlock()
+	atomic.StoreInt64(&alarmRepeatIntervalCache.valueNS, int64(resolved))
+	atomic.StoreInt64(&alarmRepeatIntervalCache.expiresAtNS, nowNS+int64(alarmRepeatIntervalRefreshWindow))
 
 	return resolved
 }
@@ -137,10 +131,8 @@ func pruneAlarmStatesLocked(now time.Time, ttl time.Duration) int {
 
 // InvalidateAlarmRepeatIntervalCache 清理重复上报间隔缓存
 func InvalidateAlarmRepeatIntervalCache() {
-	alarmRepeatIntervalCache.mu.Lock()
-	alarmRepeatIntervalCache.value = 0
-	alarmRepeatIntervalCache.expiresAt = time.Time{}
-	alarmRepeatIntervalCache.mu.Unlock()
+	atomic.StoreInt64(&alarmRepeatIntervalCache.valueNS, 0)
+	atomic.StoreInt64(&alarmRepeatIntervalCache.expiresAtNS, 0)
 }
 
 // shouldEmitAlarm 更新阈值状态并返回是否应当发出新报警。

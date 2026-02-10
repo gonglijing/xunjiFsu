@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -131,5 +132,19 @@ func TestResolveAlarmStateTTL(t *testing.T) {
 	}
 	if ttl := resolveAlarmStateTTL(2 * time.Hour); ttl != maxAlarmStateTTL {
 		t.Fatalf("ttl=%v, want capped %v", ttl, maxAlarmStateTTL)
+	}
+}
+
+func TestInvalidateAlarmRepeatIntervalCache(t *testing.T) {
+	atomic.StoreInt64(&alarmRepeatIntervalCache.valueNS, int64(30*time.Second))
+	atomic.StoreInt64(&alarmRepeatIntervalCache.expiresAtNS, time.Now().Add(time.Minute).UnixNano())
+
+	InvalidateAlarmRepeatIntervalCache()
+
+	if got := atomic.LoadInt64(&alarmRepeatIntervalCache.valueNS); got != 0 {
+		t.Fatalf("expected valueNS=0, got %d", got)
+	}
+	if got := atomic.LoadInt64(&alarmRepeatIntervalCache.expiresAtNS); got != 0 {
+		t.Fatalf("expected expiresAtNS=0, got %d", got)
 	}
 }
