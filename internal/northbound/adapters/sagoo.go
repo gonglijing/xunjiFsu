@@ -784,22 +784,19 @@ func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 	a.commandMu.Lock()
 	defer a.commandMu.Unlock()
 
+	commands := make([]*models.NorthboundCommand, 0, len(keys))
 	for _, key := range keys {
 		raw := properties[key]
-		command := &models.NorthboundCommand{
+		commands = append(commands, &models.NorthboundCommand{
 			RequestID:  requestID,
 			ProductKey: pk,
 			DeviceKey:  dk,
 			FieldName:  key,
 			Value:      stringifyAny(raw),
 			Source:     "sagoo.property.set",
-		}
-		if len(a.commandQueue) >= a.commandCap && len(a.commandQueue) > 0 {
-			a.commandQueue[0] = nil
-			a.commandQueue = a.commandQueue[1:]
-		}
-		a.commandQueue = append(a.commandQueue, command)
+		})
 	}
+	a.commandQueue = appendCommandQueueWithCap(a.commandQueue, commands, a.commandCap)
 }
 
 // 辅助函数

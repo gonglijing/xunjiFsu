@@ -1103,16 +1103,7 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 	}
 
 	a.commandMu.Lock()
-	for _, cmd := range commands {
-		if cmd == nil {
-			continue
-		}
-		if len(a.commandQueue) >= a.commandCap && len(a.commandQueue) > 0 {
-			a.commandQueue[0] = nil
-			a.commandQueue = a.commandQueue[1:]
-		}
-		a.commandQueue = append(a.commandQueue, cmd)
-	}
+	a.commandQueue = appendCommandQueueWithCap(a.commandQueue, commands, a.commandCap)
 	queueLen := len(a.commandQueue)
 	a.commandMu.Unlock()
 
