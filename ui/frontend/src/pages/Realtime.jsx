@@ -1,14 +1,16 @@
-import { createSignal, createEffect, Show } from 'solid-js';
+import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
+import { getRealtimeMiniPollIntervalMs } from '../utils/runtimeConfig';
 
 const SYSTEM_DEVICE_ID = '-1';
 const SYSTEM_DEVICE_RAW_NAME = '__system__';
 const SYSTEM_DEVICE_LABEL = '系统设备';
+const REALTIME_POLL_INTERVAL_MS = getRealtimeMiniPollIntervalMs();
 
 function Realtime() {
   const toast = useToast();
@@ -27,6 +29,8 @@ function Realtime() {
   const [historyDeviceName, setHistoryDeviceName] = createSignal('');
   const [historyStart, setHistoryStart] = createSignal('');
   const [historyEnd, setHistoryEnd] = createSignal('');
+
+  let pollTimer;
 
   const withSystemDevice = (list) => {
     const normalized = Array.isArray(list)
@@ -178,14 +182,39 @@ function Realtime() {
 
   createEffect(() => {
     if (!selected()) return;
-    setLoading(true);
-    api.data.getDataCacheByDevice(selected())
-      .then((list) => {
-        list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
-        setPoints(list);
-      })
-      .catch(showLoadError)
-      .finally(() => setLoading(false));
+
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = undefined;
+    }
+
+    const loadPoints = (isBackground = false) => {
+      if (!isBackground) {
+        setLoading(true);
+      }
+
+      api.data.getDataCacheByDevice(selected())
+        .then((list) => {
+          list.sort((a, b) => String(a.field_name || '').localeCompare(String(b.field_name || '')));
+          setPoints(list);
+        })
+        .catch(showLoadError)
+        .finally(() => {
+          if (!isBackground) {
+            setLoading(false);
+          }
+        });
+    };
+
+    loadPoints(false);
+    pollTimer = setInterval(() => loadPoints(true), REALTIME_POLL_INTERVAL_MS);
+  });
+
+  onCleanup(() => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = undefined;
+    }
   });
 
   return (

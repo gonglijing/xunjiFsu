@@ -104,6 +104,9 @@ func (c *SystemStatsCollector) IsRunning() bool {
 func (c *SystemStatsCollector) run() {
 	defer c.wg.Done()
 
+	// 启动后立即采集一次，避免重启后实时页面长时间无系统测点
+	c.collect()
+
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
