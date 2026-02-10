@@ -487,44 +487,148 @@ type LatestDeviceData struct {
 	CollectedAt time.Time
 }
 
-// GetAllDevicesLatestData 获取所有设备的最新数据（每个设备只保留最新值）
+type latestDeviceFieldKey struct {
+	deviceID  int64
+	fieldName string
+}
+
+type latestDeviceFieldRow struct {
+	DeviceID    int64
+	DeviceName  string
+	FieldName   string
+	Value       string
+	CollectedAt time.Time
+}
+
+func queryLatestDeviceFieldRows(db *sql.DB) ([]latestDeviceFieldRow, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db is nil")
+	}
+
+	rows, err := db.Query(`SELECT p.device_id, p.device_name, p.field_name, p.value, p.collected_at
+		FROM data_points p
+		INNER JOIN (
+			SELECT device_id, field_name, MAX(collected_at) AS max_collected_at
+			FROM data_points
+			GROUP BY device_id, field_name
+		) latest
+		ON p.device_id = latest.device_id
+			AND p.field_name = latest.field_name
+			AND p.collected_at = latest.max_collected_at
+		ORDER BY p.device_id ASC, p.collected_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]latestDeviceFieldRow, 0, 256)
+	for rows.Next() {
+		var item latestDeviceFieldRow
+		if err := rows.Scan(&item.DeviceID, &item.DeviceName, &item.FieldName, &item.Value, &item.CollectedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func getDiskLatestDeviceFieldRows() ([]latestDeviceFieldRow, error) {
+	db, err := openDataDiskDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return queryLatestDeviceFieldRows(db)
+}
+
+func mergeLatestDeviceFieldRows(primary, secondary []latestDeviceFieldRow) []latestDeviceFieldRow {
+	if len(secondary) == 0 {
+		return primary
+	}
+	if len(primary) == 0 {
+		return secondary
+	}
+
+	merged := make(map[latestDeviceFieldKey]latestDeviceFieldRow, len(primary)+len(secondary))
+	for _, row := range primary {
+		if row.DeviceID == 0 || row.FieldName == "" {
+			continue
+		}
+		merged[latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}] = row
+	}
+	for _, row := range secondary {
+		if row.DeviceID == 0 || row.FieldName == "" {
+			continue
+		}
+		key := latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}
+		existing, ok := merged[key]
+		if !ok || row.CollectedAt.After(existing.CollectedAt) {
+			merged[key] = row
+		}
+	}
+
+	result := make([]latestDeviceFieldRow, 0, len(merged))
+	for _, row := range merged {
+		result = append(result, row)
+	}
+	return result
+}
+
+func buildLatestDeviceData(rows []latestDeviceFieldRow) []*LatestDeviceData {
+	deviceDataMap := make(map[int64]*LatestDeviceData, len(rows)/2+1)
+	for _, row := range rows {
+		if row.DeviceID == 0 || row.FieldName == "" {
+			continue
+		}
+
+		item, exists := deviceDataMap[row.DeviceID]
+		if !exists {
+			item = &LatestDeviceData{
+				DeviceID:   row.DeviceID,
+				DeviceName: row.DeviceName,
+				Fields:     make(map[string]string, 8),
+			}
+			deviceDataMap[row.DeviceID] = item
+		}
+
+		if item.DeviceName == "" {
+			item.DeviceName = row.DeviceName
+		}
+		item.Fields[row.FieldName] = row.Value
+		if row.CollectedAt.After(item.CollectedAt) {
+			item.CollectedAt = row.CollectedAt
+		}
+	}
+
+	result := make([]*LatestDeviceData, 0, len(deviceDataMap))
+	for _, item := range deviceDataMap {
+		if len(item.Fields) > 0 {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// GetAllDevicesLatestData 获取所有设备的最新数据（每个设备每个字段仅保留最新值）
 func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
-	// 获取所有数据点
-	points, err := GetLatestDataPoints(10000)
+	memRows, err := queryLatestDeviceFieldRows(DataDB)
 	if err != nil {
 		return nil, err
 	}
 
-	// 按设备 ID 和字段名聚合，只保留最新值
-	deviceDataMap := make(map[int64]*LatestDeviceData)
-	for _, point := range points {
-		if point == nil {
-			continue
+	diskRows, err := getDiskLatestDeviceFieldRows()
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Failed to read latest device fields from disk: %v", err)
 		}
-		data, exists := deviceDataMap[point.DeviceID]
-		if !exists {
-			data = &LatestDeviceData{
-				DeviceID:   point.DeviceID,
-				DeviceName: point.DeviceName,
-				Fields:     make(map[string]string),
-			}
-			deviceDataMap[point.DeviceID] = data
-		}
-		// 由于查询已按时间降序，第一个值就是最新值
-		if _, exists := data.Fields[point.FieldName]; !exists {
-			data.Fields[point.FieldName] = point.Value
-			data.CollectedAt = point.CollectedAt
-		}
+		return buildLatestDeviceData(memRows), nil
 	}
 
-	// 转换为切片
-	result := make([]*LatestDeviceData, 0, len(deviceDataMap))
-	for _, data := range deviceDataMap {
-		if len(data.Fields) > 0 {
-			result = append(result, data)
-		}
-	}
-	return result, nil
+	rows := mergeLatestDeviceFieldRows(memRows, diskRows)
+	return buildLatestDeviceData(rows), nil
 }
 
 // InsertCollectData 将采集数据写入缓存与历史库
