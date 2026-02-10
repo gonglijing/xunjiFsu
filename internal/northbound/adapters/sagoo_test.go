@@ -207,3 +207,12 @@ func TestCloneCollectData_EmptyFieldsNil(t *testing.T) {
 		t.Fatalf("out.Fields expected nil, got %#v", out.Fields)
 	}
 }
+
+func TestIsReservedCommandKeyNormalized(t *testing.T) {
+	if !isReservedCommandKeyNormalized("subdevices") {
+		t.Fatal("expected reserved key: subdevices")
+	}
+	if isReservedCommandKeyNormalized("temperature") {
+		t.Fatal("unexpected reserved key: temperature")
+	}
+}

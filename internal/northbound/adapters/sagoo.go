@@ -1117,10 +1117,10 @@ func extractCommandProperties(params map[string]interface{}) (map[string]interfa
 	}
 
 	// sagoo 南向下发常见格式：params 直接是属性键值
-	directProperties := make(map[string]interface{})
+	directProperties := make(map[string]interface{}, len(params))
 	for key, raw := range params {
 		trimmedKey := strings.TrimSpace(key)
-		if trimmedKey == "" || isReservedCommandKey(trimmedKey) {
+		if trimmedKey == "" || isReservedCommandKeyNormalized(strings.ToLower(trimmedKey)) {
 			continue
 		}
 		switch raw.(type) {
@@ -1151,7 +1151,12 @@ func parseIdentityMap(identity map[string]interface{}) (string, string) {
 }
 
 func isReservedCommandKey(key string) bool {
-	switch strings.ToLower(strings.TrimSpace(key)) {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	return isReservedCommandKeyNormalized(normalized)
+}
+
+func isReservedCommandKeyNormalized(normalized string) bool {
+	switch normalized {
 	case "id", "method", "version", "params",
 		"identity", "properties", "events",
 		"sub_device", "subdevice", "sub_devices", "subdevices":
