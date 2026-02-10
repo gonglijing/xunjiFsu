@@ -180,7 +180,6 @@ export function Thresholds() {
                 <th>条件</th>
                 <th>严重性</th>
                 <th>状态</th>
-                <th>屏蔽</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -197,13 +196,8 @@ export function Thresholds() {
                     <td>{item.operator} {item.value}</td>
                     <td>{item.severity}</td>
                     <td>
-                      <span class={`badge ${item.enabled === 1 ? 'badge-running' : 'badge-stopped'}`}>
-                        {item.enabled === 1 ? '启用' : '禁用'}
-                      </span>
-                    </td>
-                    <td>
                       <span class={`badge ${item.shielded === 1 ? 'badge-stopped' : 'badge-running'}`}>
-                        {item.shielded === 1 ? '已屏蔽' : '未屏蔽'}
+                        {item.shielded === 1 ? '已屏蔽' : '生效中'}
                       </span>
                     </td>
                     <td>
@@ -220,7 +214,7 @@ export function Thresholds() {
               <For each={items().length === 0 ? [1] : []}>
                 {() => (
                   <tr>
-                    <td colSpan={8} style="text-align:center; padding:24px; color:var(--text-muted);">
+                    <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">
                       {loading() ? '加载中...' : '暂无阈值'}
                     </td>
                   </tr>
