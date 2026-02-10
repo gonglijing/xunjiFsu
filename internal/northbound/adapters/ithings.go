@@ -950,9 +950,10 @@ func (a *IThingsAdapter) prependRealtime(items []*models.CollectData) {
 	queue = append(queue, items...)
 	queue = append(queue, a.realtimeQueue...)
 	if len(queue) > a.realtimeCap {
+		clear(queue[a.realtimeCap:])
 		queue = queue[:a.realtimeCap]
 	}
-	a.realtimeQueue = queue
+	a.realtimeQueue = queue[:len(queue):len(queue)]
 }
 
 func (a *IThingsAdapter) enqueueAlarmLocked(item *models.AlarmPayload) {
@@ -980,9 +981,10 @@ func (a *IThingsAdapter) prependAlarms(items []*models.AlarmPayload) {
 	queue = append(queue, items...)
 	queue = append(queue, a.alarmQueue...)
 	if len(queue) > a.alarmCap {
+		clear(queue[a.alarmCap:])
 		queue = queue[:a.alarmCap]
 	}
-	a.alarmQueue = queue
+	a.alarmQueue = queue[:len(queue):len(queue)]
 }
 
 func (a *IThingsAdapter) isInitialized() bool {

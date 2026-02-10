@@ -848,9 +848,10 @@ func (a *SagooAdapter) prependRealtime(items []*models.CollectData) {
 	queue = append(queue, items...)
 	queue = append(queue, a.latestData...)
 	if len(queue) > a.realtimeCap {
+		clear(queue[a.realtimeCap:])
 		queue = queue[:a.realtimeCap]
 	}
-	a.latestData = queue
+	a.latestData = queue[:len(queue):len(queue)]
 }
 
 func (a *SagooAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
@@ -878,9 +879,10 @@ func (a *SagooAdapter) prependAlarms(alarms []*models.AlarmPayload) {
 	queue = append(queue, alarms...)
 	queue = append(queue, a.alarmQueue...)
 	if len(queue) > a.alarmCap {
+		clear(queue[a.alarmCap:])
 		queue = queue[:a.alarmCap]
 	}
-	a.alarmQueue = queue
+	a.alarmQueue = queue[:len(queue):len(queue)]
 }
 
 // GetStats 获取适配器统计信息
