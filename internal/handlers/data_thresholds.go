@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
+	"github.com/gonglijing/xunjiFsu/internal/collector"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -22,11 +24,15 @@ func (h *Handler) CreateThreshold(w http.ResponseWriter, r *http.Request) {
 	if !parseRequestOrWriteBadRequestDefault(w, r, &threshold) {
 		return
 	}
+	normalizeThresholdInput(&threshold)
+
 	id, err := database.CreateThreshold(&threshold)
 	if err != nil {
 		writeServerErrorWithLog(w, apiErrCreateThresholdFailed, err)
 		return
 	}
+	collector.InvalidateDeviceCache(threshold.DeviceID)
+
 	threshold.ID = id
 	WriteCreated(w, threshold)
 }
@@ -36,15 +42,26 @@ func (h *Handler) UpdateThreshold(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+
+	oldThreshold, _ := database.GetThresholdByID(id)
+
 	var threshold models.Threshold
 	if !parseRequestOrWriteBadRequestDefault(w, r, &threshold) {
 		return
 	}
+	normalizeThresholdInput(&threshold)
+
 	threshold.ID = id
 	if err := database.UpdateThreshold(&threshold); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateThresholdFailed, err)
 		return
 	}
+
+	collector.InvalidateDeviceCache(threshold.DeviceID)
+	if oldThreshold != nil && oldThreshold.DeviceID != threshold.DeviceID {
+		collector.InvalidateDeviceCache(oldThreshold.DeviceID)
+	}
+
 	WriteSuccess(w, threshold)
 }
 
@@ -53,9 +70,30 @@ func (h *Handler) DeleteThreshold(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+
+	threshold, _ := database.GetThresholdByID(id)
 	if err := database.DeleteThreshold(id); err != nil {
 		writeServerErrorWithLog(w, apiErrDeleteThresholdFailed, err)
 		return
 	}
+
+	if threshold != nil {
+		collector.InvalidateDeviceCache(threshold.DeviceID)
+	}
+
 	WriteDeleted(w)
+}
+
+func normalizeThresholdInput(threshold *models.Threshold) {
+	if threshold == nil {
+		return
+	}
+
+	threshold.FieldName = strings.TrimSpace(threshold.FieldName)
+	threshold.Operator = strings.TrimSpace(threshold.Operator)
+	threshold.Severity = strings.TrimSpace(threshold.Severity)
+	threshold.Message = strings.TrimSpace(threshold.Message)
+	if threshold.Enabled != 1 {
+		threshold.Enabled = 0
+	}
 }

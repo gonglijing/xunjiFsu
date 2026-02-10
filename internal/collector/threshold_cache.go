@@ -33,6 +33,7 @@ func init() {
 
 // StartThresholdCache 启动阈值缓存刷新任务
 func StartThresholdCache() {
+	cache.Refresh()
 	go cache.refreshLoop()
 	log.Println("Threshold cache started")
 }
@@ -90,19 +91,22 @@ func GetDeviceThresholds(deviceID int64) ([]*models.Threshold, error) {
 	needsRefresh := time.Since(cache.lastRefresh) > cache.interval*2 // 超过2倍刷新间隔需要刷新
 	cache.mu.RUnlock()
 
-	// 如果缓存不存在或需要刷新，从数据库加载
-	if !exists || needsRefresh {
-		cache.mu.Lock()
-		// 双重检查
-		if thresholds, exists = cache.thresholds[deviceID]; !exists {
-			thresholds, err := database.GetEnabledThresholdsByDeviceID(deviceID)
-			if err != nil {
-				cache.mu.Unlock()
-				return nil, err
-			}
-			cache.thresholds[deviceID] = thresholds
+	if needsRefresh {
+		cache.Refresh()
+		cache.mu.RLock()
+		thresholds, exists = cache.thresholds[deviceID]
+		cache.mu.RUnlock()
+	}
+
+	if !exists {
+		loaded, err := database.GetEnabledThresholdsByDeviceID(deviceID)
+		if err != nil {
+			return nil, err
 		}
+		cache.mu.Lock()
+		cache.thresholds[deviceID] = loaded
 		cache.mu.Unlock()
+		return loaded, nil
 	}
 
 	return thresholds, nil
