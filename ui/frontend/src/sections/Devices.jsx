@@ -533,16 +533,16 @@ export function Devices() {
                 </select>
               </div>
               
-              <div class="flex" style={{ gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <div class="modal-actions" style={{ marginTop: '16px' }}>
                 <button
                   type="button"
-                  class="btn"
+                  class="btn btn-outline-primary btn-sm"
                   onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }}
                   disabled={submitting()}
                 >
                   取消
                 </button>
-                <button type="submit" class="btn btn-primary" disabled={submitting()}>
+                <button type="submit" class="btn btn-primary btn-sm" disabled={submitting()}>
                   {submitting() ? '保存中...' : (editing() ? '保存' : '创建')}
                 </button>
               </div>
@@ -584,9 +584,9 @@ export function Devices() {
               <Show when={writeError()}>
                 <div style="color:var(--accent-red); padding:4px 0;">{writeError()}</div>
               </Show>
-              <div class="flex" style={{ gap: '8px', marginTop: '12px' }}>
-                <button type="button" class="btn" onClick={() => setShowWriteModal(false)} style="flex:1">取消</button>
-                <button type="submit" class="btn btn-primary" style="flex:1">写入</button>
+              <div class="modal-actions modal-actions-fill" style={{ marginTop: '12px' }}>
+                <button type="button" class="btn btn-outline-primary btn-sm" onClick={() => setShowWriteModal(false)}>取消</button>
+                <button type="submit" class="btn btn-primary btn-sm">写入</button>
               </div>
             </form>
           </div>

@@ -309,16 +309,16 @@ export function Thresholds() {
               <Show when={err()}>
                 <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
               </Show>
-              <div class="flex" style={{ gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <div class="modal-actions" style={{ marginTop: '8px' }}>
                 <button
                   type="button"
-                  class="btn"
+                  class="btn btn-outline-primary btn-sm"
                   onClick={() => { setShowModal(false); setForm(empty); }}
                   disabled={saving()}
                 >
                   取消
                 </button>
-                <button type="submit" class="btn btn-primary" disabled={saving()}>
+                <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
                   {saving() ? '创建中...' : '创建'}
                 </button>
               </div>

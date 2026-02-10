@@ -832,6 +832,27 @@ nav .container {
   margin: 0;
 }
 
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.modal-actions .btn {
+  height: 30px;
+  min-height: 30px;
+  min-width: 76px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 0.75rem;
+}
+
+.modal-actions-fill .btn {
+  flex: 1;
+  min-width: 0;
+}
+
 /* 表格 */
 .table-container {
   overflow-x: auto;

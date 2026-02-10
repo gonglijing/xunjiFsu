@@ -631,11 +631,11 @@ export function Northbound() {
                 </div>
               </Show>
 
-              <div class="flex" style={{ gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
-                <button type="button" class="btn" onClick={resetForm} disabled={saving()}>
+              <div class="modal-actions" style={{ marginTop: '12px' }}>
+                <button type="button" class="btn btn-outline-primary btn-sm" onClick={resetForm} disabled={saving()}>
                   取消
                 </button>
-                <button type="submit" class="btn btn-primary" disabled={saving()}>
+                <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
                   {saving() ? '保存中...' : (editing() ? '保存' : '创建')}
                 </button>
               </div>
