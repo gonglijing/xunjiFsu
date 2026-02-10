@@ -90,6 +90,7 @@ type SagooAdapter struct {
 	mu          sync.RWMutex
 	initialized bool
 	connected   bool
+	loopState   adapterLoopState
 	seq         uint64
 }
 
@@ -102,6 +103,7 @@ func NewSagooAdapter(name string) *SagooAdapter {
 		latestData:   make([]*models.CollectData, 0),
 		alarmQueue:   make([]*models.AlarmPayload, 0),
 		commandQueue: make([]*models.NorthboundCommand, 0),
+		loopState:    adapterLoopStopped,
 	}
 }
 
@@ -176,6 +178,7 @@ func (a *SagooAdapter) Initialize(configStr string) error {
 	a.stopChan = make(chan struct{})
 	a.initialized = true
 	a.connected = true
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	// 订阅命令主题
@@ -189,8 +192,9 @@ func (a *SagooAdapter) Initialize(configStr string) error {
 // Start 启动适配器的后台线程
 func (a *SagooAdapter) Start() {
 	a.mu.Lock()
-	if a.initialized && !a.enabled {
+	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		a.enabled = true
+		a.loopState = adapterLoopRunning
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -210,6 +214,7 @@ func (a *SagooAdapter) Stop() {
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
+		a.loopState = adapterLoopStopping
 		if stopChan != nil {
 			close(stopChan)
 		}
@@ -221,6 +226,7 @@ func (a *SagooAdapter) Stop() {
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
+		a.loopState = adapterLoopStopped
 		a.mu.Unlock()
 	}
 	log.Printf("Sagoo adapter stopped: %s", a.name)
@@ -291,6 +297,7 @@ func (a *SagooAdapter) Close() error {
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	// 刷新剩余数据
@@ -390,7 +397,12 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 
 // runLoop 单协程事件循环（实时与报警）
 func (a *SagooAdapter) runLoop() {
-	defer a.wg.Done()
+	defer func() {
+		a.mu.Lock()
+		a.loopState = adapterLoopStopped
+		a.mu.Unlock()
+		a.wg.Done()
+	}()
 
 	a.mu.RLock()
 	reportInterval := a.reportEvery
@@ -888,6 +900,7 @@ func (a *SagooAdapter) GetStats() map[string]interface{} {
 		"enabled":       a.enabled,
 		"initialized":   a.initialized,
 		"connected":     a.connected && a.client != nil && a.client.IsConnected(),
+		"loop_state":    a.loopState.String(),
 		"interval_ms":   a.reportEvery.Milliseconds(),
 		"pending_data":  dataCount,
 		"pending_alarm": alarmCount,

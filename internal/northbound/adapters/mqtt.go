@@ -69,6 +69,7 @@ type MQTTAdapter struct {
 	initialized       bool
 	enabled           bool
 	connected         bool
+	loopState         adapterLoopState
 	reconnectInterval time.Duration
 }
 
@@ -84,6 +85,7 @@ func NewMQTTAdapter(name string) *MQTTAdapter {
 		reconnectNow:      make(chan struct{}, 1),
 		pendingData:       make([]*models.CollectData, 0),
 		pendingAlarms:     make([]*models.AlarmPayload, 0),
+		loopState:         adapterLoopStopped,
 	}
 }
 
@@ -160,6 +162,7 @@ func (a *MQTTAdapter) Initialize(configStr string) error {
 	a.client = client
 	a.initialized = true
 	a.connected = true
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	log.Printf("MQTT adapter initialized: %s (broker=%s, topic=%s)", a.name, a.broker, a.topic)
@@ -266,7 +269,7 @@ func (a *MQTTAdapter) reconnectOnce() error {
 func (a *MQTTAdapter) Start() {
 	needReconnect := false
 	a.mu.Lock()
-	if a.initialized && !a.enabled {
+	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -277,6 +280,7 @@ func (a *MQTTAdapter) Start() {
 			a.reconnectNow = make(chan struct{}, 1)
 		}
 		a.enabled = true
+		a.loopState = adapterLoopRunning
 		needReconnect = !a.connected
 		a.wg.Add(1)
 		go a.runLoop()
@@ -295,6 +299,7 @@ func (a *MQTTAdapter) Stop() {
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
+		a.loopState = adapterLoopStopping
 		if stopChan != nil {
 			close(stopChan)
 		}
@@ -306,6 +311,7 @@ func (a *MQTTAdapter) Stop() {
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
+		a.loopState = adapterLoopStopped
 		a.mu.Unlock()
 	}
 	log.Printf("MQTT adapter stopped: %s", a.name)
@@ -393,6 +399,7 @@ func (a *MQTTAdapter) Close() error {
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
+	a.loopState = adapterLoopStopped
 	a.client = nil
 	a.stopChan = nil
 	a.dataChan = nil
@@ -408,7 +415,12 @@ func (a *MQTTAdapter) Close() error {
 
 // runLoop 单协程事件循环（数据/报警/重连）
 func (a *MQTTAdapter) runLoop() {
-	defer a.wg.Done()
+	defer func() {
+		a.mu.Lock()
+		a.loopState = adapterLoopStopped
+		a.mu.Unlock()
+		a.wg.Done()
+	}()
 
 	a.mu.RLock()
 	interval := a.interval
@@ -637,6 +649,7 @@ func (a *MQTTAdapter) GetStats() map[string]interface{} {
 	enabled := a.enabled
 	initialized := a.initialized
 	connected := a.connected
+	loopState := a.loopState
 	interval := a.interval
 	a.mu.RUnlock()
 
@@ -654,6 +667,7 @@ func (a *MQTTAdapter) GetStats() map[string]interface{} {
 		"enabled":       enabled,
 		"initialized":   initialized,
 		"connected":     connected,
+		"loop_state":    loopState.String(),
 		"interval_ms":   interval.Milliseconds(),
 		"pending_data":  pendingCount,
 		"pending_alarm": alarmCount,

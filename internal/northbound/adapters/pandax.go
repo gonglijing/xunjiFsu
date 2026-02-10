@@ -115,6 +115,7 @@ type PandaXAdapter struct {
 	initialized       bool
 	enabled           bool
 	connected         bool
+	loopState         adapterLoopState
 	reconnectInterval time.Duration
 	lastSend          time.Time
 	seq               uint64
@@ -134,6 +135,7 @@ func NewPandaXAdapter(name string) *PandaXAdapter {
 		alarmQueue:        make([]*models.AlarmPayload, 0),
 		commandQueue:      make([]*models.NorthboundCommand, 0),
 		reconnectInterval: defaultPandaXReconnectInterval,
+		loopState:         adapterLoopStopped,
 	}
 }
 
@@ -222,6 +224,7 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 	a.initialized = true
 	a.connected = true
 	a.enabled = false
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	a.subscribeRPCTopics(client)
@@ -233,8 +236,9 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 func (a *PandaXAdapter) Start() {
 	needReconnect := false
 	a.mu.Lock()
-	if a.initialized && !a.enabled {
+	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		a.enabled = true
+		a.loopState = adapterLoopRunning
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -262,6 +266,7 @@ func (a *PandaXAdapter) Stop() {
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
+		a.loopState = adapterLoopStopping
 		if stopChan != nil {
 			close(stopChan)
 		}
@@ -274,6 +279,7 @@ func (a *PandaXAdapter) Stop() {
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
+		a.loopState = adapterLoopStopped
 		a.mu.Unlock()
 	}
 }
@@ -356,6 +362,7 @@ func (a *PandaXAdapter) Close() error {
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	_ = a.flushRealtime()
@@ -481,6 +488,7 @@ func (a *PandaXAdapter) GetStats() map[string]interface{} {
 		"enabled":                 a.enabled,
 		"initialized":             a.initialized,
 		"connected":               a.connected && a.client != nil && a.client.IsConnected(),
+		"loop_state":              a.loopState.String(),
 		"interval_ms":             a.reportEvery.Milliseconds(),
 		"pending_data":            pendingData,
 		"pending_alarm":           pendingAlarm,
@@ -505,7 +513,12 @@ func (a *PandaXAdapter) PendingCommandCount() int {
 }
 
 func (a *PandaXAdapter) runLoop() {
-	defer a.wg.Done()
+	defer func() {
+		a.mu.Lock()
+		a.loopState = adapterLoopStopped
+		a.mu.Unlock()
+		a.wg.Done()
+	}()
 
 	a.mu.RLock()
 	reportInterval := a.reportEvery

@@ -76,4 +76,7 @@ func TestIThingsSingleLoop_StopThenCloseSafe(t *testing.T) {
 	if adapter.IsEnabled() {
 		t.Fatal("adapter should be disabled after Close")
 	}
+	if adapter.loopState != adapterLoopStopped {
+		t.Fatalf("loopState=%s, want=stopped", adapter.loopState.String())
+	}
 }

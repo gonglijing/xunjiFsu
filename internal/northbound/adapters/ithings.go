@@ -119,6 +119,7 @@ type IThingsAdapter struct {
 	initialized bool
 	enabled     bool
 	connected   bool
+	loopState   adapterLoopState
 	lastSend    time.Time
 	seq         uint64
 }
@@ -133,6 +134,7 @@ func NewIThingsAdapter(name string) *IThingsAdapter {
 		alarmQueue:    make([]*models.AlarmPayload, 0),
 		commandQueue:  make([]*models.NorthboundCommand, 0),
 		requestStates: make(map[string]*iThingsRequestState),
+		loopState:     adapterLoopStopped,
 	}
 }
 
@@ -190,6 +192,7 @@ func (a *IThingsAdapter) Initialize(configStr string) error {
 	a.initialized = true
 	a.connected = true
 	a.enabled = false
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	a.subscribeDownTopics(client)
@@ -200,8 +203,9 @@ func (a *IThingsAdapter) Initialize(configStr string) error {
 
 func (a *IThingsAdapter) Start() {
 	a.mu.Lock()
-	if a.initialized && !a.enabled {
+	if a.initialized && !a.enabled && a.loopState == adapterLoopStopped {
 		a.enabled = true
+		a.loopState = adapterLoopRunning
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
@@ -220,6 +224,7 @@ func (a *IThingsAdapter) Stop() {
 	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
+		a.loopState = adapterLoopStopping
 		if stopChan != nil {
 			close(stopChan)
 		}
@@ -231,6 +236,7 @@ func (a *IThingsAdapter) Stop() {
 		if a.stopChan == stopChan {
 			a.stopChan = nil
 		}
+		a.loopState = adapterLoopStopped
 		a.mu.Unlock()
 	}
 	log.Printf("iThings adapter stopped: %s", a.name)
@@ -295,6 +301,7 @@ func (a *IThingsAdapter) Close() error {
 	a.initialized = false
 	a.connected = false
 	a.enabled = false
+	a.loopState = adapterLoopStopped
 	a.mu.Unlock()
 
 	_ = a.flushRealtime()
@@ -432,6 +439,7 @@ func (a *IThingsAdapter) GetStats() map[string]interface{} {
 		"enabled":                    a.enabled,
 		"initialized":                a.initialized,
 		"connected":                  a.connected && a.client != nil && a.client.IsConnected(),
+		"loop_state":                 a.loopState.String(),
 		"interval_ms":                a.reportEvery.Milliseconds(),
 		"pending_data":               pendingData,
 		"pending_alarm":              pendingAlarm,
@@ -455,7 +463,12 @@ func (a *IThingsAdapter) PendingCommandCount() int {
 }
 
 func (a *IThingsAdapter) runLoop() {
-	defer a.wg.Done()
+	defer func() {
+		a.mu.Lock()
+		a.loopState = adapterLoopStopped
+		a.mu.Unlock()
+		a.wg.Done()
+	}()
 
 	a.mu.RLock()
 	reportInterval := a.reportEvery

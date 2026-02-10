@@ -48,4 +48,7 @@ func TestMQTTSingleLoop_StopThenCloseSafe(t *testing.T) {
 	if a.IsEnabled() {
 		t.Fatalf("expected adapter disabled after Close")
 	}
+	if a.loopState != adapterLoopStopped {
+		t.Fatalf("loopState=%s, want=stopped", a.loopState.String())
+	}
 }
