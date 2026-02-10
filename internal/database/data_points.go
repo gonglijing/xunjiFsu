@@ -511,8 +511,8 @@ func BatchSaveLatestDataPoints(entries []DataPointEntry) error {
 	return tx.Commit()
 }
 
-// InsertCollectDataWithOptions 写入缓存，并可选写入最新数据（upsert 模式）
-func InsertCollectDataWithOptions(data *models.CollectData, storeLatest bool) error {
+// InsertCollectDataWithOptions 写入实时缓存，并按需写入历史数据。
+func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) error {
 	if data == nil {
 		return fmt.Errorf("collect data is nil")
 	}
@@ -525,7 +525,7 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeLatest bool) er
 		if err := SaveDataCache(data.DeviceID, deviceName, field, value, "string"); err != nil {
 			log.Printf("SaveDataCache error: %v", err)
 		}
-		if !storeLatest {
+		if !storeHistory {
 			continue
 		}
 		entries = append(entries, DataPointEntry{
@@ -537,9 +537,9 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeLatest bool) er
 			CollectedAt: data.Timestamp,
 		})
 	}
-	if !storeLatest {
+	if !storeHistory {
 		return nil
 	}
-	// 使用 upsert 模式，只保存最新值
+	// 使用 upsert 模式写入 data_points（按采集时间形成历史序列）
 	return BatchSaveLatestDataPoints(entries)
 }

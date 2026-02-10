@@ -2,11 +2,23 @@ package database
 
 import (
 	"database/sql"
-	"github.com/gonglijing/xunjiFsu/internal/models"
 	"log"
+	"sync/atomic"
+	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 // ==================== 实时数据缓存操作 (data.db - 内存缓存) ====================
+
+var (
+	dataCacheCleanupCounter uint64
+	dataCacheLastCleanupNS  int64
+
+	// 允许在测试中覆盖
+	dataCacheCleanupEveryWrites uint64        = 128
+	dataCacheCleanupMinInterval time.Duration = 2 * time.Second
+)
 
 // SaveDataCache 保存实时数据缓存（内存）
 func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType string) error {
@@ -23,9 +35,35 @@ func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType strin
 		return err
 	}
 
-	// 检查并清理过量的缓存条目
-	enforceDataCacheLimit()
+	// 节流检查并清理过量缓存，避免每次写入都 count(*)
+	maybeEnforceDataCacheLimit()
 	return nil
+}
+
+func maybeEnforceDataCacheLimit() {
+	if maxDataCacheLimit <= 0 {
+		return
+	}
+
+	writes := atomic.AddUint64(&dataCacheCleanupCounter, 1)
+	now := time.Now().UnixNano()
+	last := atomic.LoadInt64(&dataCacheLastCleanupNS)
+	minIntervalNS := int64(dataCacheCleanupMinInterval)
+	if minIntervalNS < 0 {
+		minIntervalNS = 0
+	}
+
+	if dataCacheCleanupEveryWrites > 0 && writes%dataCacheCleanupEveryWrites != 0 {
+		if now-last < minIntervalNS {
+			return
+		}
+	}
+
+	if !atomic.CompareAndSwapInt64(&dataCacheLastCleanupNS, last, now) {
+		return
+	}
+
+	enforceDataCacheLimit()
 }
 
 // enforceDataCacheLimit 强制执行缓存大小限制

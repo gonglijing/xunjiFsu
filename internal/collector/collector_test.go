@@ -56,9 +56,7 @@ func TestShouldStoreHistory(t *testing.T) {
 	}
 }
 
-func TestThresholdChecker_Check(t *testing.T) {
-	tc := NewThresholdChecker()
-
+func TestThresholdMatch(t *testing.T) {
 	cases := []struct {
 		value     float64
 		op        string
@@ -77,8 +75,8 @@ func TestThresholdChecker_Check(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		if got := tc.Check(c.value, c.op, c.threshold); got != c.want {
-			t.Fatalf("Check(%v %s %v) = %v, want %v", c.value, c.op, c.threshold, got, c.want)
+		if got := thresholdMatch(c.value, c.op, c.threshold); got != c.want {
+			t.Fatalf("thresholdMatch(%v %s %v) = %v, want %v", c.value, c.op, c.threshold, got, c.want)
 		}
 	}
 }
@@ -326,12 +324,12 @@ func TestSyncDeviceTaskLocked(t *testing.T) {
 	}
 }
 
-func TestStartTickerWorker_NilWorker(t *testing.T) {
+func TestStartAdjustableTickerWorker_NilWorker(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
 	c.stopChan = make(chan struct{})
-	c.startTickerWorker(5*time.Millisecond, nil)
+	c.startAdjustableTickerWorker(5*time.Millisecond, make(chan time.Duration, 1), nil)
 	close(c.stopChan)
 }
 

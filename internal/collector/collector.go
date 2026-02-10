@@ -39,8 +39,6 @@ type Collector struct {
 	// 设备采集任务
 	tasks    map[int64]*collectTask
 	taskHeap *taskHeap // 优先队列，按下次采集时间排序
-	// 最新值缓存（用于查询）
-	latestDataCache map[int64]*models.CollectData
 }
 
 // collectTask 采集任务
@@ -110,7 +108,6 @@ func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northbound
 		tasks:                make(map[int64]*collectTask),
 		taskHeap:             h,
 		resourceLock:         make(map[int64]chan struct{}),
-		latestDataCache:      make(map[int64]*models.CollectData),
 	}
 }
 
@@ -127,7 +124,6 @@ func (c *Collector) Start() error {
 	c.deviceSyncResetChan = make(chan time.Duration, 1)
 	c.commandPollResetChan = make(chan time.Duration, 1)
 	c.tasks = make(map[int64]*collectTask)
-	c.latestDataCache = make(map[int64]*models.CollectData)
 	h := &taskHeap{}
 	heap.Init(h)
 	c.taskHeap = h
@@ -253,17 +249,16 @@ func (c *Collector) collectOnce(task *collectTask) {
 
 	collect := driverResultToCollectData(device, result)
 
-	// 保存最新值到数据库（upsert 模式，只保存最新值）
-	if err := database.InsertCollectDataWithOptions(collect, true); err != nil {
+	storeHistory := shouldStoreHistory(task, collect.Timestamp)
+
+	// 保存数据：实时缓存始终写入，历史按设备 storage_interval 控制
+	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
 		log.Printf("Failed to insert data points: %v", err)
 	}
-	c.markTaskCollected(task, collect.Timestamp, true)
+	c.markTaskCollected(task, collect.Timestamp, storeHistory)
 
-	// 缓存最新值（用于周期上传）
-	c.cacheLatestData(collect)
-
-	// 阈值计算 & 报警（但不上传北向，北向由周期任务负责）
-	c.handleThreshold(collect)
+	// 阈值计算 & 报警（按设备状态边沿触发 + 限频）
+	c.handleThresholdForDevice(device, collect)
 }
 
 // getResourceLock 返回该资源的串行锁
@@ -468,6 +463,7 @@ func (c *Collector) logDeviceSyncAction(device *models.Device, action deviceSync
 
 func (c *Collector) removeTaskLocked(deviceID int64) {
 	delete(c.tasks, deviceID)
+	clearAlarmStateForDevice(deviceID)
 }
 
 func (c *Collector) notifyTaskChangedLocked() {
@@ -549,28 +545,6 @@ func (c *Collector) waitForStopOrWake(delay time.Duration) bool {
 	case <-c.wakeChan:
 		return false
 	}
-}
-
-func (c *Collector) startTickerWorker(interval time.Duration, worker func()) {
-	if worker == nil {
-		return
-	}
-
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-c.stopChan:
-				return
-			case <-ticker.C:
-				worker()
-			}
-		}
-	}()
 }
 
 func (c *Collector) startAdjustableTickerWorker(interval time.Duration, resetChan <-chan time.Duration, worker func()) {
@@ -684,9 +658,24 @@ func parseFloatFieldValue(fields map[string]string, field string) (float64, bool
 		return 0, false
 	}
 
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return 0, false
+	}
+
 	valueStr, ok := fields[field]
 	if !ok {
-		return 0, false
+		// 兼容字段大小写和历史空白差异
+		for key, value := range fields {
+			if strings.EqualFold(strings.TrimSpace(key), field) {
+				valueStr = value
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return 0, false
+		}
 	}
 
 	value, err := strconv.ParseFloat(strings.TrimSpace(valueStr), 64)
@@ -708,8 +697,7 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 		return err
 	}
 
-	checker := NewThresholdChecker()
-
+	now := time.Now()
 	for _, threshold := range thresholds {
 		if threshold == nil {
 			continue
@@ -717,12 +705,16 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 
 		value, ok := parseFloatFieldValue(data.Fields, threshold.FieldName)
 		if !ok {
+			_ = shouldEmitAlarm(device.ID, threshold, false, now, 0)
 			continue
 		}
 
-		if checker.Check(value, threshold.Operator, threshold.Value) {
-			c.handleAlarm(device, threshold, value)
+		matched := thresholdMatch(value, threshold.Operator, threshold.Value)
+		if !shouldEmitAlarm(device.ID, threshold, matched, now, 0) {
+			continue
 		}
+
+		c.handleAlarm(device, threshold, value)
 	}
 
 	return nil
@@ -744,6 +736,10 @@ func (c *Collector) handleAlarm(device *models.Device, threshold *models.Thresho
 
 	if _, err := database.CreateAlarmLog(logEntry); err != nil {
 		log.Printf("Failed to create alarm log: %v", err)
+	}
+
+	if c.northboundMgr == nil {
+		return
 	}
 
 	// 发送到北向
@@ -788,38 +784,14 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	}
 }
 
-// handleThresholdAndNorthbound 阈值 + 北向上传（已废弃，使用周期上传模式）
-func (c *Collector) handleThresholdAndNorthbound(data *models.CollectData) {
-	device, err := database.GetDeviceByID(data.DeviceID)
-	if err == nil && device != nil {
-		if err := c.checkThresholds(device, data); err != nil {
-			log.Printf("check thresholds error: %v", err)
-		}
-	}
-	// 改为周期上传，不再立即上传
-}
-
-// handleThreshold 仅检查阈值（用于采集时触发报警，不发送北向）
-func (c *Collector) handleThreshold(data *models.CollectData) {
-	device, err := database.GetDeviceByID(data.DeviceID)
-	if err == nil && device != nil {
-		if err := c.checkThresholds(device, data); err != nil {
-			log.Printf("check thresholds error: %v", err)
-		}
-	}
-}
-
-// cacheLatestData 缓存最新数据（用于周期上传）
-func (c *Collector) cacheLatestData(data *models.CollectData) {
-	if data == nil {
+// handleThresholdForDevice 仅检查阈值（用于采集时触发报警）
+func (c *Collector) handleThresholdForDevice(device *models.Device, data *models.CollectData) {
+	if device == nil || data == nil {
 		return
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// 更新或添加最新值
-	c.latestDataCache[data.DeviceID] = data
-	log.Printf("Collector: cached latest data for device %d (%d fields)", data.DeviceID, len(data.Fields))
+	if err := c.checkThresholds(device, data); err != nil {
+		log.Printf("check thresholds error: %v", err)
+	}
 }
 
 func (c *Collector) processNorthboundCommands() {
@@ -955,35 +927,5 @@ func buildNorthboundCommandConfig(command *models.NorthboundCommand, device *mod
 		"device_key":     command.DeviceKey,
 		"deviceKey":      command.DeviceKey,
 		"device_address": device.DeviceAddress,
-	}
-}
-
-// ThresholdChecker 阈值检查器
-type ThresholdChecker struct {
-	mu sync.RWMutex
-}
-
-// NewThresholdChecker 创建阈值检查器
-func NewThresholdChecker() *ThresholdChecker {
-	return &ThresholdChecker{}
-}
-
-// Check 检查值是否触发阈值
-func (t *ThresholdChecker) Check(value float64, operator string, threshold float64) bool {
-	switch operator {
-	case ">":
-		return value > threshold
-	case "<":
-		return value < threshold
-	case ">=":
-		return value >= threshold
-	case "<=":
-		return value <= threshold
-	case "==":
-		return value == threshold
-	case "!=":
-		return value != threshold
-	default:
-		return false
 	}
 }
