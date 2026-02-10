@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -613,7 +612,7 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 	subProductID := pickFirstNonEmpty2(strings.TrimSpace(data.ProductKey), gatewayProductID)
 	subDeviceName := pickFirstNonEmpty2(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode))
 	if subDeviceName == "" {
-		subDeviceName = virtualDeviceName(data.DeviceID)
+		subDeviceName = defaultDeviceToken(data.DeviceID)
 	}
 
 	payload := map[string]interface{}{
@@ -666,7 +665,7 @@ func (a *IThingsAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, 
 	subProductID := pickFirstNonEmpty2(strings.TrimSpace(alarm.ProductKey), gatewayProductID)
 	subDeviceName := strings.TrimSpace(a.resolveAlarmDeviceName(alarm, deviceNameMode))
 	if subDeviceName == "" {
-		subDeviceName = virtualDeviceName(alarm.DeviceID)
+		subDeviceName = defaultDeviceToken(alarm.DeviceID)
 	}
 
 	params := map[string]interface{}{
@@ -735,10 +734,6 @@ func (a *IThingsAdapter) publish(topic string, payload []byte) error {
 	a.mu.Unlock()
 
 	return nil
-}
-
-func virtualDeviceName(deviceID int64) string {
-	return "device_" + strconv.FormatInt(deviceID, 10)
 }
 
 func (a *IThingsAdapter) subscribeDownTopics(client mqtt.Client) {

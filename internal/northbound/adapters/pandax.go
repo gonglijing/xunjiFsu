@@ -1470,7 +1470,3 @@ func (a *PandaXAdapter) nextID(prefix string) string {
 func formatMetricFloat2(value float64) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
-
-func defaultDeviceToken(deviceID int64) string {
-	return "device_" + strconv.FormatInt(deviceID, 10)
-}
