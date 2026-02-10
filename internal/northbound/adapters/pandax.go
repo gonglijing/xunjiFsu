@@ -1447,14 +1447,20 @@ func normalizePandaXServerURL(serverURL, protocol string, port int) string {
 }
 
 func requestIDFromPandaXRPCTopic(topic string) string {
-	parts := splitTopic(topic)
-	if len(parts) < 6 {
+	trimmed := strings.Trim(strings.TrimSpace(topic), "/")
+	const prefix = "v1/devices/me/rpc/request/"
+	if !strings.HasPrefix(trimmed, prefix) {
 		return ""
 	}
-	if parts[0] != "v1" || parts[1] != "devices" || parts[2] != "me" || parts[3] != "rpc" || parts[4] != "request" {
+
+	requestID := trimmed[len(prefix):]
+	if requestID == "" {
 		return ""
 	}
-	return strings.TrimSpace(parts[5])
+	if idx := strings.IndexByte(requestID, '/'); idx >= 0 {
+		requestID = requestID[:idx]
+	}
+	return strings.TrimSpace(requestID)
 }
 
 func maxInt2(left, right int) int {

@@ -248,3 +248,27 @@ func TestFetchCurrentSystemStats_FormatValues(t *testing.T) {
 		t.Fatalf("uptime=%q, want=123", data.Fields["uptime"])
 	}
 }
+
+func TestRequestIDFromPandaXRPCTopic(t *testing.T) {
+	cases := []struct {
+		name  string
+		topic string
+		want  string
+	}{
+		{name: "normal", topic: "v1/devices/me/rpc/request/123", want: "123"},
+		{name: "leading trailing slash", topic: "/v1/devices/me/rpc/request/abc/", want: "abc"},
+		{name: "extra segments", topic: "v1/devices/me/rpc/request/xyz/extra", want: "xyz"},
+		{name: "spaces", topic: "  /v1/devices/me/rpc/request/ 777 / ", want: "777"},
+		{name: "invalid prefix", topic: "v1/devices/me/rpc/response/123", want: ""},
+		{name: "missing request id", topic: "v1/devices/me/rpc/request", want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := requestIDFromPandaXRPCTopic(tc.topic)
+			if got != tc.want {
+				t.Fatalf("requestIDFromPandaXRPCTopic()=%q, want=%q", got, tc.want)
+			}
+		})
+	}
+}
