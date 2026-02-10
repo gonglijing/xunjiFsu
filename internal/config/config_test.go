@@ -245,6 +245,18 @@ func TestLoadFromEnv_TLS_AutoNumber(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnv_TLS_AutoTrueWithSpaces(t *testing.T) {
+	os.Setenv("TLS_AUTO", "  true  ")
+	defer os.Unsetenv("TLS_AUTO")
+
+	cfg := &Config{}
+	loadFromEnv(cfg)
+
+	if cfg.TLSAuto != true {
+		t.Errorf("TLSAuto = %v, want true", cfg.TLSAuto)
+	}
+}
+
 func TestLoadFromEnv_Collector(t *testing.T) {
 	os.Setenv("COLLECTOR_ENABLED", "false")
 	os.Setenv("COLLECTOR_WORKERS", "20")

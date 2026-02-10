@@ -116,7 +116,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-var defaultEnvConfig = *DefaultConfig()
+var defaultEnvConfig = DefaultConfig()
 
 // Load 从配置文件和环境变量加载配置
 func Load() (*Config, error) {
@@ -270,9 +270,7 @@ func loadFromEnv(cfg *Config) {
 
 	setStringFromEnv(&cfg.TLSCertFile, "TLS_CERT_FILE")
 	setStringFromEnv(&cfg.TLSKeyFile, "TLS_KEY_FILE")
-	if v, ok := envValue("TLS_AUTO"); ok && (strings.EqualFold(v, "true") || v == "1") {
-		cfg.TLSAuto = true
-	}
+	setBoolFromEnvAllowOne(&cfg.TLSAuto, "TLS_AUTO")
 	setStringFromEnv(&cfg.TLSDomain, "TLS_DOMAIN")
 	setStringFromEnv(&cfg.TLSCacheDir, "TLS_CACHE_DIR")
 
@@ -322,7 +320,16 @@ func setBoolFromEnv(dst *bool, key string) {
 		return
 	}
 	if value, ok := envValue(key); ok {
-		*dst = strings.EqualFold(value, "true")
+		*dst = parseTrueBool(value)
+	}
+}
+
+func setBoolFromEnvAllowOne(dst *bool, key string) {
+	if dst == nil {
+		return
+	}
+	if value, ok := envValue(key); ok {
+		*dst = parseTrueBoolOrOne(value)
 	}
 }
 
@@ -394,6 +401,15 @@ func envValue(key string) (string, bool) {
 		return "", false
 	}
 	return value, true
+}
+
+func parseTrueBool(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), "true")
+}
+
+func parseTrueBoolOrOne(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.EqualFold(trimmed, "true") || trimmed == "1"
 }
 
 // GetAllowedOrigins 获取允许的跨域来源列表
