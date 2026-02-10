@@ -469,6 +469,66 @@ func TestUpsertTaskLocked_ConfigChangedCreatesNewTask(t *testing.T) {
 	}
 }
 
+func TestUpsertTaskLocked_ResourceChangedReleasesOldLock(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	resourceOld := int64(401)
+	resourceNew := int64(402)
+	now := time.Now()
+	device := &models.Device{ID: 401, Enabled: 1, ResourceID: &resourceOld, CollectInterval: 1000, StorageInterval: 60, UpdatedAt: now}
+
+	c.mu.Lock()
+	_ = c.upsertTaskLocked(device)
+	c.resourceLock[resourceOld] = make(chan struct{}, 1)
+	c.resourceLock[resourceNew] = make(chan struct{}, 1)
+
+	device2 := *device
+	device2.ResourceID = &resourceNew
+	device2.UpdatedAt = now.Add(time.Second)
+	action := c.upsertTaskLocked(&device2)
+	_, hasOld := c.resourceLock[resourceOld]
+	_, hasNew := c.resourceLock[resourceNew]
+	c.mu.Unlock()
+
+	if action != deviceSyncActionUpdated {
+		t.Fatalf("expected updated action, got %v", action)
+	}
+	if hasOld {
+		t.Fatalf("old resource lock should be released after resource change")
+	}
+	if !hasNew {
+		t.Fatalf("new resource lock should still exist")
+	}
+}
+
+func TestUpsertTaskLocked_ResourceChangedKeepsSharedOldLock(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	resourceOld := int64(501)
+	resourceNew := int64(502)
+	now := time.Now()
+	deviceA := &models.Device{ID: 501, Enabled: 1, ResourceID: &resourceOld, CollectInterval: 1000, StorageInterval: 60, UpdatedAt: now}
+	deviceB := &models.Device{ID: 502, Enabled: 1, ResourceID: &resourceOld, CollectInterval: 1000, StorageInterval: 60, UpdatedAt: now}
+
+	c.mu.Lock()
+	_ = c.upsertTaskLocked(deviceA)
+	_ = c.upsertTaskLocked(deviceB)
+	c.resourceLock[resourceOld] = make(chan struct{}, 1)
+
+	deviceA2 := *deviceA
+	deviceA2.ResourceID = &resourceNew
+	deviceA2.UpdatedAt = now.Add(time.Second)
+	_ = c.upsertTaskLocked(&deviceA2)
+	_, hasOld := c.resourceLock[resourceOld]
+	c.mu.Unlock()
+
+	if !hasOld {
+		t.Fatalf("old resource lock should remain while another device still uses it")
+	}
+}
+
 func TestShouldRefreshCollectTask(t *testing.T) {
 	now := time.Now()
 	baseDevice := &models.Device{

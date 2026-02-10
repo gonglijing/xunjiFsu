@@ -434,9 +434,19 @@ func (c *Collector) upsertTaskLocked(device *models.Device) deviceSyncAction {
 		return deviceSyncActionNone
 	}
 
+	var oldResourceID *int64
+	if exists && current != nil && current.device != nil {
+		oldResourceID = current.device.ResourceID
+	}
+
 	task := newCollectTask(device, current)
 	c.tasks[device.ID] = task
 	heap.Push(c.taskHeap, task)
+
+	if exists && !sameOptionalInt64(oldResourceID, task.device.ResourceID) {
+		c.releaseResourceLockIfUnusedLocked(oldResourceID)
+	}
+
 	if exists {
 		return deviceSyncActionUpdated
 	}
