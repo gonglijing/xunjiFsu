@@ -16,6 +16,7 @@ type thresholdCache struct {
 	lastRefresh time.Time
 	interval    time.Duration
 	stopChan    chan struct{}
+	running     bool
 }
 
 // 缓存实例
@@ -27,31 +28,50 @@ func init() {
 		thresholds:  make(map[int64][]*models.Threshold),
 		interval:    time.Minute, // 缓存刷新间隔
 		lastRefresh: time.Time{},
-		stopChan:    make(chan struct{}),
 	}
 }
 
 // StartThresholdCache 启动阈值缓存刷新任务
 func StartThresholdCache() {
+	cache.mu.Lock()
+	if cache.running {
+		cache.mu.Unlock()
+		return
+	}
+	stopChan := make(chan struct{})
+	cache.stopChan = stopChan
+	cache.running = true
+	cache.mu.Unlock()
+
 	cache.Refresh()
-	go cache.refreshLoop()
+	go cache.refreshLoop(stopChan)
 	log.Println("Threshold cache started")
 }
 
 // StopThresholdCache 停止阈值缓存刷新任务
 func StopThresholdCache() {
-	close(cache.stopChan)
+	cache.mu.Lock()
+	if !cache.running {
+		cache.mu.Unlock()
+		return
+	}
+	stopChan := cache.stopChan
+	cache.stopChan = nil
+	cache.running = false
+	cache.mu.Unlock()
+
+	close(stopChan)
 	log.Println("Threshold cache stopped")
 }
 
 // refreshLoop 定期刷新缓存
-func (c *thresholdCache) refreshLoop() {
+func (c *thresholdCache) refreshLoop(stopChan <-chan struct{}) {
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-c.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
 			c.Refresh()
@@ -61,27 +81,42 @@ func (c *thresholdCache) refreshLoop() {
 
 // Refresh 刷新所有阈值缓存
 func (c *thresholdCache) Refresh() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// 获取所有设备
 	devices, err := database.GetAllDevices()
 	if err != nil {
 		log.Printf("Failed to refresh threshold cache: %v", err)
 		return
 	}
-
-	for _, device := range devices {
-		thresholds, err := database.GetThresholdsByDeviceID(device.ID)
-		if err != nil {
-			log.Printf("Failed to load thresholds for device %d: %v", device.ID, err)
-			continue
-		}
-		c.thresholds[device.ID] = thresholds
+	thresholds, err := database.GetAllThresholds()
+	if err != nil {
+		log.Printf("Failed to refresh threshold cache thresholds: %v", err)
+		return
 	}
 
+	next := make(map[int64][]*models.Threshold, len(devices))
+	for _, device := range devices {
+		if device == nil || device.ID == 0 {
+			continue
+		}
+		next[device.ID] = nil
+	}
+
+	for _, threshold := range thresholds {
+		if threshold == nil || threshold.DeviceID == 0 {
+			continue
+		}
+		if _, exists := next[threshold.DeviceID]; !exists {
+			continue
+		}
+		next[threshold.DeviceID] = append(next[threshold.DeviceID], threshold)
+	}
+
+	c.mu.Lock()
+	c.thresholds = next
 	c.lastRefresh = time.Now()
-	log.Printf("Threshold cache refreshed, %d devices", len(c.thresholds))
+	c.mu.Unlock()
+
+	log.Printf("Threshold cache refreshed, %d devices, %d thresholds", len(next), len(thresholds))
 }
 
 // GetDeviceThresholds 获取设备的阈值配置（优先从缓存获取）
