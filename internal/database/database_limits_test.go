@@ -7,6 +7,46 @@ import (
 	"time"
 )
 
+func TestApplyRuntimeLimits(t *testing.T) {
+	oldPoints := maxDataPointsLimit
+	oldCache := maxDataCacheLimit
+	defer func() {
+		maxDataPointsLimit = oldPoints
+		maxDataCacheLimit = oldCache
+	}()
+
+	ApplyRuntimeLimits(1234, 567)
+	if maxDataPointsLimit != 1234 {
+		t.Fatalf("maxDataPointsLimit = %d, want 1234", maxDataPointsLimit)
+	}
+	if maxDataCacheLimit != 567 {
+		t.Fatalf("maxDataCacheLimit = %d, want 567", maxDataCacheLimit)
+	}
+
+	ApplyRuntimeLimits(0, -1)
+	if maxDataPointsLimit != MaxDataPoints {
+		t.Fatalf("maxDataPointsLimit = %d, want default %d", maxDataPointsLimit, MaxDataPoints)
+	}
+	if maxDataCacheLimit != MaxDataCache {
+		t.Fatalf("maxDataCacheLimit = %d, want default %d", maxDataCacheLimit, MaxDataCache)
+	}
+}
+
+func TestApplySyncInterval(t *testing.T) {
+	old := syncInterval
+	defer func() { syncInterval = old }()
+
+	ApplySyncInterval(30 * time.Second)
+	if syncInterval != 30*time.Second {
+		t.Fatalf("syncInterval = %v, want 30s", syncInterval)
+	}
+
+	ApplySyncInterval(0)
+	if syncInterval != SyncInterval {
+		t.Fatalf("syncInterval = %v, want default %v", syncInterval, SyncInterval)
+	}
+}
+
 func TestTriggerSyncIfNeeded(t *testing.T) {
 	oldTrigger := syncBatchTrigger
 	oldFn := syncDataToDiskFn

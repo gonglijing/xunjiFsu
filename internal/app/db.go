@@ -9,6 +9,13 @@ import (
 )
 
 func initDatabases(cfg *config.Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	database.ApplyRuntimeLimits(cfg.MaxDataPoints, cfg.MaxDataCache)
+	database.ApplySyncInterval(cfg.SyncInterval)
+
 	logger.Info("Initializing param database (persistent mode)...")
 	if err := database.InitParamDBWithPath(cfg.ParamDBPath); err != nil {
 		return fmt.Errorf("failed to initialize param database: %w", err)

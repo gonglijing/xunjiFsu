@@ -6,20 +6,18 @@ import (
 	"log"
 	"os"
 	"time"
-
-	_ "github.com/glebarez/go-sqlite"
 )
 
 // Configuration
 const (
-	SyncInterval         = 5 * time.Minute // 同步间隔
-	SyncBatchTrigger     = 1000            // 数据量触发同步的阈值
-	DefaultParamDBFile   = "param.db"      // 配置数据库文件名
-	DataDBFile           = "data.db"       // 数据数据库文件名
-	MaxDataPoints        = 100000          // 内存数据库最大数据点数
-	MaxDataCache         = 10000           // 内存缓存最大条目数
-	DefaultRetentionDays = 30              // 默认历史保留天数
-	DefaultStorageIntervalSeconds = 300    // 默认存储周期(s)
+	SyncInterval                  = 5 * time.Minute // 同步间隔
+	SyncBatchTrigger              = 1000            // 数据量触发同步的阈值
+	DefaultParamDBFile            = "param.db"      // 配置数据库文件名
+	DataDBFile                    = "data.db"       // 数据数据库文件名
+	MaxDataPoints                 = 100000          // 内存数据库最大数据点数
+	MaxDataCache                  = 10000           // 内存缓存最大条目数
+	DefaultRetentionDays          = 30              // 默认历史保留天数
+	DefaultStorageIntervalSeconds = 300             // 默认存储周期(s)
 
 	// 连接池配置（可调整）
 	DefaultMaxOpenConns = 25        // 默认最大打开连接数
@@ -37,8 +35,38 @@ var paramDBFile = DefaultParamDBFile
 var dataDBFile = DataDBFile
 var maxDataPointsLimit = MaxDataPoints
 var maxDataCacheLimit = MaxDataCache
+var syncInterval = SyncInterval
 var syncBatchTrigger = SyncBatchTrigger
 var syncDataToDiskFn = syncDataToDisk
+
+// ApplyRuntimeLimits 应用运行时内存数据限制。
+// 当传入值小于等于0时，会回退到默认值，避免限制失效导致内存持续增长。
+func ApplyRuntimeLimits(maxDataPoints, maxDataCache int) {
+	if maxDataPoints > 0 {
+		maxDataPointsLimit = maxDataPoints
+	} else {
+		maxDataPointsLimit = MaxDataPoints
+	}
+
+	if maxDataCache > 0 {
+		maxDataCacheLimit = maxDataCache
+	} else {
+		maxDataCacheLimit = MaxDataCache
+	}
+
+	log.Printf("Applied data limits (max_data_points=%d, max_data_cache=%d)", maxDataPointsLimit, maxDataCacheLimit)
+}
+
+// ApplySyncInterval 应用数据同步间隔。
+// 当传入值小于等于0时，回退到默认值。
+func ApplySyncInterval(interval time.Duration) {
+	if interval > 0 {
+		syncInterval = interval
+	} else {
+		syncInterval = SyncInterval
+	}
+	log.Printf("Applied data sync interval: %v", syncInterval)
+}
 
 // InitParamDB 初始化配置数据库（持久化文件）
 func InitParamDB() error {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,10 +27,10 @@ func StartDataSync() {
 		return
 	}
 	dataSyncStop = make(chan struct{})
-	dataSyncTicker = time.NewTicker(SyncInterval)
+	dataSyncTicker = time.NewTicker(syncInterval)
 
 	go func() {
-		log.Printf("Data sync started (interval: %v, batch_trigger: %d)", SyncInterval, SyncBatchTrigger)
+		log.Printf("Data sync started (interval: %v, batch_trigger: %d)", syncInterval, syncBatchTrigger)
 		for {
 			select {
 			case <-dataSyncTicker.C:
@@ -107,7 +109,7 @@ func syncDataToDisk() error {
 	}
 
 	// 1. 打开/创建磁盘数据库
-	diskDB, err := sql.Open("sqlite", dataDBFile)
+	diskDB, err := openSQLite(dataDiskRWDSN(dataDBFile), 1, 1)
 	if err != nil {
 		return fmt.Errorf("failed to open data database: %w", err)
 	}
@@ -120,51 +122,10 @@ func syncDataToDisk() error {
 		return err
 	}
 
-	// 2. 批量复制数据点（仅同步已存在的部分）
-	points, err := DataDB.Query(`SELECT device_id, device_name, field_name, value, value_type, collected_at 
-		FROM data_points WHERE id <= ? ORDER BY id`, maxID)
+	// 2. attach + 单条 SQL 批量搬运，避免逐行扫描带来的分配和系统调用开销
+	count, err := syncDataPointsWithAttach(diskDB, maxID)
 	if err != nil {
-		return fmt.Errorf("failed to query data points: %w", err)
-	}
-	defer points.Close()
-
-	// 开启事务批量插入
-	tx, err := diskDB.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO data_points 
-		(device_id, device_name, field_name, value, value_type, collected_at) 
-		VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	count := 0
-	for points.Next() {
-		var deviceID int64
-		var deviceName, fieldName, value, valueType string
-		var collectedAt time.Time
-		if err := points.Scan(&deviceID, &deviceName, &fieldName, &value, &valueType, &collectedAt); err != nil {
-			tx.Rollback()
-			return err
-		}
-		deviceName = normalizeDeviceName(deviceID, deviceName)
-		if _, err := stmt.Exec(deviceID, deviceName, fieldName, value, valueType, collectedAt); err != nil {
-			tx.Rollback()
-			return err
-		}
-		count++
-	}
-	if err := points.Err(); err != nil {
-		tx.Rollback()
 		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	// 3. 删除已同步的内存数据
@@ -174,6 +135,147 @@ func syncDataToDisk() error {
 
 	log.Printf("Data synced to disk: %d points", count)
 	return nil
+}
+
+func dataDiskRWDSN(path string) string {
+	if strings.HasPrefix(path, "file:") {
+		return path
+	}
+	return "file:" + filepath.ToSlash(path)
+}
+
+func escapeSingleQuotes(path string) string {
+	return strings.ReplaceAll(path, "'", "''")
+}
+
+func getMainDatabaseFilePath(db *sql.DB) (string, error) {
+	rows, err := db.Query(`PRAGMA database_list`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var seq int
+		var name, file string
+		if err := rows.Scan(&seq, &name, &file); err != nil {
+			return "", err
+		}
+		if name == "main" {
+			return file, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func syncDataPointsWithAttach(diskDB *sql.DB, maxID int64) (int, error) {
+	if DataDB == nil {
+		return 0, fmt.Errorf("data db is not initialized")
+	}
+
+	memPath, err := getMainDatabaseFilePath(DataDB)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read memory db path: %w", err)
+	}
+
+	if strings.TrimSpace(memPath) == "" || memPath == ":memory:" {
+		return syncDataPointsRowByRow(diskDB, maxID)
+	}
+
+	tx, err := diskDB.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin sync transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	attachSQL := fmt.Sprintf("ATTACH DATABASE '%s' AS memdb", escapeSingleQuotes(memPath))
+	if _, err := tx.Exec(attachSQL); err != nil {
+		_ = tx.Rollback()
+		return syncDataPointsRowByRow(diskDB, maxID)
+	}
+	defer tx.Exec("DETACH DATABASE memdb")
+
+	if _, err := tx.Exec(
+		`UPDATE memdb.data_points SET device_name = ? WHERE device_id = ? AND device_name <> ? AND id <= ?`,
+		models.SystemStatsDeviceName,
+		models.SystemStatsDeviceID,
+		models.SystemStatsDeviceName,
+		maxID,
+	); err != nil {
+		return 0, fmt.Errorf("failed to normalize memory data before sync: %w", err)
+	}
+
+	result, err := tx.Exec(
+		`INSERT OR IGNORE INTO main.data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		 SELECT device_id, device_name, field_name, value, value_type, collected_at
+		 FROM memdb.data_points
+		 WHERE id <= ?`,
+		maxID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to bulk copy data points: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected < 0 {
+		rowsAffected = 0
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit bulk sync transaction: %w", err)
+	}
+
+	return int(rowsAffected), nil
+}
+
+func syncDataPointsRowByRow(diskDB *sql.DB, maxID int64) (int, error) {
+	points, err := DataDB.Query(`SELECT device_id, device_name, field_name, value, value_type, collected_at
+		FROM data_points WHERE id <= ? ORDER BY id`, maxID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query data points: %w", err)
+	}
+	defer points.Close()
+
+	tx, err := diskDB.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO data_points
+		(device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	count := 0
+	for points.Next() {
+		var deviceID int64
+		var deviceName, fieldName, value, valueType string
+		var collectedAt time.Time
+		if err := points.Scan(&deviceID, &deviceName, &fieldName, &value, &valueType, &collectedAt); err != nil {
+			return 0, err
+		}
+		deviceName = normalizeDeviceName(deviceID, deviceName)
+		if _, err := stmt.Exec(deviceID, deviceName, fieldName, value, valueType, collectedAt); err != nil {
+			return 0, err
+		}
+		count++
+	}
+	if err := points.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return count, nil
 }
 
 func ensureDiskDataSchema(db *sql.DB) error {
@@ -211,13 +313,10 @@ func ensureDiskDataSchema(db *sql.DB) error {
 // 如果备份文件存在，记录日志但不影响主程序运行
 // 实时数据会在系统运行后自动重新采集
 func restoreDataFromFile(filename string) error {
-	// 检查文件是否存在
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return nil
 	}
 
-	// 记录有备份文件存在，但不尝试恢复
-	// 数据会在运行时自动重新采集
 	log.Printf("Backup file exists (%s), real-time data will be collected on startup", filename)
 	return nil
 }
