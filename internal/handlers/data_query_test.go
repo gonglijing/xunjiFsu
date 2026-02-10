@@ -90,3 +90,18 @@ func TestParseHistoryDataQuery_InvalidDeviceIDValue(t *testing.T) {
 		t.Fatalf("error = %q, want %q", err.Error(), errInvalidDeviceIDMessage)
 	}
 }
+
+func TestParseHistoryDataQuery_SystemDeviceIDAllowed(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?device_id=-1&field_name=cpu_usage", nil)
+
+	query, err := parseHistoryDataQuery(req)
+	if err != nil {
+		t.Fatalf("parseHistoryDataQuery returned error: %v", err)
+	}
+	if query.DeviceID == nil || *query.DeviceID != -1 {
+		t.Fatalf("device id = %v, want -1", query.DeviceID)
+	}
+	if query.FieldName != "cpu_usage" {
+		t.Fatalf("field name = %q, want %q", query.FieldName, "cpu_usage")
+	}
+}

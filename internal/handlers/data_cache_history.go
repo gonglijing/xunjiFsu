@@ -13,7 +13,7 @@ func (h *Handler) GetDataCache(w http.ResponseWriter, r *http.Request) {
 		writeServerErrorWithLog(w, apiErrListDataCacheFailed, err)
 		return
 	}
-	WriteSuccess(w, filterSystemDataCache(cache))
+	WriteSuccess(w, cache)
 }
 
 func (h *Handler) GetDataCacheByDeviceID(w http.ResponseWriter, r *http.Request) {
@@ -56,10 +56,5 @@ func queryDataPoints(query historyDataQuery) ([]*database.DataPoint, error) {
 		return database.GetDataPointsByDevice(*query.DeviceID, 1000)
 	}
 
-	points, err := database.GetLatestDataPoints(1000)
-	if err != nil {
-		return nil, err
-	}
-
-	return filterSystemDataPoints(points), nil
+	return database.GetLatestDataPoints(1000)
 }

@@ -46,7 +46,7 @@ func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
 }
 
 func validateHistoryDataQuery(query historyDataQuery) error {
-	if query.DeviceID != nil && *query.DeviceID <= 0 {
+	if query.DeviceID != nil && *query.DeviceID <= 0 && *query.DeviceID != -1 {
 		return fmt.Errorf(errInvalidDeviceIDMessage)
 	}
 

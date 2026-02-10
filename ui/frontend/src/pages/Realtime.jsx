@@ -6,6 +6,10 @@ import { formatDateTime } from '../utils/time';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
 
+const SYSTEM_DEVICE_ID = '-1';
+const SYSTEM_DEVICE_RAW_NAME = '__system__';
+const SYSTEM_DEVICE_LABEL = '系统设备';
+
 function Realtime() {
   const toast = useToast();
   const showLoadError = withErrorToast(toast, '加载实时数据失败');
@@ -24,6 +28,19 @@ function Realtime() {
   const [historyStart, setHistoryStart] = createSignal('');
   const [historyEnd, setHistoryEnd] = createSignal('');
 
+  const withSystemDevice = (list) => {
+    const normalized = Array.isArray(list)
+      ? list.filter((d) => String(d?.id) !== SYSTEM_DEVICE_ID)
+      : [];
+    return [{ id: SYSTEM_DEVICE_ID, name: SYSTEM_DEVICE_LABEL, enabled: 1 }, ...normalized];
+  };
+
+  const getDeviceName = (deviceID, fallbackName = '') => {
+    const name = devices().find((d) => String(d.id) === String(deviceID))?.name || fallbackName || '';
+    if (String(name) === SYSTEM_DEVICE_RAW_NAME) return SYSTEM_DEVICE_LABEL;
+    return name;
+  };
+
   const pad = (n) => String(n).padStart(2, '0');
   const formatLocal = (date) => (
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
@@ -38,7 +55,7 @@ function Realtime() {
   const openHistory = (p) => {
     const now = new Date();
     const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const deviceName = devices().find((d) => String(d.id) === String(p.device_id))?.name || p.device_name || '';
+    const deviceName = getDeviceName(p.device_id, p.device_name);
     setHistoryDeviceID(String(p.device_id));
     setHistoryDeviceName(deviceName);
     setHistoryField(p.field_name || '');
@@ -151,8 +168,11 @@ function Realtime() {
 
   createEffect(() => {
     api.devices.listDevices().then((list) => {
-      setDevices(list);
-      if (list.length) setSelected(String(list[0].id));
+      const merged = withSystemDevice(list);
+      setDevices(merged);
+      if (merged.length) {
+        setSelected((prev) => prev || String(merged[0].id));
+      }
     }).catch((err) => showErrorToast(toast, err, '加载设备失败'));
   });
 
@@ -199,7 +219,7 @@ function Realtime() {
             </thead>
             <tbody>
               {points().map((p) => {
-                const deviceName = devices().find((d) => String(d.id) === String(p.device_id))?.name || p.device_name || '';
+                const deviceName = getDeviceName(p.device_id, p.device_name);
                 return (
                   <tr key={p.id || `${p.device_id}-${p.field_name}`}>
                     <td>{formatDateTime(p.collected_at || p.CollectedAt)}</td>

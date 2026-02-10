@@ -9,6 +9,8 @@ import LoadErrorHint from '../components/LoadErrorHint';
 import { getRealtimeMiniPollIntervalMs } from '../utils/runtimeConfig';
 
 const REALTIME_MINI_POLL_INTERVAL_MS = getRealtimeMiniPollIntervalMs();
+const SYSTEM_DEVICE_ID = '-1';
+const SYSTEM_DEVICE_LABEL = '系统设备';
 
 export function RealtimeMini() {
   const toast = useToast();
@@ -42,6 +44,7 @@ export function RealtimeMini() {
       .then((list) => {
         const map = new Map();
         list.forEach((d) => map.set(String(d.id), d.name || d.id));
+        map.set(SYSTEM_DEVICE_ID, SYSTEM_DEVICE_LABEL);
         setDeviceMap(map);
       })
       .catch(() => {});
