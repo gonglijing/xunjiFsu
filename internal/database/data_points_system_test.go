@@ -246,3 +246,90 @@ func TestInsertCollectDataWithOptions_StoreHistoryFlag(t *testing.T) {
 		t.Fatalf("expected history count 2 when storeHistory=true, got %d", historyCount)
 	}
 }
+
+func TestDeleteHistoryDataByPoint_MemoryAndDisk(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldDataDBFile := dataDBFile
+	t.Cleanup(func() {
+		dataDBFile = oldDataDBFile
+	})
+
+	tmpDir := t.TempDir()
+	diskPath := filepath.Join(tmpDir, "data.db")
+	diskDB, err := openSQLite(diskPath, 1, 1)
+	if err != nil {
+		t.Fatalf("open disk db: %v", err)
+	}
+	defer func() { _ = diskDB.Close() }()
+
+	_, err = diskDB.Exec(`CREATE TABLE data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(device_id, field_name, collected_at)
+	)`)
+	if err != nil {
+		t.Fatalf("create disk data_points: %v", err)
+	}
+
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'temperature', '20', 'string', datetime('now', '-10 seconds')),
+		(1, 'dev-1', 'humidity', '60', 'string', datetime('now', '-9 seconds'))`)
+	if err != nil {
+		t.Fatalf("insert mem rows: %v", err)
+	}
+
+	_, err = diskDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'temperature', '19', 'string', datetime('now', '-7 seconds')),
+		(1, 'dev-1', 'humidity', '58', 'string', datetime('now', '-6 seconds'))`)
+	if err != nil {
+		t.Fatalf("insert disk rows: %v", err)
+	}
+
+	dataDBFile = diskPath
+
+	deleted, err := DeleteHistoryDataByPoint(1, "temperature")
+	if err != nil {
+		t.Fatalf("DeleteHistoryDataByPoint: %v", err)
+	}
+	if deleted != 2 {
+		t.Fatalf("deleted = %d, want 2", deleted)
+	}
+
+	var memTempCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ? AND field_name = ?", 1, "temperature").Scan(&memTempCount); err != nil {
+		t.Fatalf("count memory temperature rows: %v", err)
+	}
+	if memTempCount != 0 {
+		t.Fatalf("memory temperature rows = %d, want 0", memTempCount)
+	}
+
+	var memHumidityCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ? AND field_name = ?", 1, "humidity").Scan(&memHumidityCount); err != nil {
+		t.Fatalf("count memory humidity rows: %v", err)
+	}
+	if memHumidityCount != 1 {
+		t.Fatalf("memory humidity rows = %d, want 1", memHumidityCount)
+	}
+
+	var diskTempCount int
+	if err := diskDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ? AND field_name = ?", 1, "temperature").Scan(&diskTempCount); err != nil {
+		t.Fatalf("count disk temperature rows: %v", err)
+	}
+	if diskTempCount != 0 {
+		t.Fatalf("disk temperature rows = %d, want 0", diskTempCount)
+	}
+
+	var diskHumidityCount int
+	if err := diskDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ? AND field_name = ?", 1, "humidity").Scan(&diskHumidityCount); err != nil {
+		t.Fatalf("count disk humidity rows: %v", err)
+	}
+	if diskHumidityCount != 1 {
+		t.Fatalf("disk humidity rows = %d, want 1", diskHumidityCount)
+	}
+}

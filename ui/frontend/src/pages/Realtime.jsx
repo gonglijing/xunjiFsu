@@ -21,6 +21,7 @@ function Realtime() {
   const [loading, setLoading] = createSignal(false);
   const [historyOpen, setHistoryOpen] = createSignal(false);
   const [historyLoading, setHistoryLoading] = createSignal(false);
+  const [historyClearing, setHistoryClearing] = createSignal(false);
   const [historyError, setHistoryError] = createSignal('');
   const [historyView, setHistoryView] = createSignal('chart');
   const [historyData, setHistoryData] = createSignal([]);
@@ -103,6 +104,32 @@ function Realtime() {
       })
       .catch((err) => setHistoryError(getErrorMessage(err, '加载历史数据失败')))
       .finally(() => setHistoryLoading(false));
+  };
+
+  const clearCurrentPointHistory = async () => {
+    const deviceID = historyDeviceID();
+    const fieldName = historyField();
+    if (!deviceID || !fieldName) return;
+
+    if (!window.confirm(`确认清除测点「${historyDeviceName()} / ${fieldName}」的全部历史数据吗？此操作不可恢复。`)) {
+      return;
+    }
+
+    setHistoryClearing(true);
+    try {
+      const result = await api.data.clearHistoryData({
+        device_id: deviceID,
+        field_name: fieldName,
+      });
+      const deleted = result?.deleted ?? 0;
+      toast.show('success', `已清除 ${deleted} 条历史数据`);
+      setHistoryData([]);
+      setHistoryError('');
+    } catch (err) {
+      showErrorToast(toast, err, '清除历史数据失败');
+    } finally {
+      setHistoryClearing(false);
+    }
   };
 
   const series = () => historyData()
@@ -327,9 +354,16 @@ function Realtime() {
                 <button
                   class="btn btn-soft-primary btn-sm"
                   onClick={() => fetchHistory()}
-                  disabled={historyLoading()}
+                  disabled={historyLoading() || historyClearing()}
                 >
                   {historyLoading() ? '加载中...' : '查询'}
+                </button>
+                <button
+                  class="btn btn-outline-danger btn-sm"
+                  onClick={clearCurrentPointHistory}
+                  disabled={historyLoading() || historyClearing()}
+                >
+                  {historyClearing() ? '清除中...' : '清除当前测点历史'}
                 </button>
               </div>
 

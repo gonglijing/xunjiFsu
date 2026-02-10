@@ -86,6 +86,7 @@ func registerDataRoutes(api *http.ServeMux, h *handlers.Handler) {
 	api.HandleFunc("GET /data", h.GetDataCache)
 	api.HandleFunc("GET /data/cache/{id}", h.GetDataCacheByDeviceID)
 	api.HandleFunc("GET /data/history", h.GetHistoryData)
+	api.HandleFunc("DELETE /data/history", h.ClearHistoryData)
 }
 
 func registerUserRoutes(api *http.ServeMux, h *handlers.Handler) {

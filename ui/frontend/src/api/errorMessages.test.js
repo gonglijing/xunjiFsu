@@ -37,6 +37,16 @@ test('getErrorMessage 再次 code 映射', () => {
   assert.equal(got, '按保留天数清理失败');
 });
 
+test('getErrorMessage 支持历史测点参数错误映射', () => {
+  const got = getErrorMessage({ code: 'E_HISTORY_POINT_QUERY_INVALID' }, 'fallback');
+  assert.equal(got, '历史测点参数无效');
+});
+
+test('getErrorMessage 支持清除历史数据错误映射', () => {
+  const got = getErrorMessage({ code: 'E_CLEAR_HISTORY_DATA_FAILED' }, 'fallback');
+  assert.equal(got, '清除历史数据失败');
+});
+
 test('getErrorMessage 空对象回退 fallback', () => {
   const got = getErrorMessage({}, 'fallback');
   assert.equal(got, 'fallback');

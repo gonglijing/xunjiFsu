@@ -479,6 +479,67 @@ func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
 	return mergeDataPoints(memPoints, diskPoints, limit), nil
 }
 
+// DeleteHistoryDataByPoint 删除指定测点的全部历史数据（内存 + 磁盘）
+func DeleteHistoryDataByPoint(deviceID int64, fieldName string) (int64, error) {
+	fieldName = strings.TrimSpace(fieldName)
+	if deviceID == 0 {
+		return 0, fmt.Errorf("invalid device_id")
+	}
+	if fieldName == "" {
+		return 0, fmt.Errorf("field_name is required")
+	}
+
+	result, err := DataDB.Exec(
+		`DELETE FROM data_points WHERE device_id = ? AND field_name = ?`,
+		deviceID, fieldName,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	memDeleted, _ := result.RowsAffected()
+
+	diskDeleted, err := deleteHistoryDataByPointOnDisk(deviceID, fieldName)
+	if err != nil {
+		return memDeleted, err
+	}
+
+	return memDeleted + diskDeleted, nil
+}
+
+func deleteHistoryDataByPointOnDisk(deviceID int64, fieldName string) (int64, error) {
+	if dataDBFile == "" {
+		return 0, nil
+	}
+	if _, err := os.Stat(dataDBFile); err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	diskDB, err := openSQLite(dataDBFile, 1, 1)
+	if err != nil {
+		return 0, err
+	}
+	defer diskDB.Close()
+
+	if err := ensureDiskDataSchema(diskDB); err != nil {
+		return 0, err
+	}
+
+	result, err := diskDB.Exec(
+		`DELETE FROM data_points WHERE device_id = ? AND field_name = ?`,
+		deviceID, fieldName,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	deleted, _ := result.RowsAffected()
+	return deleted, nil
+}
+
 // LatestDeviceData 单个设备的最新数据
 type LatestDeviceData struct {
 	DeviceID    int64

@@ -45,6 +45,22 @@ func (h *Handler) GetHistoryData(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, points)
 }
 
+func (h *Handler) ClearHistoryData(w http.ResponseWriter, r *http.Request) {
+	query, err := parseHistoryPointQuery(r)
+	if err != nil {
+		WriteBadRequestCode(w, apiErrHistoryPointQueryInvalid.Code, apiErrHistoryPointQueryInvalid.Message+": "+err.Error())
+		return
+	}
+
+	deleted, err := database.DeleteHistoryDataByPoint(query.DeviceID, query.FieldName)
+	if err != nil {
+		writeServerErrorWithLog(w, apiErrClearHistoryDataFailed, err)
+		return
+	}
+
+	WriteSuccess(w, map[string]int64{"deleted": deleted})
+}
+
 func queryDataPoints(query historyDataQuery) ([]*database.DataPoint, error) {
 	if query.DeviceID != nil {
 		if query.FieldName != "" {

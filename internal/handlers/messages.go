@@ -21,6 +21,7 @@ const (
 
 	errHistoryStartAfterEndDetail        = "start time must be before end time"
 	errHistoryFilterRequiresDevice       = "device_id is required when using field_name/start/end filters"
+	errHistoryFieldNameRequired          = "field_name is required"
 	errAlarmIDsRequiredMessage           = "ids is required"
 	errAlarmRepeatIntervalInvalidMessage = "alarm repeat interval must be > 0"
 )
@@ -80,6 +81,7 @@ var (
 	apiErrListDataCacheFailed             = newAPIError("E_LIST_DATA_CACHE_FAILED", "获取数据缓存失败")
 	apiErrGetDeviceDataCacheFailed        = newAPIError("E_GET_DEVICE_DATA_CACHE_FAILED", "获取设备缓存失败")
 	apiErrQueryHistoryDataFailed          = newAPIError("E_QUERY_HISTORY_DATA_FAILED", "查询历史数据失败")
+	apiErrClearHistoryDataFailed          = newAPIError("E_CLEAR_HISTORY_DATA_FAILED", "清除历史数据失败")
 	apiErrListThresholdsFailed            = newAPIError("E_LIST_THRESHOLDS_FAILED", "获取阈值列表失败")
 	apiErrCreateThresholdFailed           = newAPIError("E_CREATE_THRESHOLD_FAILED", "创建阈值失败")
 	apiErrUpdateThresholdFailed           = newAPIError("E_UPDATE_THRESHOLD_FAILED", "更新阈值失败")
@@ -103,4 +105,5 @@ var (
 	apiErrListPaginatedDevicesFailed      = newAPIError("E_LIST_PAGINATED_DEVICES_FAILED", "分页查询设备失败")
 	apiErrListPaginatedDataPointsFailed   = newAPIError("E_LIST_PAGINATED_DATA_POINTS_FAILED", "分页查询历史数据失败")
 	apiErrHistoryDataQueryInvalid         = newAPIError("E_HISTORY_DATA_QUERY_INVALID", "历史数据查询参数无效")
+	apiErrHistoryPointQueryInvalid        = newAPIError("E_HISTORY_POINT_QUERY_INVALID", "历史测点参数无效")
 )

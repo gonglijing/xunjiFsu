@@ -15,6 +15,11 @@ type historyDataQuery struct {
 	EndTime   time.Time
 }
 
+type historyPointQuery struct {
+	DeviceID  int64
+	FieldName string
+}
+
 func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
 	query := historyDataQuery{
 		FieldName: strings.TrimSpace(r.URL.Query().Get("field_name")),
@@ -40,6 +45,27 @@ func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
 
 	if err := validateHistoryDataQuery(query); err != nil {
 		return historyDataQuery{}, err
+	}
+
+	return query, nil
+}
+
+func parseHistoryPointQuery(r *http.Request) (historyPointQuery, error) {
+	deviceID, err := parseOptionalInt64Query(r, "device_id")
+	if err != nil || deviceID == nil {
+		return historyPointQuery{}, fmt.Errorf(errInvalidDeviceIDMessage)
+	}
+
+	query := historyPointQuery{
+		DeviceID:  *deviceID,
+		FieldName: strings.TrimSpace(r.URL.Query().Get("field_name")),
+	}
+
+	if query.DeviceID <= 0 && query.DeviceID != -1 {
+		return historyPointQuery{}, fmt.Errorf(errInvalidDeviceIDMessage)
+	}
+	if query.FieldName == "" {
+		return historyPointQuery{}, fmt.Errorf(errHistoryFieldNameRequired)
 	}
 
 	return query, nil

@@ -105,3 +105,42 @@ func TestParseHistoryDataQuery_SystemDeviceIDAllowed(t *testing.T) {
 		t.Fatalf("field name = %q, want %q", query.FieldName, "cpu_usage")
 	}
 }
+
+func TestParseHistoryPointQuery(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?device_id=7&field_name=temp", nil)
+
+	query, err := parseHistoryPointQuery(req)
+	if err != nil {
+		t.Fatalf("parseHistoryPointQuery returned error: %v", err)
+	}
+	if query.DeviceID != 7 {
+		t.Fatalf("device id = %d, want 7", query.DeviceID)
+	}
+	if query.FieldName != "temp" {
+		t.Fatalf("field name = %q, want %q", query.FieldName, "temp")
+	}
+}
+
+func TestParseHistoryPointQuery_FieldNameRequired(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?device_id=7", nil)
+
+	_, err := parseHistoryPointQuery(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != errHistoryFieldNameRequired {
+		t.Fatalf("error = %q, want %q", err.Error(), errHistoryFieldNameRequired)
+	}
+}
+
+func TestParseHistoryPointQuery_InvalidDeviceID(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?device_id=0&field_name=temp", nil)
+
+	_, err := parseHistoryPointQuery(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != errInvalidDeviceIDMessage {
+		t.Fatalf("error = %q, want %q", err.Error(), errInvalidDeviceIDMessage)
+	}
+}
