@@ -156,7 +156,7 @@ func (w *rotatingWriter) Close() error {
 // InitFileOutput 将日志输出到文件并启用滚动
 func InitFileOutput(path string, maxSizeBytes int64) (io.Writer, error) {
 	if path == "" {
-		path = filepath.Join("logs", "xunji.log")
+		path = filepath.Join("logs", "sagoo.log")
 	}
 	writer, err := newRotatingWriter(path, maxSizeBytes, defaultMaxBackups, defaultFlushInterval)
 	if err != nil {
