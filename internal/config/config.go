@@ -204,78 +204,50 @@ func loadFromFile(cfg *Config) error {
 	}
 
 	// 应用服务器配置
-	if yamlCfg.Server.Addr != "" {
-		cfg.ListenAddr = yamlCfg.Server.Addr
-	}
-	if yamlCfg.Server.ReadTimeout != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Server.ReadTimeout); err == nil {
-			cfg.HTTPReadTimeout = timeout
-		}
-	}
-	if yamlCfg.Server.WriteTimeout != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Server.WriteTimeout); err == nil {
-			cfg.HTTPWriteTimeout = timeout
-		}
-	}
-	if yamlCfg.Drivers.Dir != "" {
-		cfg.DriversDir = yamlCfg.Drivers.Dir
-	}
-	if yamlCfg.Northbound.PluginsDir != "" {
-		cfg.NorthboundPluginsDir = yamlCfg.Northbound.PluginsDir
-	}
-	if yamlCfg.Northbound.MQTTReconnectInterval != "" {
-		if interval, err := time.ParseDuration(yamlCfg.Northbound.MQTTReconnectInterval); err == nil {
-			cfg.NorthboundMQTTReconnectInterval = interval
-		}
-	}
-	if yamlCfg.Drivers.CallTimeout != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Drivers.CallTimeout); err == nil {
-			cfg.DriverCallTimeout = timeout
-		}
-	}
-	if yamlCfg.Drivers.SerialReadTimeout != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Drivers.SerialReadTimeout); err == nil {
-			cfg.DriverSerialReadTimeout = timeout
-		}
-	}
-	if yamlCfg.Drivers.SerialOpenRetries > 0 {
-		cfg.DriverSerialOpenRetries = yamlCfg.Drivers.SerialOpenRetries
-	}
-	if yamlCfg.Drivers.SerialOpenBackoff != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Drivers.SerialOpenBackoff); err == nil {
-			cfg.DriverSerialOpenBackoff = timeout
-		}
-	}
-	if yamlCfg.Drivers.TCPDialTimeout != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Drivers.TCPDialTimeout); err == nil {
-			cfg.DriverTCPDialTimeout = timeout
-		}
-	}
-	if yamlCfg.Drivers.TCPDialRetries > 0 {
-		cfg.DriverTCPDialRetries = yamlCfg.Drivers.TCPDialRetries
-	}
-	if yamlCfg.Drivers.TCPDialBackoff != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Drivers.TCPDialBackoff); err == nil {
-			cfg.DriverTCPDialBackoff = timeout
-		}
-	}
-	if yamlCfg.Drivers.TCPReadTimeout != "" {
-		if timeout, err := time.ParseDuration(yamlCfg.Drivers.TCPReadTimeout); err == nil {
-			cfg.DriverTCPReadTimeout = timeout
-		}
-	}
-	if yamlCfg.Collector.DeviceSyncInterval != "" {
-		if interval, err := time.ParseDuration(yamlCfg.Collector.DeviceSyncInterval); err == nil {
-			cfg.CollectorDeviceSyncInterval = interval
-		}
-	}
-	if yamlCfg.Collector.CommandPollInterval != "" {
-		if interval, err := time.ParseDuration(yamlCfg.Collector.CommandPollInterval); err == nil {
-			cfg.CollectorCommandPollInterval = interval
-		}
-	}
+	setStringIfNotEmpty(&cfg.ListenAddr, yamlCfg.Server.Addr)
+	setDurationFromText(&cfg.HTTPReadTimeout, yamlCfg.Server.ReadTimeout)
+	setDurationFromText(&cfg.HTTPWriteTimeout, yamlCfg.Server.WriteTimeout)
+
+	setStringIfNotEmpty(&cfg.DriversDir, yamlCfg.Drivers.Dir)
+	setStringIfNotEmpty(&cfg.NorthboundPluginsDir, yamlCfg.Northbound.PluginsDir)
+	setDurationFromText(&cfg.NorthboundMQTTReconnectInterval, yamlCfg.Northbound.MQTTReconnectInterval)
+
+	setDurationFromText(&cfg.DriverCallTimeout, yamlCfg.Drivers.CallTimeout)
+	setDurationFromText(&cfg.DriverSerialReadTimeout, yamlCfg.Drivers.SerialReadTimeout)
+	setPositiveInt(&cfg.DriverSerialOpenRetries, yamlCfg.Drivers.SerialOpenRetries)
+	setDurationFromText(&cfg.DriverSerialOpenBackoff, yamlCfg.Drivers.SerialOpenBackoff)
+	setDurationFromText(&cfg.DriverTCPDialTimeout, yamlCfg.Drivers.TCPDialTimeout)
+	setPositiveInt(&cfg.DriverTCPDialRetries, yamlCfg.Drivers.TCPDialRetries)
+	setDurationFromText(&cfg.DriverTCPDialBackoff, yamlCfg.Drivers.TCPDialBackoff)
+	setDurationFromText(&cfg.DriverTCPReadTimeout, yamlCfg.Drivers.TCPReadTimeout)
+
+	setDurationFromText(&cfg.CollectorDeviceSyncInterval, yamlCfg.Collector.DeviceSyncInterval)
+	setDurationFromText(&cfg.CollectorCommandPollInterval, yamlCfg.Collector.CommandPollInterval)
 
 	return nil
+}
+
+func setStringIfNotEmpty(dst *string, value string) {
+	if dst == nil || value == "" {
+		return
+	}
+	*dst = value
+}
+
+func setDurationFromText(dst *time.Duration, value string) {
+	if dst == nil || value == "" {
+		return
+	}
+	if parsed, err := time.ParseDuration(value); err == nil {
+		*dst = parsed
+	}
+}
+
+func setPositiveInt(dst *int, value int) {
+	if dst == nil || value <= 0 {
+		return
+	}
+	*dst = value
 }
 
 // loadFromEnv 从环境变量加载配置（会覆盖文件配置）
