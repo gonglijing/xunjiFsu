@@ -280,7 +280,7 @@ function Realtime() {
           <div class="card" style="width:780px; max-width:95vw;">
             <div class="card-header">
               <h3 class="card-title">历史数据 - {historyDeviceName()} / {historyField()}</h3>
-              <button class="btn btn-ghost" onClick={() => setHistoryOpen(false)} style="padding:4px 8px;">✕</button>
+              <button class="btn btn-ghost btn-no-icon btn-only-icon" onClick={() => setHistoryOpen(false)} style="padding:4px 8px;">✕</button>
             </div>
             <div class="card-body">
               <div class="grid" style="grid-template-columns: 1.4fr 1.4fr 1fr; gap:12px; margin-bottom:12px;">

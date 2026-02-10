@@ -503,7 +503,7 @@ export function Northbound() {
           <div class="card" style="width:780px; max-width:94vw;">
             <div class="card-header">
               <h3 class="card-title">{editing() ? '编辑北向配置' : '新增北向配置'}</h3>
-              <button class="btn btn-ghost" onClick={resetForm} style="padding:4px 8px;">✕</button>
+              <button class="btn btn-ghost btn-no-icon btn-only-icon" onClick={resetForm} style="padding:4px 8px;">✕</button>
             </div>
             <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
               <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">

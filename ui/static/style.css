@@ -595,11 +595,44 @@ nav .container {
   gap: 5px;
 }
 
-.btn-ico {
+.btn::before {
+  content: '\2022';
   font-size: 0.9em;
   line-height: 1;
-  opacity: 0.88;
+  opacity: 0.78;
   transform: translateY(-0.5px);
+}
+
+.btn-primary::before,
+.btn-soft-primary::before,
+.btn-outline-primary::before {
+  content: '\2726';
+}
+
+.btn-danger::before,
+.btn-danger-muted::before,
+.btn-outline-danger::before {
+  content: '\2715';
+}
+
+.btn-success::before {
+  content: '\2713';
+}
+
+.btn-ghost::before {
+  content: '\21BB';
+}
+
+.btn-no-icon::before,
+.btn-only-icon::before {
+  content: '';
+  width: 0;
+  margin: 0;
+}
+
+.btn-only-icon {
+  min-width: 30px;
+  padding: 4px 8px;
 }
 
 .btn-pill {

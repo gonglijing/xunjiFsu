@@ -329,7 +329,7 @@ export function Devices() {
           <div class="card" style="width:720px; max-width:100%;">
             <div class="card-header">
               <h3 class="card-title">{editing() ? '编辑设备' : '新增设备'}</h3>
-              <button class="btn btn-ghost" onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }} style="padding:4px 8px;">✕</button>
+              <button class="btn btn-ghost btn-no-icon btn-only-icon" onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }} style="padding:4px 8px;">✕</button>
             </div>
             <form class="form" onSubmit={submit} style="padding:0 4px;">
               <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap:12px;">
@@ -562,7 +562,7 @@ export function Devices() {
           <div class="card" style="width:400px; max-width:90vw;">
             <div class="card-header">
               <h3 class="card-title">写入数据 - {writeTarget()?.name}</h3>
-              <button class="btn btn-ghost" onClick={() => setShowWriteModal(false)} style="padding:4px 8px;">✕</button>
+              <button class="btn btn-ghost btn-no-icon btn-only-icon" onClick={() => setShowWriteModal(false)} style="padding:4px 8px;">✕</button>
             </div>
             <form class="form" onSubmit={submitWrite} style="padding:16px;">
               <div class="form-group">
