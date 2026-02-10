@@ -199,7 +199,7 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 	a.client = client
 	a.qos = clampQOS(cfg.QOS)
 	a.retain = cfg.Retain
-	a.timeout = time.Duration(maxInt(cfg.Timeout, 10)) * time.Second
+	a.timeout = time.Duration(maxInt2(cfg.Timeout, 10)) * time.Second
 	a.reportEvery = resolveInterval(cfg.UploadIntervalMs, defaultReportInterval)
 	a.alarmEvery = resolveInterval(cfg.AlarmFlushIntervalMs, defaultAlarmInterval)
 	a.alarmBatch = resolvePositive(cfg.AlarmBatchSize, defaultAlarmBatch)
@@ -1488,17 +1488,11 @@ func requestIDFromPandaXRPCTopic(topic string) string {
 	return strings.TrimSpace(parts[5])
 }
 
-func maxInt(values ...int) int {
-	if len(values) == 0 {
-		return 0
+func maxInt2(left, right int) int {
+	if left > right {
+		return left
 	}
-	max := values[0]
-	for i := 1; i < len(values); i++ {
-		if values[i] > max {
-			max = values[i]
-		}
-	}
-	return max
+	return right
 }
 
 func (a *PandaXAdapter) nextID(prefix string) string {
