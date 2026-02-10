@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -589,7 +590,7 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 		return upPropertyTpl, []byte("{}"), nil
 	}
 
-	values := make(map[string]interface{})
+	values := make(map[string]interface{}, len(data.Fields))
 	for key, value := range data.Fields {
 		values[key] = convertFieldValue(value)
 	}
@@ -611,7 +612,10 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 	topic := renderIThingsTopic(upPropertyTpl, gatewayProductID, gatewayDeviceName)
 
 	subProductID := pickFirstNonEmpty(strings.TrimSpace(data.ProductKey), gatewayProductID)
-	subDeviceName := pickFirstNonEmpty(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode), fmt.Sprintf("device_%d", data.DeviceID), gatewayDeviceName)
+	subDeviceName := pickFirstNonEmpty(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode))
+	if subDeviceName == "" {
+		subDeviceName = virtualDeviceName(data.DeviceID)
+	}
 
 	payload := map[string]interface{}{
 		"method":     "packReport",
@@ -661,7 +665,10 @@ func (a *IThingsAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, 
 	topic := renderIThingsTopic(upEventTpl, gatewayProductID, gatewayDeviceName)
 
 	subProductID := pickFirstNonEmpty(strings.TrimSpace(alarm.ProductKey), gatewayProductID)
-	subDeviceName := pickFirstNonEmpty(a.resolveAlarmDeviceName(alarm, deviceNameMode), fmt.Sprintf("device_%d", alarm.DeviceID), gatewayDeviceName)
+	subDeviceName := pickFirstNonEmpty(a.resolveAlarmDeviceName(alarm, deviceNameMode))
+	if subDeviceName == "" {
+		subDeviceName = virtualDeviceName(alarm.DeviceID)
+	}
 
 	params := map[string]interface{}{
 		"device_name":  alarm.DeviceName,
@@ -729,6 +736,10 @@ func (a *IThingsAdapter) publish(topic string, payload []byte) error {
 	a.mu.Unlock()
 
 	return nil
+}
+
+func virtualDeviceName(deviceID int64) string {
+	return "device_" + strconv.FormatInt(deviceID, 10)
 }
 
 func (a *IThingsAdapter) subscribeDownTopics(client mqtt.Client) {
