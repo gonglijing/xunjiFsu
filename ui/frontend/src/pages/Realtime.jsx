@@ -304,15 +304,15 @@ function Realtime() {
                 </div>
                 <div class="form-group">
                   <label class="form-label">展现方式</label>
-                  <div class="flex" style="gap:8px;">
+                  <div class="toolbar-actions">
                     <button
-                      class={`btn ${historyView() === 'chart' ? 'btn-primary' : ''}`}
+                      class={`btn btn-sm ${historyView() === 'chart' ? 'btn-primary' : 'btn-outline-primary'}`}
                       onClick={() => setHistoryView('chart')}
                     >
                       折线图
                     </button>
                     <button
-                      class={`btn ${historyView() === 'list' ? 'btn-primary' : ''}`}
+                      class={`btn btn-sm ${historyView() === 'list' ? 'btn-primary' : 'btn-outline-primary'}`}
                       onClick={() => setHistoryView('list')}
                     >
                       列表
@@ -321,9 +321,9 @@ function Realtime() {
                 </div>
               </div>
 
-              <div class="flex" style="gap:8px; justify-content:flex-end; margin-bottom:12px;">
+              <div class="modal-actions" style="margin-bottom:12px;">
                 <button
-                  class="btn"
+                  class="btn btn-soft-primary btn-sm"
                   onClick={() => fetchHistory()}
                   disabled={historyLoading()}
                 >

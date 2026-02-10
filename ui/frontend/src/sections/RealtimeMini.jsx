@@ -54,7 +54,7 @@ export function RealtimeMini() {
   });
 
   return (
-    <Card title="最新采集" extra={<button class="btn" onClick={load}>刷新</button>}>
+    <Card title="最新采集" extra={<div class="toolbar-actions"><button class="btn btn-ghost btn-sm" onClick={load}>刷新</button></div>}>
       <LoadErrorHint error={loadError()} onRetry={load} />
       <div class="table-container" style="max-height:320px; overflow:auto;">
         <table class="table">

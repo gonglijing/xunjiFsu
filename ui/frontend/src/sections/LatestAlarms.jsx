@@ -24,7 +24,7 @@ export function LatestAlarms() {
   };
 
   return (
-    <Card title="最近告警" extra={<button class="btn" onClick={load}>刷新</button>}>
+    <Card title="最近告警" extra={<div class="toolbar-actions"><button class="btn btn-ghost btn-sm" onClick={load}>刷新</button></div>}>
       <div class="table-container" style="max-height:320px; overflow:auto;">
         <table class="table">
           <thead>
@@ -54,7 +54,7 @@ export function LatestAlarms() {
                   </td>
                   <td>
                     <Show when={a.acknowledged !== 1}>
-                      <button class="btn btn-primary" onClick={() => ack(a.id)} style="padding:6px 10px;">确认</button>
+                      <button class="btn btn-soft-primary btn-sm" onClick={() => ack(a.id)}>确认</button>
                     </Show>
                     <Show when={a.acknowledged === 1}>
                       <span class="text-muted text-xs">已确认</span>
