@@ -11,12 +11,10 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/config"
 	"github.com/gonglijing/xunjiFsu/internal/handlers"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
-
-	"github.com/gorilla/mux"
 )
 
-func buildRouter(h *handlers.Handler, authManager *auth.JWTManager) *mux.Router {
-	r := mux.NewRouter()
+func buildRouter(h *handlers.Handler, authManager *auth.JWTManager) *http.ServeMux {
+	r := http.NewServeMux()
 
 	staticDir := resolveStaticDir()
 	registerStaticRoutes(r, staticDir)
@@ -27,7 +25,7 @@ func buildRouter(h *handlers.Handler, authManager *auth.JWTManager) *mux.Router 
 	return r
 }
 
-func buildHandlerChain(cfg *config.Config, router *mux.Router) http.Handler {
+func buildHandlerChain(cfg *config.Config, router *http.ServeMux) http.Handler {
 	allowedOrigins := cfg.GetAllowedOrigins()
 	loggingHandler := requestLoggingMiddleware(router)
 	gzipHandler := handlers.GzipMiddleware(loggingHandler)
@@ -146,33 +144,41 @@ func resolveStaticDir() http.Dir {
 	return http.Dir(filepath.Join(workDir, "ui", "static"))
 }
 
-func registerStaticRoutes(r *mux.Router, staticDir http.Dir) {
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(staticDir)))
-	r.PathPrefix("/ui/static/").Handler(http.StripPrefix("/ui/static/", http.FileServer(staticDir)))
+func registerStaticRoutes(r *http.ServeMux, staticDir http.Dir) {
+	r.Handle("/static/", http.StripPrefix("/static/", http.FileServer(staticDir)))
+	r.Handle("/ui/static/", http.StripPrefix("/ui/static/", http.FileServer(staticDir)))
 }
 
-func registerPageRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWTManager) {
-	r.HandleFunc("/login", h.Login).Methods("GET")
-	r.HandleFunc("/login", h.LoginPost).Methods("POST")
-	r.HandleFunc("/logout", h.Logout).Methods("GET")
+func registerPageRoutes(r *http.ServeMux, h *handlers.Handler, authManager *auth.JWTManager) {
+	r.HandleFunc("GET /login", h.Login)
+	r.HandleFunc("POST /login", h.LoginPost)
+	r.HandleFunc("GET /logout", h.Logout)
 
-	r.PathPrefix("/").
-		Handler(authManager.RequireAuth(http.HandlerFunc(h.SPA))).
-		Methods("GET").
-		MatcherFunc(func(req *http.Request, _ *mux.RouteMatch) bool {
-			path := req.URL.Path
-			if strings.HasPrefix(path, "/api") ||
-				strings.HasPrefix(path, "/static/") ||
-				strings.HasPrefix(path, "/ui/static/") {
-				return false
-			}
-			return true
-		})
+	r.Handle("/", authManager.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		path := req.URL.Path
+		if strings.HasPrefix(path, "/api") ||
+			strings.HasPrefix(path, "/static/") ||
+			strings.HasPrefix(path, "/ui/static/") ||
+			path == "/health" ||
+			path == "/ready" ||
+			path == "/live" ||
+			path == "/metrics" ||
+			path == "/login" ||
+			path == "/logout" {
+			http.NotFound(w, req)
+			return
+		}
+		if req.Method != http.MethodGet {
+			http.NotFound(w, req)
+			return
+		}
+		h.SPA(w, req)
+	})))
 }
 
-func registerHealthRoutes(r *mux.Router) {
-	r.HandleFunc("/health", handlers.Health).Methods("GET")
-	r.HandleFunc("/ready", handlers.Readiness).Methods("GET")
-	r.HandleFunc("/live", handlers.Liveness).Methods("GET")
-	r.HandleFunc("/metrics", handlers.Metrics).Methods("GET")
+func registerHealthRoutes(r *http.ServeMux) {
+	r.HandleFunc("GET /health", handlers.Health)
+	r.HandleFunc("GET /ready", handlers.Readiness)
+	r.HandleFunc("GET /live", handlers.Liveness)
+	r.HandleFunc("GET /metrics", handlers.Metrics)
 }

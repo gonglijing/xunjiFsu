@@ -2,12 +2,13 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -53,14 +54,32 @@ func TestJWTManager_GenerateAndParseToken(t *testing.T) {
 func TestJWTManager_ParseToken_Invalid(t *testing.T) {
 	m := NewJWTManager([]byte("secret-key-123456"))
 
-	// 使用错误算法构造一个 token，应该被拒绝
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"sub":  float64(1),
-		"name": "bad",
-	})
-	signed, _ := token.SignedString([]byte("other"))
+	user := &models.User{ID: 1, Username: "bad", Role: "user"}
+	token, err := m.GenerateToken(user)
+	if err != nil {
+		t.Fatalf("GenerateToken error: %v", err)
+	}
 
-	if _, err := m.ParseToken(signed); err == nil {
+	// 篡改签名，应该被拒绝
+	tampered := token[:len(token)-1] + "x"
+	if _, err := m.ParseToken(tampered); err == nil {
+		t.Fatalf("expected ParseToken to fail for tampered signature")
+	}
+}
+
+func TestJWTManager_ParseToken_InvalidSigningMethod(t *testing.T) {
+	m := NewJWTManager([]byte("secret-key-123456"))
+
+	claims := jwtClaims{
+		Subject:   1,
+		Username:  "bad",
+		Role:      "user",
+		IssuedAt:  time.Now().Unix(),
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}
+	token := buildTokenForTest(jwtHeader{Alg: "RS256", Typ: "JWT"}, claims, m.secret)
+
+	if _, err := m.ParseToken(token); err == nil {
 		t.Fatalf("expected ParseToken to fail for invalid signing method")
 	}
 }
@@ -196,23 +215,37 @@ func TestJWTManager_TokenTTL(t *testing.T) {
 		t.Fatalf("GenerateToken error: %v", err)
 	}
 
-	parsed, err := jwt.Parse(token, func(tk *jwt.Token) (interface{}, error) {
-		return m.secret, nil
-	})
-	if err != nil || !parsed.Valid {
-		t.Fatalf("token not valid: %v", err)
+	claims, err := verifyJWT(token, m.secret, time.Now())
+	if err != nil {
+		t.Fatalf("verifyJWT error: %v", err)
 	}
-	claims, ok := parsed.Claims.(jwt.MapClaims)
-	if !ok {
-		t.Fatalf("unexpected claims type")
+	if claims.ExpiresAt <= claims.IssuedAt {
+		t.Fatalf("invalid claims exp=%d iat=%d", claims.ExpiresAt, claims.IssuedAt)
 	}
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		t.Fatalf("exp claim missing or wrong type")
-	}
-	expTime := time.Unix(int64(exp), 0)
-	if time.Until(expTime) <= 0 {
+
+	expTime := time.Unix(claims.ExpiresAt, 0)
+	delta := time.Until(expTime)
+	if delta <= 0 {
 		t.Fatalf("token already expired")
+	}
+	if delta < tokenTTL-time.Minute || delta > tokenTTL+time.Minute {
+		t.Fatalf("token ttl drift too large: got %v, want around %v", delta, tokenTTL)
+	}
+}
+
+func TestJWTManager_ParseToken_Expired(t *testing.T) {
+	m := NewJWTManager([]byte("expired-secret-key-123"))
+	claims := jwtClaims{
+		Subject:   1,
+		Username:  "u",
+		Role:      "r",
+		IssuedAt:  time.Now().Add(-2 * time.Hour).Unix(),
+		ExpiresAt: time.Now().Add(-time.Hour).Unix(),
+	}
+	token := buildTokenForTest(jwtHeader{Alg: "HS256", Typ: "JWT"}, claims, m.secret)
+
+	if _, err := m.ParseToken(token); err == nil {
+		t.Fatalf("expected expired token to be rejected")
 	}
 }
 
@@ -232,4 +265,14 @@ func TestSessionFromContext(t *testing.T) {
 	if got == nil || got.UserID != 9 || got.Username != "admin" || got.Role != "admin" {
 		t.Fatalf("unexpected session info from context: %+v", got)
 	}
+}
+
+func buildTokenForTest(header jwtHeader, claims jwtClaims, secret []byte) string {
+	headerJSON, _ := json.Marshal(header)
+	claimsJSON, _ := json.Marshal(claims)
+	headerPart := base64.RawURLEncoding.EncodeToString(headerJSON)
+	claimsPart := base64.RawURLEncoding.EncodeToString(claimsJSON)
+	signingInput := headerPart + "." + claimsPart
+	signature := signHS256(signingInput, secret)
+	return signingInput + "." + signature
 }

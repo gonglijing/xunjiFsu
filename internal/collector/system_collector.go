@@ -177,40 +177,81 @@ func (c *SystemStatsCollector) collectSystemStats() *models.SystemStats {
 
 // getCpuUsage 获取 CPU 使用率
 func (c *SystemStatsCollector) getCpuUsage() float64 {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+	return c.readProcCPUUsage()
+}
 
-	// 强制执行 GC 以获得准确的数字
-	runtime.GC()
+func (c *SystemStatsCollector) readProcCPUUsage() float64 {
+	first, ok := readProcStatCPUTotalIdle()
+	if !ok {
+		return 0
+	}
 
-	// 简单采样方式：sleep 一小段时间然后计算
-	// 更准确的方式是读取 /proc/stat (Linux)
-	var before, after runtime.MemStats
-	runtime.ReadMemStats(&before)
 	time.Sleep(100 * time.Millisecond)
-	runtime.ReadMemStats(&after)
 
-	// 使用 AllocDelta 估算
-	allocDelta := float64(after.Mallocs - before.Mallocs)
-	if allocDelta < 0 {
-		allocDelta = 0
+	second, ok := readProcStatCPUTotalIdle()
+	if !ok {
+		return 0
 	}
 
-	// 简化的 CPU 使用率估算
-	cpuUsage := 100.0
-	if allocDelta > 0 {
-		cpuUsage = 100.0 - (float64(after.Frees) / float64(after.Mallocs+after.Frees) * 100)
+	totalDelta := second.total - first.total
+	idleDelta := second.idle - first.idle
+	if totalDelta <= 0 {
+		return 0
 	}
 
-	// 限制范围
-	if cpuUsage < 0 {
-		cpuUsage = 0
+	usage := (float64(totalDelta-idleDelta) / float64(totalDelta)) * 100
+	if usage < 0 {
+		return 0
 	}
-	if cpuUsage > 100 {
-		cpuUsage = 100
+	if usage > 100 {
+		return 100
+	}
+	return usage
+}
+
+type procCPUStat struct {
+	total uint64
+	idle  uint64
+}
+
+func readProcStatCPUTotalIdle() (procCPUStat, bool) {
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return procCPUStat{}, false
 	}
 
-	return cpuUsage
+	line := firstLine(string(data))
+	if line == "" || !strings.HasPrefix(line, "cpu ") {
+		return procCPUStat{}, false
+	}
+
+	fields := strings.Fields(line)
+	if len(fields) < 5 {
+		return procCPUStat{}, false
+	}
+
+	var total uint64
+	for i := 1; i < len(fields); i++ {
+		v, parseErr := strconv.ParseUint(fields[i], 10, 64)
+		if parseErr != nil {
+			return procCPUStat{}, false
+		}
+		total += v
+	}
+
+	idle, err := strconv.ParseUint(fields[4], 10, 64)
+	if err != nil {
+		return procCPUStat{}, false
+	}
+
+	return procCPUStat{total: total, idle: idle}, true
+}
+
+func firstLine(s string) string {
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		return strings.TrimSpace(s[:idx])
+	}
+	return strings.TrimSpace(s)
 }
 
 // getMemoryInfo 获取内存信息
@@ -335,7 +376,7 @@ func (c *SystemStatsCollector) getUptime() int64 {
 	// 尝试读取 /proc/uptime
 	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {
-		return int64(time.Since(time.Now()).Seconds())
+		return 0
 	}
 
 	parts := strings.Split(string(data), " ")

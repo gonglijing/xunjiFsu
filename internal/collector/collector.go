@@ -654,28 +654,72 @@ func (c *Collector) markTaskCollected(task *collectTask, collectedAt time.Time, 
 }
 
 func parseFloatFieldValue(fields map[string]string, field string) (float64, bool) {
-	if fields == nil {
-		return 0, false
+	lookup := newNumericFieldLookup(fields)
+	return lookup.getFloat(field)
+}
+
+type numericFieldLookup struct {
+	raw        map[string]string
+	normalized map[string]string
+	parsed     map[string]float64
+}
+
+func newNumericFieldLookup(fields map[string]string) *numericFieldLookup {
+	return &numericFieldLookup{
+		raw:    fields,
+		parsed: make(map[string]float64),
+	}
+}
+
+func normalizeFieldName(field string) string {
+	return strings.ToLower(strings.TrimSpace(field))
+}
+
+func (l *numericFieldLookup) getRawValue(field string) (normalized string, value string, ok bool) {
+	if l == nil || len(l.raw) == 0 {
+		return "", "", false
 	}
 
-	field = strings.TrimSpace(field)
-	if field == "" {
-		return 0, false
+	trimmed := strings.TrimSpace(field)
+	if trimmed == "" {
+		return "", "", false
 	}
 
-	valueStr, ok := fields[field]
-	if !ok {
-		// 兼容字段大小写和历史空白差异
-		for key, value := range fields {
-			if strings.EqualFold(strings.TrimSpace(key), field) {
-				valueStr = value
-				ok = true
-				break
+	if value, ok = l.raw[trimmed]; ok {
+		return normalizeFieldName(trimmed), value, true
+	}
+
+	normalized = normalizeFieldName(trimmed)
+	if normalized == "" {
+		return "", "", false
+	}
+
+	if l.normalized == nil {
+		l.normalized = make(map[string]string, len(l.raw))
+		for key, candidate := range l.raw {
+			normalizedKey := normalizeFieldName(key)
+			if normalizedKey == "" {
+				continue
 			}
+			if _, exists := l.normalized[normalizedKey]; exists {
+				continue
+			}
+			l.normalized[normalizedKey] = candidate
 		}
-		if !ok {
-			return 0, false
-		}
+	}
+
+	value, ok = l.normalized[normalized]
+	return normalized, value, ok
+}
+
+func (l *numericFieldLookup) getFloat(field string) (float64, bool) {
+	normalized, valueStr, ok := l.getRawValue(field)
+	if !ok {
+		return 0, false
+	}
+
+	if cached, exists := l.parsed[normalized]; exists {
+		return cached, true
 	}
 
 	value, err := strconv.ParseFloat(strings.TrimSpace(valueStr), 64)
@@ -683,6 +727,7 @@ func parseFloatFieldValue(fields map[string]string, field string) (float64, bool
 		return 0, false
 	}
 
+	l.parsed[normalized] = value
 	return value, true
 }
 
@@ -698,19 +743,25 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 	}
 
 	now := time.Now()
+	repeatInterval := resolveAlarmRepeatInterval()
+	lookup := newNumericFieldLookup(data.Fields)
 	for _, threshold := range thresholds {
 		if threshold == nil {
 			continue
 		}
+		if threshold.Shielded == 1 {
+			_ = shouldEmitAlarm(device.ID, threshold, false, now, repeatInterval)
+			continue
+		}
 
-		value, ok := parseFloatFieldValue(data.Fields, threshold.FieldName)
+		value, ok := lookup.getFloat(threshold.FieldName)
 		if !ok {
-			_ = shouldEmitAlarm(device.ID, threshold, false, now, 0)
+			_ = shouldEmitAlarm(device.ID, threshold, false, now, repeatInterval)
 			continue
 		}
 
 		matched := thresholdMatch(value, threshold.Operator, threshold.Value)
-		if !shouldEmitAlarm(device.ID, threshold, matched, now, 0) {
+		if !shouldEmitAlarm(device.ID, threshold, matched, now, repeatInterval) {
 			continue
 		}
 
@@ -761,14 +812,21 @@ func (c *Collector) handleAlarm(device *models.Device, threshold *models.Thresho
 
 // driverResultToCollectData 转换驱动结果为采集数据
 func driverResultToCollectData(device *models.Device, res *driver.DriverResult) *models.CollectData {
-	fields := map[string]string{}
+	if res == nil {
+		res = &driver.DriverResult{}
+	}
+
+	fields := make(map[string]string, len(res.Data)+len(res.Points))
 	if len(res.Data) > 0 {
 		for k, v := range res.Data {
 			fields[k] = v
 		}
 	}
 	for _, p := range res.Points {
-		fields[p.FieldName] = fmt.Sprintf("%v", p.Value)
+		if strings.TrimSpace(p.FieldName) == "" {
+			continue
+		}
+		fields[p.FieldName] = driverPointValueToString(p.Value)
 	}
 	ts := res.Timestamp
 	if ts.IsZero() {
@@ -781,6 +839,45 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		DeviceKey:  strings.TrimSpace(device.DeviceKey),
 		Timestamp:  ts,
 		Fields:     fields,
+	}
+}
+
+func driverPointValueToString(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	case bool:
+		return strconv.FormatBool(v)
+	case int:
+		return strconv.Itoa(v)
+	case int8:
+		return strconv.FormatInt(int64(v), 10)
+	case int16:
+		return strconv.FormatInt(int64(v), 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", v)
 	}
 }
 

@@ -9,6 +9,10 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type alarmRepeatIntervalPayload struct {
+	Seconds int `json:"seconds"`
+}
+
 // 阈值管理
 func (h *Handler) GetThresholds(w http.ResponseWriter, r *http.Request) {
 	thresholds, err := database.GetAllThresholds()
@@ -84,6 +88,36 @@ func (h *Handler) DeleteThreshold(w http.ResponseWriter, r *http.Request) {
 	WriteDeleted(w)
 }
 
+func (h *Handler) GetAlarmRepeatInterval(w http.ResponseWriter, r *http.Request) {
+	seconds, err := database.GetAlarmRepeatIntervalSeconds()
+	if err != nil {
+		writeServerErrorWithLog(w, apiErrGetAlarmRepeatIntervalFailed, err)
+		return
+	}
+
+	WriteSuccess(w, map[string]int{"seconds": seconds})
+}
+
+func (h *Handler) UpdateAlarmRepeatInterval(w http.ResponseWriter, r *http.Request) {
+	var payload alarmRepeatIntervalPayload
+	if !parseRequestOrWriteBadRequestDefault(w, r, &payload) {
+		return
+	}
+
+	if payload.Seconds <= 0 {
+		WriteBadRequestDef(w, apiErrInvalidAlarmRepeatInterval)
+		return
+	}
+
+	if err := database.UpdateAlarmRepeatIntervalSeconds(payload.Seconds); err != nil {
+		writeServerErrorWithLog(w, apiErrUpdateAlarmRepeatIntervalFailed, err)
+		return
+	}
+
+	collector.InvalidateAlarmRepeatIntervalCache()
+	WriteSuccess(w, map[string]int{"seconds": payload.Seconds})
+}
+
 func normalizeThresholdInput(threshold *models.Threshold) {
 	if threshold == nil {
 		return
@@ -95,5 +129,8 @@ func normalizeThresholdInput(threshold *models.Threshold) {
 	threshold.Message = strings.TrimSpace(threshold.Message)
 	if threshold.Enabled != 1 {
 		threshold.Enabled = 0
+	}
+	if threshold.Shielded != 1 {
+		threshold.Shielded = 0
 	}
 }

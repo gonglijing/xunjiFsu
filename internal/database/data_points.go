@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -25,6 +25,15 @@ type DataPoint struct {
 	ValueType   string    `json:"value_type"`
 	CollectedAt time.Time `json:"collected_at"`
 }
+
+var (
+	dataPointsCleanupCounter uint64
+	dataPointsLastCleanupNS  int64
+
+	// 允许在测试中覆盖
+	dataPointsCleanupEveryWrites uint64        = 128
+	dataPointsCleanupMinInterval time.Duration = 2 * time.Second
+)
 
 func normalizeDeviceName(deviceID int64, deviceName string) string {
 	if deviceID == models.SystemStatsDeviceID {
@@ -45,8 +54,8 @@ func SaveDataPoint(deviceID int64, deviceName, fieldName, value, valueType strin
 		return err
 	}
 
-	// 检查并清理过量的数据点
-	enforceDataPointsLimit()
+	// 节流检查并清理过量的数据点，避免每次写入都 count(*)
+	maybeEnforceDataPointsLimit()
 	return nil
 }
 
@@ -104,8 +113,8 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// 检查并清理过量的数据点
-	enforceDataPointsLimit()
+	// 节流检查并清理过量的数据点，避免每次写入都 count(*)
+	maybeEnforceDataPointsLimit()
 
 	// 检查是否需要触发同步
 	TriggerSyncIfNeeded()
@@ -120,40 +129,67 @@ type dataPointKey struct {
 }
 
 func mergeDataPoints(primary, secondary []*DataPoint, limit int) []*DataPoint {
+	if limit <= 0 {
+		limit = len(primary) + len(secondary)
+	}
+
 	if len(secondary) == 0 {
-		if limit > 0 && len(primary) > limit {
+		if len(primary) > limit {
 			return primary[:limit]
 		}
 		return primary
 	}
+	if len(primary) == 0 {
+		if len(secondary) > limit {
+			return secondary[:limit]
+		}
+		return secondary
+	}
 
-	combined := make([]*DataPoint, 0, len(primary)+len(secondary))
-	combined = append(combined, primary...)
-	combined = append(combined, secondary...)
+	maxSeen := len(primary) + len(secondary)
+	if maxSeen > limit {
+		maxSeen = limit
+	}
+	if maxSeen <= 0 {
+		maxSeen = 1
+	}
 
-	sort.Slice(combined, func(i, j int) bool {
-		return combined[i].CollectedAt.After(combined[j].CollectedAt)
-	})
+	seen := make(map[dataPointKey]struct{}, maxSeen)
+	result := make([]*DataPoint, 0, limit)
 
-	seen := make(map[dataPointKey]struct{}, len(combined))
-	result := make([]*DataPoint, 0, len(combined))
-	for _, point := range combined {
-		if point == nil {
+	i, j := 0, 0
+	for len(result) < limit && (i < len(primary) || j < len(secondary)) {
+		var candidate *DataPoint
+		takePrimary := j >= len(secondary)
+		if !takePrimary && i < len(primary) {
+			candidate = primary[i]
+			other := secondary[j]
+			if other == nil || (candidate != nil && !candidate.CollectedAt.Before(other.CollectedAt)) {
+				takePrimary = true
+			}
+		}
+		if takePrimary {
+			candidate = primary[i]
+			i++
+		} else {
+			candidate = secondary[j]
+			j++
+		}
+
+		if candidate == nil {
 			continue
 		}
+
 		key := dataPointKey{
-			deviceID:    point.DeviceID,
-			fieldName:   point.FieldName,
-			collectedAt: point.CollectedAt.UnixNano(),
+			deviceID:    candidate.DeviceID,
+			fieldName:   candidate.FieldName,
+			collectedAt: candidate.CollectedAt.UnixNano(),
 		}
 		if _, exists := seen[key]; exists {
 			continue
 		}
 		seen[key] = struct{}{}
-		result = append(result, point)
-		if limit > 0 && len(result) >= limit {
-			break
-		}
+		result = append(result, candidate)
 	}
 
 	return result
@@ -291,6 +327,32 @@ func enforceDataPointsLimit() {
 		}
 		log.Printf("Cleaned up data points, removed %d old entries", count-maxDataPointsLimit)
 	}
+}
+
+func maybeEnforceDataPointsLimit() {
+	if maxDataPointsLimit <= 0 {
+		return
+	}
+
+	writes := atomic.AddUint64(&dataPointsCleanupCounter, 1)
+	now := time.Now().UnixNano()
+	last := atomic.LoadInt64(&dataPointsLastCleanupNS)
+	minIntervalNS := int64(dataPointsCleanupMinInterval)
+	if minIntervalNS < 0 {
+		minIntervalNS = 0
+	}
+
+	if dataPointsCleanupEveryWrites > 0 && writes%dataPointsCleanupEveryWrites != 0 {
+		if now-last < minIntervalNS {
+			return
+		}
+	}
+
+	if !atomic.CompareAndSwapInt64(&dataPointsLastCleanupNS, last, now) {
+		return
+	}
+
+	enforceDataPointsLimit()
 }
 
 // GetDataPointsByDeviceAndTime 根据设备ID和时间范围获取历史数据（内存 + 磁盘）

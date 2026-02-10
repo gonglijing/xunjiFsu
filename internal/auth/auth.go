@@ -2,12 +2,15 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/pwdutil"
@@ -26,12 +29,26 @@ const (
 )
 
 // JWTManager 管理 JWT 签发与验证
+// 采用标准 HS256(JWT) 格式，使用标准库实现，避免额外依赖。
 type JWTManager struct {
 	secret     []byte
 	cookieName string
 }
 
 type sessionInfoContextKey struct{}
+
+type jwtHeader struct {
+	Alg string `json:"alg"`
+	Typ string `json:"typ"`
+}
+
+type jwtClaims struct {
+	Subject   int64  `json:"sub"`
+	Username  string `json:"name"`
+	Role      string `json:"role"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
+}
 
 func NewJWTManager(secretKey []byte) *JWTManager {
 	if len(secretKey) < 16 {
@@ -129,42 +146,102 @@ type SessionInfo struct {
 	Role     string
 }
 
-// GenerateToken 签发 JWT
+// GenerateToken 签发 JWT(HS256)
 func (m *JWTManager) GenerateToken(user *models.User) (string, error) {
-	claims := jwt.MapClaims{
-		"sub":  user.ID,
-		"name": user.Username,
-		"role": user.Role,
-		"iat":  time.Now().Unix(),
-		"exp":  time.Now().Add(tokenTTL).Unix(),
+	now := time.Now()
+	claims := jwtClaims{
+		Subject:   user.ID,
+		Username:  user.Username,
+		Role:      user.Role,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(tokenTTL).Unix(),
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(m.secret)
+	return signJWT(claims, m.secret)
 }
 
 // ParseToken 解析并验证 JWT
 func (m *JWTManager) ParseToken(tokenStr string) (*SessionInfo, error) {
-	parsed, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, ErrInvalidCredentials
-		}
-		return m.secret, nil
-	})
-	if err != nil || !parsed.Valid {
+	claims, err := verifyJWT(tokenStr, m.secret, time.Now())
+	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
-	claims, ok := parsed.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, ErrInvalidCredentials
-	}
-	id, _ := claims["sub"].(float64)
-	username, _ := claims["name"].(string)
-	role, _ := claims["role"].(string)
 	return &SessionInfo{
-		UserID:   int64(id),
-		Username: username,
-		Role:     role,
+		UserID:   claims.Subject,
+		Username: claims.Username,
+		Role:     claims.Role,
 	}, nil
+}
+
+func signJWT(claims jwtClaims, secret []byte) (string, error) {
+	header := jwtHeader{Alg: "HS256", Typ: "JWT"}
+	headerJSON, err := json.Marshal(header)
+	if err != nil {
+		return "", err
+	}
+	claimsJSON, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+
+	headerPart := base64.RawURLEncoding.EncodeToString(headerJSON)
+	claimsPart := base64.RawURLEncoding.EncodeToString(claimsJSON)
+	signingInput := headerPart + "." + claimsPart
+	signature := signHS256(signingInput, secret)
+	return signingInput + "." + signature, nil
+}
+
+func verifyJWT(token string, secret []byte, now time.Time) (jwtClaims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+
+	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+	var header jwtHeader
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+	if header.Alg != "HS256" || header.Typ != "JWT" {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+
+	signatureGiven, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+	signingInput := parts[0] + "." + parts[1]
+	signatureExpected := signHS256Bytes(signingInput, secret)
+	if !hmac.Equal(signatureGiven, signatureExpected) {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+
+	claimsJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+	var claims jwtClaims
+	if err := json.Unmarshal(claimsJSON, &claims); err != nil {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+
+	if claims.ExpiresAt <= 0 || now.Unix() >= claims.ExpiresAt {
+		return jwtClaims{}, ErrInvalidCredentials
+	}
+
+	return claims, nil
+}
+
+func signHS256(input string, secret []byte) string {
+	return base64.RawURLEncoding.EncodeToString(signHS256Bytes(input, secret))
+}
+
+func signHS256Bytes(input string, secret []byte) []byte {
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(input))
+	return mac.Sum(nil)
 }
 
 func extractToken(r *http.Request, cookieName string) string {

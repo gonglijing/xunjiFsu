@@ -6,8 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/gorilla/mux"
 )
 
 type parsedErrorResponse struct {
@@ -131,7 +129,9 @@ func TestParseIDOrWriteBadRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
-			req = mux.SetURLVars(req, tt.vars)
+			for k, v := range tt.vars {
+				req.SetPathValue(k, v)
+			}
 			w := httptest.NewRecorder()
 
 			id, ok := parseIDOrWriteBadRequestDefault(w, req)
@@ -325,7 +325,7 @@ func TestWriteDeleted(t *testing.T) {
 func TestParseDefaultHelpers(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/users/9", strings.NewReader(`{"name":"demo"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req = mux.SetURLVars(req, map[string]string{"id": "9"})
+	req.SetPathValue("id", "9")
 	w := httptest.NewRecorder()
 
 	id, ok := parseIDOrWriteBadRequestDefault(w, req)

@@ -328,3 +328,74 @@ func TestSaveDataCache_ThrottledCleanup(t *testing.T) {
 		t.Fatalf("expected count <= %d after cleanup, got %d", maxDataCacheLimit, count)
 	}
 }
+
+func TestSaveDataPoint_ThrottledCleanup(t *testing.T) {
+	oldLimit := maxDataPointsLimit
+	oldEvery := dataPointsCleanupEveryWrites
+	oldInterval := dataPointsCleanupMinInterval
+	defer func() {
+		maxDataPointsLimit = oldLimit
+		dataPointsCleanupEveryWrites = oldEvery
+		dataPointsCleanupMinInterval = oldInterval
+		atomic.StoreUint64(&dataPointsCleanupCounter, 0)
+		atomic.StoreInt64(&dataPointsLastCleanupNS, 0)
+	}()
+
+	maxDataPointsLimit = 3
+	dataPointsCleanupEveryWrites = 1000
+	dataPointsCleanupMinInterval = time.Hour
+	atomic.StoreUint64(&dataPointsCleanupCounter, 0)
+	atomic.StoreInt64(&dataPointsLastCleanupNS, 0)
+
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+	var err error
+	DataDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open data db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = DataDB.Close()
+	})
+
+	_, err = DataDB.Exec(`CREATE TABLE data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("create data_points: %v", err)
+	}
+
+	for i := 1; i <= 5; i++ {
+		if err := SaveDataPoint(1, "dev1", fmt.Sprintf("f%d", i), fmt.Sprintf("v%d", i), "string"); err != nil {
+			t.Fatalf("SaveDataPoint %d: %v", i, err)
+		}
+	}
+
+	var count int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
+		t.Fatalf("count data_points before forced cleanup: %v", err)
+	}
+	if count != 5 {
+		t.Fatalf("expected throttled mode to keep 5 rows before cleanup, got %d", count)
+	}
+
+	dataPointsCleanupEveryWrites = 1
+	dataPointsCleanupMinInterval = 0
+	if err := SaveDataPoint(1, "dev1", "f6", "v6", "string"); err != nil {
+		t.Fatalf("SaveDataPoint force cleanup: %v", err)
+	}
+
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
+		t.Fatalf("count data_points after forced cleanup: %v", err)
+	}
+	if count > maxDataPointsLimit {
+		t.Fatalf("expected count <= %d after cleanup, got %d", maxDataPointsLimit, count)
+	}
+}

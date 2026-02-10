@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
-	"github.com/gorilla/mux"
 )
 
 func TestHasSchemaConfig(t *testing.T) {
@@ -133,7 +132,7 @@ func TestParseAndPrepareNorthboundConfig_InvalidBody(t *testing.T) {
 func TestParseAndPrepareNorthboundConfig_InvalidConfig(t *testing.T) {
 	body := `{"name":"demo","type":"mqtt"}`
 	req := httptest.NewRequest(http.MethodPost, "/northbound", strings.NewReader(body))
-	req = mux.SetURLVars(req, map[string]string{"id": "1"})
+	req.SetPathValue("id", "1")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 

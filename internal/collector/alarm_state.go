@@ -1,13 +1,18 @@
 package collector
 
 import (
+	"log"
 	"sync"
 	"time"
 
+	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-const defaultAlarmRepeatInterval = time.Minute
+const (
+	defaultAlarmRepeatInterval       = time.Minute
+	alarmRepeatIntervalRefreshWindow = 5 * time.Second
+)
 
 type alarmStateKey struct {
 	DeviceID       int64
@@ -28,6 +33,12 @@ var alarmStates = struct {
 	data: make(map[alarmStateKey]alarmState),
 }
 
+var alarmRepeatIntervalCache = struct {
+	mu        sync.Mutex
+	value     time.Duration
+	expiresAt time.Time
+}{}
+
 func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateKey {
 	if threshold == nil {
 		return alarmStateKey{DeviceID: deviceID}
@@ -39,6 +50,42 @@ func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateK
 		Operator:       threshold.Operator,
 		ThresholdValue: threshold.Value,
 	}
+}
+
+func resolveAlarmRepeatInterval() time.Duration {
+	now := time.Now()
+
+	alarmRepeatIntervalCache.mu.Lock()
+	cached := alarmRepeatIntervalCache.value
+	expiresAt := alarmRepeatIntervalCache.expiresAt
+	alarmRepeatIntervalCache.mu.Unlock()
+
+	if cached > 0 && now.Before(expiresAt) {
+		return cached
+	}
+
+	resolved := defaultAlarmRepeatInterval
+	seconds, err := database.GetAlarmRepeatIntervalSeconds()
+	if err != nil {
+		log.Printf("Failed to load alarm repeat interval: %v", err)
+	} else if seconds > 0 {
+		resolved = time.Duration(seconds) * time.Second
+	}
+
+	alarmRepeatIntervalCache.mu.Lock()
+	alarmRepeatIntervalCache.value = resolved
+	alarmRepeatIntervalCache.expiresAt = now.Add(alarmRepeatIntervalRefreshWindow)
+	alarmRepeatIntervalCache.mu.Unlock()
+
+	return resolved
+}
+
+// InvalidateAlarmRepeatIntervalCache 清理重复上报间隔缓存
+func InvalidateAlarmRepeatIntervalCache() {
+	alarmRepeatIntervalCache.mu.Lock()
+	alarmRepeatIntervalCache.value = 0
+	alarmRepeatIntervalCache.expiresAt = time.Time{}
+	alarmRepeatIntervalCache.mu.Unlock()
 }
 
 // shouldEmitAlarm 更新阈值状态并返回是否应当发出新报警。

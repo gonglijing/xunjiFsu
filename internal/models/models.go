@@ -148,6 +148,7 @@ type Threshold struct {
 	Value     float64   `json:"value" db:"value"`
 	Severity  string    `json:"severity" db:"severity"`
 	Enabled   int       `json:"enabled" db:"enabled"`
+	Shielded  int       `json:"shielded" db:"shielded"`
 	Message   string    `json:"message" db:"message"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`

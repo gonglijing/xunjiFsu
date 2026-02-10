@@ -6,8 +6,6 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/extism/go-sdk v1.7.1
 	github.com/glebarez/go-sqlite v1.22.0
-	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/gorilla/mux v1.8.1
 	go.bug.st/serial v1.6.2
 	golang.org/x/crypto v0.42.0
 	gopkg.in/yaml.v3 v3.0.1

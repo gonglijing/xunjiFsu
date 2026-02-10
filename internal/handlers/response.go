@@ -2,11 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"mime"
 	"net/http"
 	"strconv"
-
-	"github.com/gorilla/mux"
 )
 
 var stringOnlyFormFields = map[string]struct{}{
@@ -166,8 +165,11 @@ func ParseRequest(r *http.Request, v interface{}) error {
 
 // ParseID 从 URL 参数解析 ID
 func ParseID(r *http.Request) (int64, error) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	idText := r.PathValue("id")
+	if idText == "" {
+		return 0, errors.New("missing id path param")
+	}
+	id, err := strconv.ParseInt(idText, 10, 64)
 	if err != nil {
 		return 0, err
 	}

@@ -200,6 +200,50 @@ func TestParseFloatFieldValue(t *testing.T) {
 	if _, ok := parseFloatFieldValue(fields, "bad"); ok {
 		t.Fatalf("invalid float should return false")
 	}
+
+	fieldsWithSpacing := map[string]string{
+		" Humidity ": " 51.5 ",
+	}
+	if v, ok := parseFloatFieldValue(fieldsWithSpacing, "humidity"); !ok || v != 51.5 {
+		t.Fatalf("expected case/trim match humidity=51.5, got (%v, %v)", v, ok)
+	}
+}
+
+func TestNumericFieldLookup_CacheParsedValue(t *testing.T) {
+	lookup := newNumericFieldLookup(map[string]string{
+		"temperature": "42.1",
+	})
+
+	v1, ok1 := lookup.getFloat("temperature")
+	v2, ok2 := lookup.getFloat(" temperature ")
+	if !ok1 || !ok2 || v1 != 42.1 || v2 != 42.1 {
+		t.Fatalf("expected cached parsed value 42.1, got (%v,%v) and (%v,%v)", v1, ok1, v2, ok2)
+	}
+
+	if len(lookup.parsed) != 1 {
+		t.Fatalf("expected parsed cache size 1, got %d", len(lookup.parsed))
+	}
+}
+
+func TestDriverPointValueToString(t *testing.T) {
+	cases := []struct {
+		name  string
+		input interface{}
+		want  string
+	}{
+		{name: "string", input: "abc", want: "abc"},
+		{name: "bytes", input: []byte("ab"), want: "ab"},
+		{name: "bool", input: true, want: "true"},
+		{name: "int", input: int64(123), want: "123"},
+		{name: "float", input: 12.5, want: "12.5"},
+		{name: "nil", input: nil, want: ""},
+	}
+
+	for _, tc := range cases {
+		if got := driverPointValueToString(tc.input); got != tc.want {
+			t.Fatalf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
 }
 
 func TestNormalizeNorthboundCommand(t *testing.T) {
