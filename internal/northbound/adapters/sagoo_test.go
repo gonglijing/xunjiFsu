@@ -267,3 +267,12 @@ func TestPickFirstNonEmptyFixedArity(t *testing.T) {
 		t.Fatalf("pickFirstNonEmpty3()=%q, want=pk", got)
 	}
 }
+
+func TestSagooSysTopic(t *testing.T) {
+	if got := sagooSysTopic("pk", "dk", "thing/service/property/set_reply"); got != "/sys/pk/dk/thing/service/property/set_reply" {
+		t.Fatalf("sagooSysTopic()=%q", got)
+	}
+	if got := sagooSysTopic("pk", "dk", ""); got != "/sys/pk/dk" {
+		t.Fatalf("sagooSysTopic() empty suffix=%q", got)
+	}
+}

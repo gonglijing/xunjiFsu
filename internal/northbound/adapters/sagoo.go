@@ -135,7 +135,7 @@ func (a *SagooAdapter) Initialize(configStr string) error {
 	retain := cfg.Retain
 	topic := strings.TrimSpace(cfg.Topic)
 	if !strings.HasPrefix(topic, "/sys/") {
-		topic = fmt.Sprintf("/sys/%s/%s/thing/event/property/pack/post", cfg.ProductKey, cfg.DeviceKey)
+		topic = sagooSysTopic(cfg.ProductKey, cfg.DeviceKey, "thing/event/property/pack/post")
 	}
 	alarmTopic := strings.TrimSpace(cfg.AlarmTopic)
 	if !strings.HasPrefix(alarmTopic, "/sys/") {
@@ -374,7 +374,7 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 	}
 	body, _ := json.Marshal(resp)
 
-	topic := fmt.Sprintf("/sys/%s/%s/thing/service/property/set_reply", pk, dk)
+	topic := sagooSysTopic(pk, dk, "thing/service/property/set_reply")
 	return a.publish(topic, body)
 }
 
@@ -651,9 +651,9 @@ func (a *SagooAdapter) subscribeCommandTopics(client mqtt.Client) {
 		return
 	}
 
-	a.subscribe(client, fmt.Sprintf("/sys/%s/%s/thing/service/property/set", pk, dk), a.handlePropertySet)
-	a.subscribe(client, fmt.Sprintf("/sys/%s/%s/thing/service/+", pk, dk), a.handleServiceCall)
-	a.subscribe(client, fmt.Sprintf("/sys/%s/%s/thing/config/push", pk, dk), a.handleConfigPush)
+	a.subscribe(client, sagooSysTopic(pk, dk, "thing/service/property/set"), a.handlePropertySet)
+	a.subscribe(client, sagooSysTopic(pk, dk, "thing/service/+"), a.handleServiceCall)
+	a.subscribe(client, sagooSysTopic(pk, dk, "thing/config/push"), a.handleConfigPush)
 }
 
 func (a *SagooAdapter) subscribe(client mqtt.Client, topic string, handler mqtt.MessageHandler) {
@@ -694,7 +694,7 @@ func (a *SagooAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
 		"version": "1.0.0",
 	}
 	respBody, _ := json.Marshal(resp)
-	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/service/property/set_reply", pk, dk), respBody)
+	_ = a.publish(sagooSysTopic(pk, dk, "thing/service/property/set_reply"), respBody)
 }
 
 func (a *SagooAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
@@ -730,7 +730,7 @@ func (a *SagooAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 		"version": "1.0.0",
 	}
 	respBody, _ := json.Marshal(resp)
-	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/service/%s_reply", pk, dk, svc), respBody)
+	_ = a.publish(sagooSysTopic(pk, dk, "thing/service/"+svc+"_reply"), respBody)
 }
 
 func (a *SagooAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
@@ -752,7 +752,7 @@ func (a *SagooAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
 		"id":   req.Id,
 	}
 	respBody, _ := json.Marshal(resp)
-	_ = a.publish(fmt.Sprintf("/sys/%s/%s/thing/config/push/reply", pk, dk), respBody)
+	_ = a.publish(sagooSysTopic(pk, dk, "thing/config/push/reply"), respBody)
 }
 
 func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}, rootIdentityPK, rootIdentityDK string) {
@@ -1013,6 +1013,13 @@ func cloneAlarmPayload(alarm *models.AlarmPayload) *models.AlarmPayload {
 	}
 	out := *alarm
 	return &out
+}
+
+func sagooSysTopic(productKey, deviceKey, suffix string) string {
+	if suffix == "" {
+		return "/sys/" + productKey + "/" + deviceKey
+	}
+	return "/sys/" + productKey + "/" + deviceKey + "/" + suffix
 }
 
 func splitTopic(topic string) []string {
