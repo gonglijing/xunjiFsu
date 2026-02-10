@@ -90,7 +90,6 @@ function GatewayPage() {
   });
   const [saving, setSaving] = createSignal(false);
   const [runtimeSaving, setRuntimeSaving] = createSignal(false);
-  const [syncing, setSyncing] = createSignal(false);
   const [err, setErr] = createSignal('');
 
   const load = () => {
@@ -114,20 +113,6 @@ function GatewayPage() {
         toast.show('error', msg);
       })
       .finally(() => setSaving(false));
-  };
-
-  const syncNorthboundIdentity = () => {
-    setSyncing(true);
-    api.gateway.syncGatewayIdentityToNorthbound()
-      .then((data) => {
-        const updated = data.updated?.length || 0;
-        const failed = data.failed ? Object.keys(data.failed).length : 0;
-        toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
-      })
-      .catch((er) => {
-        showErrorToast(toast, er, '同步失败');
-      })
-      .finally(() => setSyncing(false));
   };
 
   const submitRuntime = (e) => {
@@ -224,9 +209,6 @@ function GatewayPage() {
             <div class="flex" style={{ gap: '8px', marginTop: '16px' }}>
               <button type="submit" class="btn btn-primary" disabled={saving()}>
                 {saving() ? '保存中...' : '保存配置'}
-              </button>
-              <button type="button" class="btn" onClick={syncNorthboundIdentity} disabled={syncing() || saving()}>
-                {syncing() ? '同步中...' : '同步到北向'}
               </button>
             </div>
           </form>

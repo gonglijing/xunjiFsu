@@ -268,15 +268,6 @@ export function Northbound() {
           payload.username = cfg.username || '';
         }
       }
-
-      if (isIThingsType(payload.type)) {
-        if (payload.product_key === undefined || !`${payload.product_key || ''}`.trim()) {
-          payload.product_key = cfg.productKey || cfg.productID || '';
-        }
-        if (payload.device_key === undefined || !`${payload.device_key || ''}`.trim()) {
-          payload.device_key = cfg.deviceKey || cfg.deviceName || '';
-        }
-      }
     } else {
       // 无 schema，使用 JSON 编辑
       try {

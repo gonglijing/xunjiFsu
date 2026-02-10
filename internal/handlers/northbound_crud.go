@@ -120,10 +120,6 @@ func parseAndPrepareNorthboundConfig(w http.ResponseWriter, r *http.Request) (*m
 		writeNorthboundConfigInvalid(w, err)
 		return nil, false
 	}
-	if err := enrichNorthboundConfigWithGatewayIdentity(&config); err != nil {
-		writeNorthboundConfigInvalid(w, err)
-		return nil, false
-	}
 
 	return &config, true
 }

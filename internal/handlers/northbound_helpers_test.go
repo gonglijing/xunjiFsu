@@ -11,28 +11,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func TestIsGatewayIdentityNorthboundType(t *testing.T) {
-	tests := []struct {
-		name   string
-		nbType string
-		want   bool
-	}{
-		{name: "xunji", nbType: "xunji", want: true},
-		{name: "pandax", nbType: "pandax", want: true},
-		{name: "ithings mixed case", nbType: "iThings", want: true},
-		{name: "mqtt", nbType: "mqtt", want: false},
-		{name: "empty", nbType: "", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isGatewayIdentityNorthboundType(tt.nbType); got != tt.want {
-				t.Fatalf("isGatewayIdentityNorthboundType(%q) = %v, want %v", tt.nbType, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestHasSchemaConfig(t *testing.T) {
 	tests := []struct {
 		name string

@@ -19,7 +19,6 @@ const (
 	errDriverConfigSchemaInvalidJSONError = "driver config_schema is invalid JSON"
 	errDeviceHasNoDriverMessage           = "Device has no driver"
 
-	errGatewayIdentityRequiredMessage = "请先在网关配置中设置 product_key 和 device_key"
 	errHistoryStartAfterEndDetail     = "start time must be before end time"
 	errHistoryFilterRequiresDevice    = "device_id is required when using field_name/start/end filters"
 )
@@ -36,7 +35,6 @@ var (
 	apiErrDriverNotFound                = newAPIError("E_DRIVER_NOT_FOUND", errDriverNotFoundMessage)
 	apiErrNorthboundConfigNotFound      = newAPIError("E_NORTHBOUND_NOT_FOUND", errNorthboundConfigNotFoundMessage)
 	apiErrResourceNotFound              = newAPIError("E_RESOURCE_NOT_FOUND", errResourceNotFoundMessage)
-	apiErrGatewayIdentityRequired       = newAPIError("E_GATEWAY_IDENTITY_REQUIRED", errGatewayIdentityRequiredMessage)
 	apiErrDriverWasmFileNotFound        = newAPIError("E_DRIVER_WASM_NOT_FOUND", errDriverWasmFileNotFoundMessage)
 	apiErrDriverLookupFailed            = newAPIError("E_DRIVER_LOOKUP_FAILED", errDriverLookupFailedMessage)
 	apiErrDriverNotLoaded               = newAPIError("E_DRIVER_NOT_LOADED", errDriverNotLoadedMessage)
