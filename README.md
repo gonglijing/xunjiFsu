@@ -613,7 +613,6 @@ make deploy-windows  # Windows
 |------|------|------|
 | GET | `/api/gateway/config` | 获取网关配置 |
 | PUT | `/api/gateway/config` | 更新网关配置 |
-| POST | `/api/gateway/northbound/sync-identity` | 将网关 ProductKey/DeviceKey 同步到 xunji 北向配置 |
 
 ## 驱动开发
 

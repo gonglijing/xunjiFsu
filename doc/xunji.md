@@ -194,7 +194,6 @@ Topic：`/sys/gatewayPk/gatewayDk/thing/service/property/set`
 - `productKey/deviceKey` 填网关身份（即 FSU 自身）
 - 设备侧（子设备）身份来自设备表里的 `product_key/device_key`
 - 若设备未配置身份，会回退网关身份（不建议）
-- 可调用 `POST /api/gateway/northbound/sync-identity` 将网关身份同步到北向配置
 
 ---
 

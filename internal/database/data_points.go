@@ -26,8 +26,16 @@ type DataPoint struct {
 	CollectedAt time.Time `json:"collected_at"`
 }
 
+func normalizeDeviceName(deviceID int64, deviceName string) string {
+	if deviceID == models.SystemStatsDeviceID {
+		return models.SystemStatsDeviceName
+	}
+	return strings.TrimSpace(deviceName)
+}
+
 // SaveDataPoint 保存历史数据点（内存暂存）
 func SaveDataPoint(deviceID int64, deviceName, fieldName, value, valueType string) error {
+	deviceName = normalizeDeviceName(deviceID, deviceName)
 	_, err := DataDB.Exec(
 		`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
@@ -86,7 +94,7 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 		if collectedAt.IsZero() {
 			collectedAt = time.Now()
 		}
-		if _, err := stmt.Exec(entry.DeviceID, entry.DeviceName, entry.FieldName,
+		if _, err := stmt.Exec(entry.DeviceID, normalizeDeviceName(entry.DeviceID, entry.DeviceName), entry.FieldName,
 			entry.Value, entry.ValueType, collectedAt); err != nil {
 			return fmt.Errorf("failed to insert data point: %w", err)
 		}
@@ -434,7 +442,7 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 		data, exists := deviceDataMap[point.DeviceID]
 		if !exists {
 			data = &LatestDeviceData{
-				DeviceID:    point.DeviceID,
+				DeviceID:   point.DeviceID,
 				DeviceName: point.DeviceName,
 				Fields:     make(map[string]string),
 			}
@@ -464,6 +472,7 @@ func InsertCollectData(data *models.CollectData) error {
 
 // SaveLatestDataPoint 保存最新数据点（使用 upsert，只保留最新值）
 func SaveLatestDataPoint(deviceID int64, deviceName, fieldName, value string) error {
+	deviceName = normalizeDeviceName(deviceID, deviceName)
 	_, err := DataDB.Exec(
 		`INSERT OR REPLACE INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
@@ -493,7 +502,7 @@ func BatchSaveLatestDataPoints(entries []DataPointEntry) error {
 	defer stmt.Close()
 
 	for _, entry := range entries {
-		if _, err := stmt.Exec(entry.DeviceID, entry.DeviceName, entry.FieldName,
+		if _, err := stmt.Exec(entry.DeviceID, normalizeDeviceName(entry.DeviceID, entry.DeviceName), entry.FieldName,
 			entry.Value, entry.ValueType); err != nil {
 			return fmt.Errorf("failed to upsert data point: %w", err)
 		}
@@ -508,10 +517,12 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeLatest bool) er
 		return fmt.Errorf("collect data is nil")
 	}
 
+	deviceName := normalizeDeviceName(data.DeviceID, data.DeviceName)
+
 	entries := make([]DataPointEntry, 0, len(data.Fields))
 	for field, value := range data.Fields {
 		// 保存到缓存（最新值）
-		if err := SaveDataCache(data.DeviceID, data.DeviceName, field, value, "string"); err != nil {
+		if err := SaveDataCache(data.DeviceID, deviceName, field, value, "string"); err != nil {
 			log.Printf("SaveDataCache error: %v", err)
 		}
 		if !storeLatest {
@@ -519,7 +530,7 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeLatest bool) er
 		}
 		entries = append(entries, DataPointEntry{
 			DeviceID:    data.DeviceID,
-			DeviceName:  data.DeviceName,
+			DeviceName:  deviceName,
 			FieldName:   field,
 			Value:       value,
 			ValueType:   "string",

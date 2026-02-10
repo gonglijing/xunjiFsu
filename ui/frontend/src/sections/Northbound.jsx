@@ -161,7 +161,6 @@ export function Northbound() {
   const [runtime, setRuntime] = createSignal([]);
   const showLoadError = withErrorToast(toast, '加载北向配置失败');
   const showSaveError = withErrorToast(toast, '保存失败');
-  const showSyncError = withErrorToast(toast, '同步失败');
   const {
     loading,
     error: loadError,
@@ -182,7 +181,6 @@ export function Northbound() {
   const [editing, setEditing] = createSignal(null);
   const [showModal, setShowModal] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
-  const [syncing, setSyncing] = createSignal(false);
 
   // Schema 状态
   const [schema, setSchema] = createSignal([]);
@@ -326,19 +324,6 @@ export function Northbound() {
       .catch((err) => showErrorToast(toast, err, '重载失败'));
   };
 
-  const syncGatewayIdentity = () => {
-    setSyncing(true);
-    api.northbound.syncGatewayIdentityToNorthbound()
-      .then((data) => {
-        const updated = data.updated?.length || 0;
-        const failed = data.failed ? Object.keys(data.failed).length : 0;
-        toast.show('success', `同步完成：更新 ${updated} 个，失败 ${failed} 个`);
-        load();
-      })
-      .catch(showSyncError)
-      .finally(() => setSyncing(false));
-  };
-
   const remove = (id) => {
     if (!confirm('删除该配置？')) return;
     api.northbound.deleteNorthboundConfig(id)
@@ -450,9 +435,6 @@ export function Northbound() {
             <Show when={schemaError()}>
               <span style="font-size:12px; color:var(--danger);">Schema 异常</span>
             </Show>
-            <button class="btn" onClick={syncGatewayIdentity} disabled={syncing()}>
-              {syncing() ? '同步中...' : '同步网关身份'}
-            </button>
             <button class="btn btn-primary" onClick={openCreate}>
               新增配置
             </button>

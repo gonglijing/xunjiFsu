@@ -34,8 +34,3 @@ export async function toggleNorthboundConfig(id) {
 export async function reloadNorthboundConfig(id) {
   return post(`/api/northbound/${id}/reload`);
 }
-
-export async function syncGatewayIdentityToNorthbound() {
-  const res = await post('/api/gateway/northbound/sync-identity');
-  return unwrapData(res, {});
-}
