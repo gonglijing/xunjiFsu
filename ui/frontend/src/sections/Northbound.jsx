@@ -421,11 +421,11 @@ export function Northbound() {
       <Card
         title="北向配置列表"
         extra={
-          <div class="flex" style="gap:8px; align-items:center;">
+          <div class="toolbar-actions">
             <Show when={schemaError()}>
               <span style="font-size:12px; color:var(--danger);">Schema 异常</span>
             </Show>
-            <button class="btn btn-primary" onClick={openCreate}>
+            <button class="btn btn-primary btn-sm" onClick={openCreate}>
               新增配置
             </button>
           </div>
@@ -565,7 +565,7 @@ export function Northbound() {
                       fallback={
                         <div class="form-hint" style="margin-bottom:8px; color:var(--danger);">
                           <div>{schemaError() || 'Schema 加载失败'}</div>
-                          <button type="button" class="btn" style="margin-top:8px;" onClick={() => loadSchema(form().type)}>
+                          <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onClick={() => loadSchema(form().type)}>
                             重试
                           </button>
                         </div>

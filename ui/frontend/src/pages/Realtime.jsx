@@ -256,7 +256,9 @@ function Realtime() {
                     <td>{p.field_name || ''}</td>
                     <td>{p.value}</td>
                     <td>
-                      <button class="btn btn-primary" onClick={() => openHistory(p)}>历史数据</button>
+                      <div class="table-actions">
+                        <button class="btn btn-soft-primary btn-sm" onClick={() => openHistory(p)}>历史数据</button>
+                      </div>
                     </td>
                   </tr>
                 );

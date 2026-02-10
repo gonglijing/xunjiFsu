@@ -84,9 +84,11 @@ function Resources() {
       <Card
         title="资源列表"
         extra={
-          <button class="btn btn-primary" onClick={() => { setForm(empty); setEditing(null); setErr(''); setShowModal(true); }}>
-            新增资源
-          </button>
+          <div class="toolbar-actions">
+            <button class="btn btn-primary btn-sm" onClick={() => { setForm(empty); setEditing(null); setErr(''); setShowModal(true); }}>
+              新增资源
+            </button>
+          </div>
         }
       >
         <LoadErrorHint error={loadError()} onRetry={load} />

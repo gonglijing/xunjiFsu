@@ -63,9 +63,11 @@ export function GatewayStatus() {
     <Card
       title="网关运行状态"
       extra={
-        <button class="btn btn-ghost text-xs" type="button" onClick={load}>
-          刷新
-        </button>
+        <div class="toolbar-actions">
+          <button class="btn btn-ghost btn-sm" type="button" onClick={load}>
+            刷新
+          </button>
+        </div>
       }
     >
       <Show

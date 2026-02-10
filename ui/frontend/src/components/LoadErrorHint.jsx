@@ -17,7 +17,7 @@ export default function LoadErrorHint(props) {
         "
       >
         <span style="color:var(--accent-red);">{props.error}</span>
-        <button class="btn" type="button" onClick={() => props.onRetry?.()}>
+        <button class="btn btn-ghost btn-sm" type="button" onClick={() => props.onRetry?.()}>
           重试
         </button>
       </div>
