@@ -205,9 +205,11 @@ func (a *IThingsAdapter) Start() {
 		if a.stopChan == nil {
 			a.stopChan = make(chan struct{})
 		}
-		a.wg.Add(2)
-		go a.reportLoop()
-		go a.alarmLoop()
+		if a.flushNow == nil {
+			a.flushNow = make(chan struct{}, 1)
+		}
+		a.wg.Add(1)
+		go a.runLoop()
 		log.Printf("iThings adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
@@ -445,40 +447,27 @@ func (a *IThingsAdapter) PendingCommandCount() int {
 	return len(a.commandQueue)
 }
 
-func (a *IThingsAdapter) reportLoop() {
+func (a *IThingsAdapter) runLoop() {
 	defer a.wg.Done()
 
 	a.mu.RLock()
-	interval := a.reportEvery
-	stopChan := a.stopChan
-	a.mu.RUnlock()
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-stopChan:
-			return
-		case <-ticker.C:
-			if err := a.flushRealtime(); err != nil {
-				log.Printf("iThings realtime flush failed: %v", err)
-			}
-		}
-	}
-}
-
-func (a *IThingsAdapter) alarmLoop() {
-	defer a.wg.Done()
-
-	a.mu.RLock()
-	interval := a.alarmEvery
+	reportInterval := a.reportEvery
+	alarmInterval := a.alarmEvery
 	flushNow := a.flushNow
 	stopChan := a.stopChan
 	a.mu.RUnlock()
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	if reportInterval <= 0 {
+		reportInterval = defaultReportInterval
+	}
+	if alarmInterval <= 0 {
+		alarmInterval = defaultAlarmInterval
+	}
+
+	reportTicker := time.NewTicker(reportInterval)
+	alarmTicker := time.NewTicker(alarmInterval)
+	defer reportTicker.Stop()
+	defer alarmTicker.Stop()
 
 	for {
 		select {
@@ -496,7 +485,11 @@ func (a *IThingsAdapter) alarmLoop() {
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-		case <-ticker.C:
+		case <-reportTicker.C:
+			if err := a.flushRealtime(); err != nil {
+				log.Printf("iThings realtime flush failed: %v", err)
+			}
+		case <-alarmTicker.C:
 			if err := a.flushAlarmBatch(); err != nil {
 				log.Printf("iThings alarm flush failed: %v", err)
 			}

@@ -61,3 +61,19 @@ func TestResolveDeviceNameByMode(t *testing.T) {
 		t.Fatalf("default mode got=%q, want=dev-key", got)
 	}
 }
+
+func TestIThingsSingleLoop_StopThenCloseSafe(t *testing.T) {
+	adapter := NewIThingsAdapter("ithings-test")
+	adapter.initialized = true
+	adapter.reportEvery = time.Hour
+	adapter.alarmEvery = time.Hour
+
+	adapter.Start()
+	adapter.Stop()
+	if err := adapter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if adapter.IsEnabled() {
+		t.Fatal("adapter should be disabled after Close")
+	}
+}
