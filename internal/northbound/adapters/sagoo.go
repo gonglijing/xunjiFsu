@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -816,8 +815,7 @@ func (a *SagooAdapter) defaultIdentity() (string, string) {
 }
 
 func (a *SagooAdapter) nextID(prefix string) string {
-	n := atomic.AddUint64(&a.seq, 1)
-	return fmt.Sprintf("%s_%d_%d", prefix, time.Now().UnixMilli(), n)
+	return nextPrefixedID(prefix, &a.seq)
 }
 
 func (a *SagooAdapter) enqueueRealtimeLocked(item *models.CollectData) {

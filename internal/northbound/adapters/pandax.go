@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -1488,9 +1487,7 @@ func maxInt2(left, right int) int {
 }
 
 func (a *PandaXAdapter) nextID(prefix string) string {
-	n := atomic.AddUint64(&a.seq, 1)
-	millis := strconv.FormatInt(time.Now().UnixMilli(), 10)
-	return prefix + "_" + millis + "_" + strconv.FormatUint(n, 10)
+	return nextPrefixedID(prefix, &a.seq)
 }
 
 func formatMetricFloat2(value float64) string {

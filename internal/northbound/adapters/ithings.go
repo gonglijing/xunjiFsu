@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -1181,6 +1180,5 @@ func renderIThingsTopic(template, productID, deviceName string) string {
 }
 
 func (a *IThingsAdapter) nextID(prefix string) string {
-	n := atomic.AddUint64(&a.seq, 1)
-	return fmt.Sprintf("%s_%d_%d", prefix, time.Now().UnixMilli(), n)
+	return nextPrefixedID(prefix, &a.seq)
 }
