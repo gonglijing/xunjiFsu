@@ -252,8 +252,8 @@ export function Devices() {
               value={search()}
               onInput={(e) => setSearch(e.target.value)}
             />
-            <button class="btn" onClick={load}>刷新</button>
-            <button class="btn btn-primary" onClick={openCreate}>新增设备</button>
+            <button class="btn btn-ghost btn-sm" onClick={load}>刷新</button>
+            <button class="btn btn-primary btn-sm" onClick={openCreate}>新增设备</button>
           </div>
         }
       >

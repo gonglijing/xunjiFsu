@@ -77,10 +77,10 @@ export function Drivers() {
       title="驱动管理"
       extra={
         <div class="toolbar-actions">
-          <button class="btn" onClick={load} disabled={loading()}>
+          <button class="btn btn-ghost btn-sm" onClick={load} disabled={loading()}>
             刷新
           </button>
-          <label class="btn btn-primary" style="cursor:pointer;">
+          <label class="btn btn-primary btn-sm" style="cursor:pointer;">
             上传驱动
             <input type="file" accept=".wasm" style="display:none" onChange={upload} />
           </label>

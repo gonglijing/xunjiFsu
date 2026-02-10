@@ -11,7 +11,7 @@ export function Alarms() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const showLoadError = withErrorToast(toast, '加载告警失败');
-  const { loading, run: runAlarmsLoad } = usePageLoader(async () => {
+  const { loading, error, run: runAlarmsLoad } = usePageLoader(async () => {
     const res = await api.alarms.listAlarms();
     setItems(res || []);
   }, {
@@ -25,8 +25,11 @@ export function Alarms() {
   onMount(load);
 
   return (
-    <Card title="报警日志" extra={<button class="btn" onClick={load}>刷新</button>}>
-      <LoadErrorHint error={loadError()} onRetry={load} />
+    <Card
+      title="报警日志"
+      extra={<div class="toolbar-actions"><button class="btn btn-ghost btn-sm" onClick={load}>刷新</button></div>}
+    >
+      <LoadErrorHint error={error()} onRetry={load} />
       {loading() ? (
         <div class="text-center" style="padding:48px; color:var(--text-muted);">
           <div class="loading-spinner" style="margin:0 auto 16px;"></div>

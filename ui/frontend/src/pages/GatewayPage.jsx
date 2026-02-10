@@ -180,8 +180,8 @@ function GatewayPage() {
               <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
             </Show>
 
-            <div class="flex" style={{ gap: '8px', marginTop: '16px' }}>
-              <button type="submit" class="btn btn-primary" disabled={saving()}>
+            <div class="modal-actions" style={{ marginTop: '16px' }}>
+              <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
                 {saving() ? '保存中...' : '保存配置'}
               </button>
             </div>
@@ -258,9 +258,11 @@ function GatewayPage() {
               onInput={(e) => setRuntimeForm({ ...runtimeForm(), driver_tcp_dial_retries: e.target.value })}
               placeholder="例如 0" />
           </div>
-          <button type="submit" class="btn btn-primary" disabled={runtimeSaving()}>
-            {runtimeSaving() ? '更新中...' : '热更新参数'}
-          </button>
+          <div class="modal-actions" style={{ marginTop: '12px' }}>
+            <button type="submit" class="btn btn-primary btn-sm" disabled={runtimeSaving()}>
+              {runtimeSaving() ? '更新中...' : '热更新参数'}
+            </button>
+          </div>
         </form>
       </Card>
 
