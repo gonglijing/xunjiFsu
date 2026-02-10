@@ -545,6 +545,39 @@ func TestRemoveTaskLocked_KeepSharedResourceLock(t *testing.T) {
 	}
 }
 
+func TestPruneMissingTasksLocked(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	resourceA := int64(301)
+	resourceB := int64(302)
+	device1 := &models.Device{ID: 301, Enabled: 1, ResourceID: &resourceA, CollectInterval: 1000, StorageInterval: 60}
+	device2 := &models.Device{ID: 302, Enabled: 1, ResourceID: &resourceB, CollectInterval: 1000, StorageInterval: 60}
+
+	c.mu.Lock()
+	c.tasks[device1.ID] = newCollectTask(device1, nil)
+	c.tasks[device2.ID] = newCollectTask(device2, nil)
+	c.resourceLock[resourceA] = make(chan struct{}, 1)
+	c.resourceLock[resourceB] = make(chan struct{}, 1)
+
+	removed := c.pruneMissingTasksLocked(map[int64]struct{}{device1.ID: {}})
+	_, hasTask1 := c.tasks[device1.ID]
+	_, hasTask2 := c.tasks[device2.ID]
+	_, hasLockA := c.resourceLock[resourceA]
+	_, hasLockB := c.resourceLock[resourceB]
+	c.mu.Unlock()
+
+	if removed != 1 {
+		t.Fatalf("expected removed=1, got %d", removed)
+	}
+	if !hasTask1 || hasTask2 {
+		t.Fatalf("expected task1 kept and task2 removed, hasTask1=%v hasTask2=%v", hasTask1, hasTask2)
+	}
+	if !hasLockA || hasLockB {
+		t.Fatalf("expected lockA kept and lockB removed, hasLockA=%v hasLockB=%v", hasLockA, hasLockB)
+	}
+}
+
 func TestStartAdjustableTickerWorker_NilWorker(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)

@@ -289,13 +289,24 @@ func (c *Collector) SyncDeviceStatus() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	changed := false
+	seenDeviceIDs := make(map[int64]struct{}, len(devices))
 
 	for _, device := range devices {
+		if device == nil {
+			continue
+		}
+		seenDeviceIDs[device.ID] = struct{}{}
+
 		action := c.syncDeviceTaskLocked(device)
 		if action != deviceSyncActionNone {
 			changed = true
 		}
 		c.logDeviceSyncAction(device, action)
+	}
+
+	if removed := c.pruneMissingTasksLocked(seenDeviceIDs); removed > 0 {
+		changed = true
+		log.Printf("Pruned %d orphaned device tasks", removed)
 	}
 
 	if changed {
@@ -523,6 +534,22 @@ func (c *Collector) removeTaskLocked(deviceID int64) {
 		c.releaseResourceLockIfUnusedLocked(removedTask.device.ResourceID)
 	}
 	clearAlarmStateForDevice(deviceID)
+}
+
+func (c *Collector) pruneMissingTasksLocked(seenDeviceIDs map[int64]struct{}) int {
+	if len(c.tasks) == 0 {
+		return 0
+	}
+
+	removed := 0
+	for deviceID := range c.tasks {
+		if _, exists := seenDeviceIDs[deviceID]; exists {
+			continue
+		}
+		c.removeTaskLocked(deviceID)
+		removed++
+	}
+	return removed
 }
 
 func (c *Collector) releaseResourceLockIfUnusedLocked(resourceID *int64) {
