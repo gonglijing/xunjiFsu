@@ -127,9 +127,6 @@ func normalizeThresholdInput(threshold *models.Threshold) {
 	threshold.Operator = strings.TrimSpace(threshold.Operator)
 	threshold.Severity = strings.TrimSpace(threshold.Severity)
 	threshold.Message = strings.TrimSpace(threshold.Message)
-	if threshold.Enabled != 1 {
-		threshold.Enabled = 0
-	}
 	if threshold.Shielded != 1 {
 		threshold.Shielded = 0
 	}

@@ -99,8 +99,8 @@ func CreateThreshold(threshold *models.Threshold) (int64, error) {
 	}
 
 	result, err := ParamDB.Exec(
-		"INSERT INTO thresholds (device_id, field_name, operator, value, severity, enabled, shielded, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		threshold.DeviceID, threshold.FieldName, threshold.Operator, threshold.Value, threshold.Severity, threshold.Enabled, threshold.Shielded, threshold.Message,
+		"INSERT INTO thresholds (device_id, field_name, operator, value, severity, shielded, message) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		threshold.DeviceID, threshold.FieldName, threshold.Operator, threshold.Value, threshold.Severity, threshold.Shielded, threshold.Message,
 	)
 	if err != nil {
 		return 0, err
@@ -116,10 +116,10 @@ func GetThresholdByID(id int64) (*models.Threshold, error) {
 
 	threshold := &models.Threshold{}
 	err := ParamDB.QueryRow(
-		"SELECT id, device_id, field_name, operator, value, severity, enabled, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE id = ?",
+		"SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE id = ?",
 		id,
 	).Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-		&threshold.Enabled, &threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt)
+		&threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -133,32 +133,12 @@ func GetThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
 	}
 
 	return queryList[*models.Threshold](ParamDB,
-		"SELECT id, device_id, field_name, operator, value, severity, enabled, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE device_id = ?",
+		"SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE device_id = ?",
 		[]any{deviceID},
 		func(rows *sql.Rows) (*models.Threshold, error) {
 			threshold := &models.Threshold{}
 			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-				&threshold.Enabled, &threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
-				return nil, err
-			}
-			return threshold, nil
-		},
-	)
-}
-
-// GetEnabledThresholdsByDeviceID 根据设备ID获取启用的阈值
-func GetEnabledThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
-	if err := ensureThresholdColumns(); err != nil {
-		return nil, err
-	}
-
-	return queryList[*models.Threshold](ParamDB,
-		"SELECT id, device_id, field_name, operator, value, severity, enabled, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE device_id = ? AND enabled = 1",
-		[]any{deviceID},
-		func(rows *sql.Rows) (*models.Threshold, error) {
-			threshold := &models.Threshold{}
-			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-				&threshold.Enabled, &threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
+				&threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
 				return nil, err
 			}
 			return threshold, nil
@@ -173,12 +153,12 @@ func GetAllThresholds() ([]*models.Threshold, error) {
 	}
 
 	return queryList[*models.Threshold](ParamDB,
-		"SELECT id, device_id, field_name, operator, value, severity, enabled, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds ORDER BY id",
+		"SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds ORDER BY id",
 		nil,
 		func(rows *sql.Rows) (*models.Threshold, error) {
 			threshold := &models.Threshold{}
 			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-				&threshold.Enabled, &threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
+				&threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
 				return nil, err
 			}
 			return threshold, nil
@@ -193,8 +173,8 @@ func UpdateThreshold(threshold *models.Threshold) error {
 	}
 
 	_, err := ParamDB.Exec(
-		"UPDATE thresholds SET device_id = ?, field_name = ?, operator = ?, value = ?, severity = ?, enabled = ?, shielded = ?, message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-		threshold.DeviceID, threshold.FieldName, threshold.Operator, threshold.Value, threshold.Severity, threshold.Enabled, threshold.Shielded, threshold.Message, threshold.ID,
+		"UPDATE thresholds SET device_id = ?, field_name = ?, operator = ?, value = ?, severity = ?, shielded = ?, message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		threshold.DeviceID, threshold.FieldName, threshold.Operator, threshold.Value, threshold.Severity, threshold.Shielded, threshold.Message, threshold.ID,
 	)
 	return err
 }

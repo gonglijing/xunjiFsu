@@ -71,7 +71,6 @@ func TestThresholdCRUD_WithShieldedColumn(t *testing.T) {
 		Operator:  ">",
 		Value:     40,
 		Severity:  "warning",
-		Enabled:   1,
 		Shielded:  1,
 		Message:   "too hot",
 	})

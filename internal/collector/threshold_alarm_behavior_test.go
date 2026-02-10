@@ -138,7 +138,6 @@ func TestCheckThresholds_ShieldAndRepeatInterval(t *testing.T) {
 		Operator:  ">",
 		Value:     30,
 		Severity:  "warning",
-		Enabled:   1,
 		Shielded:  1,
 		Message:   "high temp",
 	})

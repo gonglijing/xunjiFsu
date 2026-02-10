@@ -72,7 +72,7 @@ func (c *thresholdCache) Refresh() {
 	}
 
 	for _, device := range devices {
-		thresholds, err := database.GetEnabledThresholdsByDeviceID(device.ID)
+		thresholds, err := database.GetThresholdsByDeviceID(device.ID)
 		if err != nil {
 			log.Printf("Failed to load thresholds for device %d: %v", device.ID, err)
 			continue
@@ -99,7 +99,7 @@ func GetDeviceThresholds(deviceID int64) ([]*models.Threshold, error) {
 	}
 
 	if !exists {
-		loaded, err := database.GetEnabledThresholdsByDeviceID(deviceID)
+		loaded, err := database.GetThresholdsByDeviceID(deviceID)
 		if err != nil {
 			return nil, err
 		}
