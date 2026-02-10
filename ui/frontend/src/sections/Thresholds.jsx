@@ -7,7 +7,7 @@ import { showErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
 import LoadErrorHint from '../components/LoadErrorHint';
 
-const DEFAULT_REPEAT_INTERVAL_SECONDS = 60;
+const DEFAULT_REPEAT_INTERVAL_MINUTES = 1;
 const empty = {
   device_id: '',
   field_name: '',
@@ -23,7 +23,7 @@ export function Thresholds() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const [devices, setDevices] = createSignal([]);
-  const [repeatIntervalSeconds, setRepeatIntervalSeconds] = createSignal(DEFAULT_REPEAT_INTERVAL_SECONDS);
+  const [repeatIntervalMinutes, setRepeatIntervalMinutes] = createSignal(DEFAULT_REPEAT_INTERVAL_MINUTES);
   const [savingRepeatInterval, setSavingRepeatInterval] = createSignal(false);
   const {
     loading,
@@ -39,7 +39,7 @@ export function Thresholds() {
     setItems(thresholds || []);
     setDevices(devicesList || []);
     const seconds = Number(repeatCfg?.seconds);
-    setRepeatIntervalSeconds(Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_REPEAT_INTERVAL_SECONDS);
+    setRepeatIntervalMinutes(Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.ceil(seconds / 60)) : DEFAULT_REPEAT_INTERVAL_MINUTES);
   }, {
     errorMessage: '加载阈值失败',
     onError: (err) => showErrorToast(toast, err, '加载阈值失败'),
@@ -91,19 +91,20 @@ export function Thresholds() {
   };
 
   const saveRepeatInterval = () => {
-    const seconds = Number.parseInt(String(repeatIntervalSeconds() || 0), 10);
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      toast.show('warning', '重复上报间隔必须大于 0 秒');
+    const minutes = Number.parseInt(String(repeatIntervalMinutes() || 0), 10);
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      toast.show('warning', '重复触发间隔必须大于 0 分钟');
       return;
     }
 
+    const seconds = minutes * 60;
     setSavingRepeatInterval(true);
     api.thresholds.updateAlarmRepeatInterval(seconds)
       .then(() => {
-        setRepeatIntervalSeconds(seconds);
-        toast.show('success', '重复上报间隔已更新');
+        setRepeatIntervalMinutes(minutes);
+        toast.show('success', '重复触发间隔已更新');
       })
-      .catch((error) => showErrorToast(toast, error, '更新重复上报间隔失败'))
+      .catch((error) => showErrorToast(toast, error, '更新重复触发间隔失败'))
       .finally(() => setSavingRepeatInterval(false));
   };
 
@@ -143,14 +144,14 @@ export function Thresholds() {
         title="阈值配置列表"
         extra={(
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <span class="text-muted text-xs">重复上报间隔(秒)</span>
+            <span class="text-muted text-xs">重复触发间隔(分钟)</span>
             <input
               class="form-input"
               type="number"
               min="1"
               style="width:110px;"
-              value={repeatIntervalSeconds()}
-              onInput={(e) => setRepeatIntervalSeconds(Number(e.target.value || 0))}
+              value={repeatIntervalMinutes()}
+              onInput={(e) => setRepeatIntervalMinutes(Number(e.target.value || 0))}
             />
             <button
               class="btn"

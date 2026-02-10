@@ -44,3 +44,33 @@ func TestShouldEmitAlarm_EdgeAndRateLimit(t *testing.T) {
 		t.Fatal("matched again after recovery should emit immediately")
 	}
 }
+
+func TestBuildAlarmStateKey_UseThresholdIDAsPrimaryIdentity(t *testing.T) {
+	deviceID := int64(99)
+	threshold := &models.Threshold{
+		ID:        3001,
+		FieldName: "temp",
+		Operator:  ">",
+		Value:     30,
+	}
+
+	first := buildAlarmStateKey(deviceID, threshold)
+
+	threshold.FieldName = "temperature"
+	threshold.Operator = ">="
+	threshold.Value = 31
+
+	second := buildAlarmStateKey(deviceID, threshold)
+
+	if first != second {
+		t.Fatalf("same threshold id should produce same alarm key, first=%+v second=%+v", first, second)
+	}
+
+	if first.ThresholdID != threshold.ID {
+		t.Fatalf("expected threshold id in key, got %d want %d", first.ThresholdID, threshold.ID)
+	}
+
+	if first.FieldName != "" || first.Operator != "" || first.ThresholdValue != 0 {
+		t.Fatalf("id-based key should not depend on field/operator/value, got %+v", first)
+	}
+}

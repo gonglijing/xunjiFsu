@@ -43,9 +43,14 @@ func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateK
 	if threshold == nil {
 		return alarmStateKey{DeviceID: deviceID}
 	}
+	if threshold.ID > 0 {
+		return alarmStateKey{
+			DeviceID:    deviceID,
+			ThresholdID: threshold.ID,
+		}
+	}
 	return alarmStateKey{
 		DeviceID:       deviceID,
-		ThresholdID:    threshold.ID,
 		FieldName:      threshold.FieldName,
 		Operator:       threshold.Operator,
 		ThresholdValue: threshold.Value,
