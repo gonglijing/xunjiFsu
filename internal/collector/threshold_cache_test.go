@@ -152,8 +152,8 @@ func TestThresholdCache_RefreshRebuildsAndDropsStaleEntries(t *testing.T) {
 	if got := len(cache.thresholds[1]); got != 1 {
 		t.Fatalf("expected device 1 threshold count 1, got %d", got)
 	}
-	if got := len(cache.thresholds[2]); got != 0 {
-		t.Fatalf("expected device 2 threshold count 0, got %d", got)
+	if _, ok := cache.thresholds[2]; ok {
+		t.Fatalf("expected device 2 with no thresholds to be absent from cache")
 	}
 }
 
@@ -189,4 +189,55 @@ func TestThresholdCache_StartStopIdempotent(t *testing.T) {
 	time.Sleep(25 * time.Millisecond)
 	StopThresholdCache()
 	StopThresholdCache()
+}
+
+func TestGetDeviceThresholds_DoesNotCacheEmptyMiss(t *testing.T) {
+	oldDB := database.ParamDB
+	db := setupThresholdCacheTestDB(t)
+	database.ParamDB = db
+	defer func() {
+		StopThresholdCache()
+		InvalidateAllCache()
+		database.ParamDB = oldDB
+		_ = db.Close()
+	}()
+
+	_, err := db.Exec(`INSERT INTO devices (
+		id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity,
+		ip_address, port_num, device_address, collect_interval, storage_interval, timeout, driver_id, enabled, resource_id
+	) VALUES (10, 'd10', '', '', '', 'modbus_rtu', '', 9600, 8, 1, 'N', '', 0, '10', 1000, 300, 1000, NULL, 1, NULL)`)
+	if err != nil {
+		t.Fatalf("insert device failed: %v", err)
+	}
+
+	InvalidateAllCache()
+
+	thresholds, err := GetDeviceThresholds(10)
+	if err != nil {
+		t.Fatalf("GetDeviceThresholds first call failed: %v", err)
+	}
+	if len(thresholds) != 0 {
+		t.Fatalf("expected 0 thresholds, got %d", len(thresholds))
+	}
+
+	cache.mu.RLock()
+	_, existsAfterMiss := cache.thresholds[10]
+	cache.mu.RUnlock()
+	if existsAfterMiss {
+		t.Fatalf("empty threshold miss should not be cached")
+	}
+
+	_, err = db.Exec(`INSERT INTO thresholds (device_id, field_name, operator, value, severity, message)
+		VALUES (10, 'humidity', '>', 50, 'warning', '湿度高')`)
+	if err != nil {
+		t.Fatalf("insert threshold failed: %v", err)
+	}
+
+	thresholds, err = GetDeviceThresholds(10)
+	if err != nil {
+		t.Fatalf("GetDeviceThresholds second call failed: %v", err)
+	}
+	if len(thresholds) != 1 {
+		t.Fatalf("expected 1 threshold after insert, got %d", len(thresholds))
+	}
 }

@@ -93,19 +93,20 @@ func (c *thresholdCache) Refresh() {
 		return
 	}
 
-	next := make(map[int64][]*models.Threshold, len(devices))
+	validDeviceIDs := make(map[int64]struct{}, len(devices))
 	for _, device := range devices {
 		if device == nil || device.ID == 0 {
 			continue
 		}
-		next[device.ID] = nil
+		validDeviceIDs[device.ID] = struct{}{}
 	}
+	next := make(map[int64][]*models.Threshold, len(validDeviceIDs))
 
 	for _, threshold := range thresholds {
 		if threshold == nil || threshold.DeviceID == 0 {
 			continue
 		}
-		if _, exists := next[threshold.DeviceID]; !exists {
+		if _, exists := validDeviceIDs[threshold.DeviceID]; !exists {
 			continue
 		}
 		next[threshold.DeviceID] = append(next[threshold.DeviceID], threshold)
@@ -116,7 +117,7 @@ func (c *thresholdCache) Refresh() {
 	c.lastRefresh = time.Now()
 	c.mu.Unlock()
 
-	log.Printf("Threshold cache refreshed, %d devices, %d thresholds", len(next), len(thresholds))
+	log.Printf("Threshold cache refreshed, %d devices with thresholds, %d thresholds", len(next), len(thresholds))
 }
 
 // GetDeviceThresholds 获取设备的阈值配置（优先从缓存获取）
@@ -138,9 +139,11 @@ func GetDeviceThresholds(deviceID int64) ([]*models.Threshold, error) {
 		if err != nil {
 			return nil, err
 		}
-		cache.mu.Lock()
-		cache.thresholds[deviceID] = loaded
-		cache.mu.Unlock()
+		if len(loaded) > 0 {
+			cache.mu.Lock()
+			cache.thresholds[deviceID] = loaded
+			cache.mu.Unlock()
+		}
 		return loaded, nil
 	}
 
