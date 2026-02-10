@@ -24,14 +24,6 @@ function SidebarNav(props) {
             <span>{l.label}</span>
           </button>
         ))}
-        <button
-          type="button"
-          class={`sidebar-link ${isActive(props.path, '/topology') ? 'active' : ''}`}
-          onClick={() => props.onNav('/topology')}
-        >
-          <span class="sidebar-link-icon">⛓</span>
-          <span>拓扑视图</span>
-        </button>
       </div>
 
       <div class="sidebar-section">
@@ -66,4 +58,3 @@ function SidebarNav(props) {
 }
 
 export default SidebarNav;
-
