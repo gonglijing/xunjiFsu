@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
 )
 
 // NorthboundConfigBuilder 用于从数据库字段生成适配器配置JSON
@@ -17,7 +18,7 @@ type NorthboundConfigBuilder struct {
 // NewConfigBuilder 创建配置构建器
 func NewConfigBuilder(northboundType string) *NorthboundConfigBuilder {
 	return &NorthboundConfigBuilder{
-		northboundType: northboundType,
+		northboundType: nbtype.Normalize(northboundType),
 		config:         make(map[string]interface{}),
 	}
 }
@@ -148,7 +149,7 @@ func (b *NorthboundConfigBuilder) SetExtConfig(extConfig string) *NorthboundConf
 // Build 生成配置JSON字符串
 func (b *NorthboundConfigBuilder) Build() string {
 	// 根据类型设置默认值
-	switch b.northboundType {
+	switch nbtype.Normalize(b.northboundType) {
 	case "mqtt":
 		if _, ok := b.config["broker"]; !ok {
 			b.config["broker"] = ""
@@ -165,7 +166,7 @@ func (b *NorthboundConfigBuilder) Build() string {
 		if _, ok := b.config["connectTimeout"]; !ok {
 			b.config["connectTimeout"] = 30
 		}
-	case "xunji", "sagoo":
+	case nbtype.TypeSagoo:
 		if _, ok := b.config["serverUrl"]; !ok {
 			b.config["serverUrl"] = ""
 		}
@@ -252,7 +253,7 @@ func (b *NorthboundConfigBuilder) Build() string {
 func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 	builder := NewConfigBuilder(cfg.Type)
 
-	switch cfg.Type {
+	switch nbtype.Normalize(cfg.Type) {
 	case "mqtt":
 		// 构建MQTT配置
 		broker := buildBrokerURL(cfg.ServerURL, cfg.Port)
@@ -272,7 +273,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		builder.SetTimeout(cfg.Timeout)
 		builder.SetExtConfig(cfg.ExtConfig)
 
-	case "xunji", "sagoo":
+	case nbtype.TypeSagoo:
 		// 构建XunJi配置
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(serverURL)
@@ -432,7 +433,7 @@ func GetSupportedTypes() map[string][]string {
 
 // ValidateConfig 验证配置是否有效
 func ValidateConfig(northboundType string, config map[string]interface{}) error {
-	switch northboundType {
+	switch nbtype.Normalize(northboundType) {
 	case "mqtt":
 		if broker, ok := config["broker"].(string); !ok || strings.TrimSpace(broker) == "" {
 			return fmt.Errorf("broker is required for MQTT adapter")
@@ -440,7 +441,7 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 		if topic, ok := config["topic"].(string); !ok || strings.TrimSpace(topic) == "" {
 			return fmt.Errorf("topic is required for MQTT adapter")
 		}
-	case "xunji", "sagoo":
+	case nbtype.TypeSagoo:
 		if serverURL, ok := config["serverUrl"].(string); !ok || strings.TrimSpace(serverURL) == "" {
 			return fmt.Errorf("serverUrl is required for Sagoo adapter")
 		}

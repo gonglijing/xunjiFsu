@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
 	northboundschema "github.com/gonglijing/xunjiFsu/internal/northbound/schema"
 )
 
@@ -15,9 +16,7 @@ func (h *Handler) GetNorthboundSchema(w http.ResponseWriter, r *http.Request) {
 	if nbType == "" {
 		nbType = "pandax"
 	}
-	if nbType == northboundTypeXunJi {
-		nbType = northboundTypeSagoo
-	}
+	nbType = nbtype.Normalize(nbType)
 
 	fields, ok := northboundschema.FieldsByType(nbType)
 	if !ok {

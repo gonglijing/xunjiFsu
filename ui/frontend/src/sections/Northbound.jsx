@@ -8,6 +8,7 @@ import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
 import { getNorthboundDefaultUploadIntervalMs } from '../utils/runtimeConfig';
+import { NORTHBOUND_TYPE, getNorthboundTypeLabel, isSagooType, normalizeNorthboundType } from '../utils/northboundType';
 
 const DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS = getNorthboundDefaultUploadIntervalMs();
 const empty = {
@@ -77,15 +78,15 @@ function normalizeConfig(raw, schemaFields, uploadIntervalFallback = DEFAULT_NOR
 }
 
 function isXunJiType(nbType) {
-  return nbType === 'xunji' || nbType === 'sagoo';
+  return isSagooType(nbType);
 }
 
 function isPandaXType(nbType) {
-  return nbType === 'pandax';
+  return normalizeNorthboundType(nbType) === NORTHBOUND_TYPE.PANDAX;
 }
 
 function isIThingsType(nbType) {
-  return nbType === 'ithings';
+  return normalizeNorthboundType(nbType) === NORTHBOUND_TYPE.ITHINGS;
 }
 
 function isSchemaDrivenType(nbType) {
@@ -337,12 +338,13 @@ export function Northbound() {
 
   const edit = (item) => {
     const upload = toInt(item.upload_interval, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
-    const base = { name: item.name, type: item.type, upload_interval: upload, config: item.config, enabled: item.enabled };
+	const normalizedType = normalizeNorthboundType(item.type);
+	const base = { name: item.name, type: normalizedType, upload_interval: upload, config: item.config, enabled: item.enabled };
 
     const parsed = safeParseJSON(item.config, {});
 
-    if (isSchemaDrivenType(item.type)) {
-      loadSchema(item.type, true).then(() => {
+	if (isSchemaDrivenType(normalizedType)) {
+		loadSchema(normalizedType, true).then(() => {
         const cfg = normalizeConfig(parsed, schema(), upload);
         if (hasSchemaField(schema(), 'uploadIntervalMs')) {
           base.upload_interval = toInt(cfg.uploadIntervalMs, upload);
@@ -360,9 +362,10 @@ export function Northbound() {
     setConfigErrors({});
   };
 
-  const updateType = (nextType) => {
-    const current = form();
-    const next = { ...current, type: nextType };
+	const updateType = (nextType) => {
+		nextType = normalizeNorthboundType(nextType);
+		const current = form();
+		const next = { ...current, type: nextType };
 
     if (isSchemaDrivenType(nextType)) {
       loadSchema(nextType, true).then(() => {
@@ -404,18 +407,15 @@ export function Northbound() {
   };
 
   const getTypeLabel = () => {
-    const type = form().type;
-    return type === 'xunji' || type === 'sagoo'
-      ? 'Sagoo'
-      : (type === 'pandax' ? 'PandaX' : (type === 'ithings' ? 'iThings' : (type === 'mqtt' ? 'MQTT' : type.toUpperCase())));
+    return getNorthboundTypeLabel(form().type);
   };
 
   const getSchemaTitle = () => {
-    const type = form().type;
-    if (type === 'xunji' || type === 'sagoo') return 'Sagoo Schema 配置';
-    if (type === 'pandax') return 'PandaX Schema 配置';
-    if (type === 'ithings') return 'iThings Schema 配置';
-    if (type === 'mqtt') return 'MQTT Schema 配置';
+    const type = normalizeNorthboundType(form().type);
+    if (type === NORTHBOUND_TYPE.SAGOO) return 'Sagoo Schema 配置';
+    if (type === NORTHBOUND_TYPE.PANDAX) return 'PandaX Schema 配置';
+    if (type === NORTHBOUND_TYPE.ITHINGS) return 'iThings Schema 配置';
+    if (type === NORTHBOUND_TYPE.MQTT) return 'MQTT Schema 配置';
     return '配置';
   };
 
@@ -527,10 +527,10 @@ export function Northbound() {
                     value={form().type}
                     onChange={(e) => updateType(e.target.value)}
                   >
-                    <option value="mqtt">MQTT</option>
-                    <option value="pandax">PandaX</option>
-                    <option value="ithings">iThings</option>
-                    <option value="sagoo">Sagoo</option>
+                    <option value={NORTHBOUND_TYPE.MQTT}>MQTT</option>
+                    <option value={NORTHBOUND_TYPE.PANDAX}>PandaX</option>
+                    <option value={NORTHBOUND_TYPE.ITHINGS}>iThings</option>
+                    <option value={NORTHBOUND_TYPE.SAGOO}>Sagoo</option>
                   </select>
                 </div>
               </div>

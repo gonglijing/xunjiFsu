@@ -3,16 +3,10 @@ import api from '../api/services';
 import Card from '../components/cards';
 import { usePageLoader } from '../utils/pageLoader';
 import { getGatewayMetricsPollIntervalMs } from '../utils/runtimeConfig';
+import { getNorthboundTypeLabel, normalizeNorthboundType, NORTHBOUND_TYPE } from '../utils/northboundType';
 
 const GATEWAY_METRICS_POLL_INTERVAL_MS = getGatewayMetricsPollIntervalMs();
-const NORTHBOUND_TYPE_ORDER = ['mqtt', 'pandax', 'ithings', 'sagoo'];
-const NORTHBOUND_TYPE_LABELS = {
-  mqtt: 'MQTT',
-  pandax: 'PandaX',
-  ithings: 'iThings',
-  sagoo: 'Sagoo',
-  xunji: 'Sagoo',
-};
+const NORTHBOUND_TYPE_ORDER = [NORTHBOUND_TYPE.MQTT, NORTHBOUND_TYPE.PANDAX, NORTHBOUND_TYPE.ITHINGS, NORTHBOUND_TYPE.SAGOO];
 
 export function GatewayStatus() {
   const [metrics, setMetrics] = createSignal(null);
@@ -41,7 +35,7 @@ export function GatewayStatus() {
     const buckets = Object.fromEntries(
       NORTHBOUND_TYPE_ORDER.map((type) => [type, {
         type,
-        label: NORTHBOUND_TYPE_LABELS[type] || type,
+        label: getNorthboundTypeLabel(type),
         total: 0,
         connected: 0,
         disconnected: 0,
@@ -50,7 +44,7 @@ export function GatewayStatus() {
     );
 
     for (const item of northboundStatus() || []) {
-      const itemType = `${item?.type || ''}`.toLowerCase();
+      const itemType = normalizeNorthboundType(item?.type);
       if (!item?.enabled || !buckets[itemType]) continue;
 
       buckets[itemType].total += 1;

@@ -10,15 +10,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
+	"github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
 	northboundschema "github.com/gonglijing/xunjiFsu/internal/northbound/schema"
-)
-
-const (
-	northboundTypeMQTT    = "mqtt"
-	northboundTypePandaX  = "pandax"
-	northboundTypeIThings = "ithings"
-	northboundTypeSagoo   = "sagoo"
-	northboundTypeXunJi   = "xunji"
 )
 
 type requiredFieldRule struct {
@@ -26,36 +19,30 @@ type requiredFieldRule struct {
 	present   func(*models.NorthboundConfig) bool
 }
 
-var supportedNorthboundTypes = []string{
-	northboundTypeMQTT,
-	northboundTypePandaX,
-	northboundTypeIThings,
-	northboundTypeSagoo,
-}
+var supportedNorthboundTypes = nbtype.SupportedTypes()
 
 var northboundTypeDisplayName = map[string]string{
-	northboundTypeMQTT:    "MQTT",
-	northboundTypePandaX:  "PandaX",
-	northboundTypeIThings: "iThings",
-	northboundTypeSagoo:   "Sagoo",
-	northboundTypeXunJi:   "Sagoo",
+	nbtype.TypeMQTT:    "MQTT",
+	nbtype.TypePandaX:  "PandaX",
+	nbtype.TypeIThings: "iThings",
+	nbtype.TypeSagoo:   "Sagoo",
 }
 
 var northboundRequiredFieldRules = map[string][]requiredFieldRule{
-	northboundTypeMQTT: {
+	nbtype.TypeMQTT: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "topic", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Topic) != "" }},
 	},
-	northboundTypeSagoo: {
+	nbtype.TypeSagoo: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "product_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ProductKey) != "" }},
 		{fieldName: "device_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.DeviceKey) != "" }},
 	},
-	northboundTypePandaX: {
+	nbtype.TypePandaX: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "username", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Username) != "" }},
 	},
-	northboundTypeIThings: {
+	nbtype.TypeIThings: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "username", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Username) != "" }},
 	},
@@ -135,7 +122,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		switch config.Type {
 		case "http":
 			config.Port = 80
-		case northboundTypeMQTT, northboundTypeSagoo, northboundTypePandaX, northboundTypeIThings:
+		case nbtype.TypeMQTT, nbtype.TypeSagoo, nbtype.TypePandaX, nbtype.TypeIThings:
 			config.Port = 1883
 		}
 	}
@@ -181,11 +168,7 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 }
 
 func normalizeNorthboundType(raw string) string {
-	nbType := strings.ToLower(strings.TrimSpace(raw))
-	if nbType == northboundTypeXunJi {
-		return northboundTypeSagoo
-	}
-	return nbType
+	return nbtype.Normalize(raw)
 }
 
 func isSupportedNorthboundType(nbType string) bool {

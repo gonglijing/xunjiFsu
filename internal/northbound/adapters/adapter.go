@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
 )
 
 // NorthboundAdapter 北向适配器接口
@@ -50,7 +51,7 @@ type NorthboundAdapterWithCommands interface {
 
 // NewAdapter 创建指定类型的适配器
 func NewAdapter(northboundType, name string) NorthboundAdapter {
-	switch northboundType {
+	switch nbtype.Normalize(northboundType) {
 	case "mqtt":
 		return NewMQTTAdapter(name)
 	case "pandax":
@@ -59,8 +60,6 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 		return NewIThingsAdapter(name)
 	case "sagoo":
 		return NewXunJiAdapter(name)
-	case "xunji":
-		return NewXunJiAdapter(name)
 	default:
 		return nil
 	}
@@ -68,5 +67,5 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 
 // SupportedTypes 返回支持的北向类型
 func SupportedTypes() []string {
-	return []string{"mqtt", "pandax", "ithings", "sagoo"}
+	return nbtype.SupportedTypes()
 }
