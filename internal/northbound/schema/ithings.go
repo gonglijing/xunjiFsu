@@ -5,8 +5,6 @@ var IThingsConfigSchema = []Field{
 	{Key: "serverUrl", Label: "MQTT 地址", Type: FieldTypeString, Required: true, Default: "", Description: "例如 tcp://127.0.0.1:1883"},
 	{Key: "username", Label: "用户名", Type: FieldTypeString, Required: true, Default: "", Description: "iThings MQTT 用户名"},
 	{Key: "password", Label: "密码", Type: FieldTypeString, Optional: true, Default: "", Description: "iThings MQTT 密码"},
-	{Key: "productKey", Label: "网关 ProductID", Type: FieldTypeString, Required: true, Default: "", Description: "网关产品ID（上行/下行路由）"},
-	{Key: "deviceKey", Label: "网关 DeviceName", Type: FieldTypeString, Required: true, Default: "", Description: "网关设备名（上行/下行路由）"},
 	{Key: "clientId", Label: "Client ID", Type: FieldTypeString, Optional: true, Default: "", Description: "可为空，自动生成"},
 	{Key: "qos", Label: "QOS", Type: FieldTypeInt, Optional: true, Default: 0, Description: "范围 0~2"},
 	{Key: "retain", Label: "Retain", Type: FieldTypeBool, Optional: true, Default: false, Description: "MQTT retain 标记"},

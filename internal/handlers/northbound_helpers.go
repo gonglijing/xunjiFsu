@@ -39,10 +39,10 @@ var northboundTypeDisplayName = map[string]string{
 	northboundTypeXunJi:   "XunJi",
 }
 
+// gatewayIdentityNorthboundTypes 定义了哪些北向类型需要使用网关身份的 productKey/deviceKey
+// 目前只有 sagoo (xunji) 北向使用网关身份来上报系统属性
 var gatewayIdentityNorthboundTypes = map[string]struct{}{
-	northboundTypeXunJi:   {},
-	northboundTypePandaX:  {},
-	northboundTypeIThings: {},
+	northboundTypeXunJi: {},
 }
 
 var northboundRequiredFieldRules = map[string][]requiredFieldRule{
@@ -62,8 +62,6 @@ var northboundRequiredFieldRules = map[string][]requiredFieldRule{
 	northboundTypeIThings: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "username", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Username) != "" }},
-		{fieldName: "product_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ProductKey) != "" }},
-		{fieldName: "device_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.DeviceKey) != "" }},
 	},
 }
 
