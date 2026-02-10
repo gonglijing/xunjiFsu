@@ -169,7 +169,7 @@ func (a *IThingsAdapter) Initialize(configStr string) error {
 	a.client = client
 	a.qos = clampQOS(cfg.QOS)
 	a.retain = cfg.Retain
-	a.timeout = time.Duration(maxInt2(cfg.Timeout, 10)) * time.Second
+	a.timeout = time.Duration(resolvePositive(cfg.Timeout, 10)) * time.Second
 	a.reportEvery = resolveInterval(cfg.UploadIntervalMs, defaultReportInterval)
 	a.alarmEvery = resolveInterval(cfg.AlarmFlushIntervalMs, defaultAlarmInterval)
 	a.alarmBatch = resolvePositive(cfg.AlarmBatchSize, defaultAlarmBatch)
