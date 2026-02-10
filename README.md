@@ -40,6 +40,13 @@
 │   │  串口资源  │           │   TCP 连接    │           │  其他资源  │   │
 │   └───────────┘           └───────────────┘           └───────────┘   │
 │                                                                          │
+│   ┌────────────────────────────────────────────────────────────────┐   │
+│   │                     北向适配器 (内置)                            │   │
+│   │   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐          │   │
+│   │   │  Sagoo  │  │ PandaX  │  │  MQTT   │  │  HTTP   │          │   │
+│   │   └─────────┘  └─────────┘  └─────────┘  └─────────┘          │   │
+│   └────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +62,7 @@
 | **数据采集** | 优先队列调度、自定义采集周期 |
 | **阈值报警** | 多条件判断、严重程度分级、自动触发 |
 | **双数据库** | param.db (配置) + data.db (历史数据，内存缓冲 + 磁盘归档) |
-| **北向接口** | HashiCorp go-plugin + HTTP / MQTT / XunJi 插件 |
+| **北向接口** | 内置 Sagoo / PandaX / MQTT / HTTP 适配器 |
 
 ### Web 管理界面
 
@@ -72,110 +79,93 @@
 | 后端 | Go | 1.21+ |
 | 数据库 | SQLite | pure Go (glebarez/go-sqlite) |
 | Web 框架 | Gorilla Mux | 路由中间件 |
-| 前端框架 | SolidJS | 1.8.15 |
-| 构建工具 | Vite | 5.2.9 |
+| 前端框架 | SolidJS | 1.8+ |
+| 构建工具 | Vite | 5.x |
 | 驱动运行时 | Extism | go-sdk |
 | 驱动开发 | TinyGo | 0.34+ |
-| 北向插件 | HashiCorp go-plugin | net/rpc |
+| 北向适配器 | 内置 | Sagoo / PandaX / MQTT / HTTP |
 | 认证 | JWT | 鉴权中间件 |
 | 跨平台 | CGO=0 | arm32 / arm64 / darwin / windows |
 
 ## 项目结构
 
 ```
-gogw/
+fsu/
 ├── cmd/
 │   └── main.go                 # 程序入口，配置加载
-├── plugin_north/               # 北向插件源码与产物
-│   ├── src/
-│   │   ├── northbound-http/    # HTTP 插件入口
-│   │   ├── northbound-mqtt/    # MQTT 插件入口
-│   │   └── northbound-xunji/   # XunJi 插件入口
-│   ├── northbound-http         # 插件二进制 (make northbound-plugins)
-│   ├── northbound-mqtt
-│   └── northbound-xunji
 ├── internal/
 │   ├── app/
-│   │   ├── app.go              # 启动逻辑、优雅关闭
-│   │   ├── db.go               # 数据库初始化
-│   │   ├── http.go             # HTTP 服务器构建
+│   │   ├── app.go             # 启动逻辑、优雅关闭
+│   │   ├── db.go              # 数据库初始化
+│   │   ├── http.go            # HTTP 服务器构建
 │   │   ├── northbound.go       # 北向调度器
-│   │   └── secret.go           # JWT 密钥管理
+│   │   └── secret.go          # JWT 密钥管理
 │   ├── auth/
-│   │   └── auth.go             # JWT 认证中间件
+│   │   └── auth.go            # JWT 认证中间件
 │   ├── collector/
-│   │   ├── collector.go        # 采集调度器（优先队列）
+│   │   ├── collector.go       # 采集调度器（优先队列）
+│   │   ├── system_collector.go # 系统监控采集
 │   │   └── threshold_cache.go  # 阈值缓存
 │   ├── database/
 │   │   ├── database.go         # 双数据库管理
-│   │   ├── device.go           # 设备 CRUD
-│   │   ├── health.go           # 健康检查
-│   │   └── resource.go         # 资源 CRUD
+│   │   ├── device.go          # 设备 CRUD
+│   │   ├── health.go          # 健康检查
+│   │   └── resource.go        # 资源 CRUD
 │   ├── driver/
-│   │   └── manager.go          # 驱动加载/执行/Host Functions
+│   │   └── manager.go         # 驱动加载/执行/Host Functions
 │   ├── handlers/
-│   │   ├── auth.go             # 登录/登出
-│   │   ├── data.go             # 数据查询
-│   │   ├── device.go           # 设备管理
-│   │   ├── driver.go           # 驱动管理
-│   │   ├── handlers.go         # Handler 初始化
-│   │   ├── northbound.go       # 北向配置
-│   │   ├── pages.go            # 页面路由
-│   │   ├── resource.go         # 资源管理
-│   │   ├── response.go         # 统一响应
-│   │   └── user.go             # 用户管理
+│   │   ├── auth.go            # 登录/登出
+│   │   ├── data.go            # 数据查询
+│   │   ├── device.go          # 设备管理
+│   │   ├── driver.go          # 驱动管理
+│   │   ├── handlers.go        # Handler 初始化
+│   │   ├── northbound.go      # 北向配置
+│   │   ├── pages.go           # 页面路由
+│   │   ├── resource.go        # 资源管理
+│   │   ├── response.go        # 统一响应
+│   │   └── user.go            # 用户管理
 │   ├── models/
-│   │   └── models.go           # 数据模型定义
+│   │   └── models.go          # 数据模型定义
 │   ├── northbound/
-│   │   ├── manager.go          # 北向调度与熔断
-│   │   └── plugin.go           # go-plugin 适配与 RPC
+│   │   ├── adapters/          # 北向适配器
+│   │   │   ├── sagoo.go      # Sagoo (原 XunJi) 适配器
+│   │   │   ├── pandax.go     # PandaX 适配器
+│   │   │   ├── mqtt.go       # MQTT 适配器
+│   │   │   └── http.go       # HTTP 适配器
+│   │   ├── manager.go        # 北向调度与熔断
+│   │   └── schema/           # 北向配置 Schema
 │   ├── resource/
-│   │   └── manager.go          # 串口/TCP 连接管理
+│   │   └── manager.go        # 串口/TCP 连接管理
 │   └── logger/
-│       └── logger.go           # 日志封装
+│       └── logger.go          # 日志封装
 ├── ui/
-│   ├── frontend/               # SolidJS 前端
+│   ├── frontend/              # SolidJS 前端
 │   │   ├── src/
-│   │   │   ├── api.js          # HTTP 客户端基础能力（鉴权/错误处理）
-│   │   │   ├── api/            # 领域 API 封装
-│   │   │   │   ├── services.js # 统一 API 聚合入口（default export）
-│   │   │   │   └── *.js        # devices/storage/northbound/...
-│   │   │   ├── router.jsx      # 路由管理
-│   │   │   ├── main.jsx        # 入口文件
-│   │   │   ├── App.jsx         # 根组件
-│   │   │   ├── components/     # UI 组件
-│   │   │   │   ├── TopNav.jsx  # 导航栏
-│   │   │   │   ├── cards.jsx   # 卡片组件
-│   │   │   │   └── Toast.jsx   # 通知组件
-│   │   │   ├── pages/          # 页面
-│   │   │   │   ├── Dashboard.jsx
-│   │   │   │   ├── Login.jsx
-│   │   │   │   ├── DevicesPage.jsx
-│   │   │   │   └── ...
-│   │   │   └── sections/       # 页面区块
-│   │   │       ├── Devices.jsx
-│   │   │       ├── Northbound.jsx
-│   │   │       └── ...
-│   │   ├── package.json
-│   │   └── vite.config.js
+│   │   │   ├── api.js        # HTTP 客户端基础能力
+│   │   │   ├── api/          # 领域 API 封装
+│   │   │   │   └── *.js      # devices/northbound/...
+│   │   │   ├── router.jsx    # 路由管理
+│   │   │   ├── main.jsx      # 入口文件
+│   │   │   ├── App.jsx       # 根组件
+│   │   │   ├── components/   # UI 组件
+│   │   │   ├── pages/        # 页面
+│   │   │   └── sections/    # 页面区块
+│   │   └── package.json
 │   └── static/
-│       ├── dist/main.js        # 构建后的 JS
-│       └── style.css           # 样式文件
-├── drvs/                       # TinyGo 驱动源码
-│   ├── README.md               # 驱动开发指南
-│   ├── th_modbusrtu.go         # Modbus RTU 驱动
-│   ├── th_modbustcp.go         # Modbus TCP 驱动
-│   └── modbus/
-│       ├── rtu.go              # Modbus RTU 协议包
-│       └── README.md
+│       └── dist/             # 构建后的静态资源
+├── drvs/                     # TinyGo 驱动源码
+│   ├── README.md             # 驱动开发指南
+│   ├── air_conditioning/     # 空调驱动
+│   ├── ups/                  # UPS 驱动
+│   ├── electric_meter/       # 电表驱动
+│   ├── temperature_humidity/ # 温湿度驱动
+│   ├── water_leak/           # 漏水驱动
+│   └── cabinet_header/       # 机柜 header 驱动
 ├── migrations/
-│   ├── 001_init.sql
-│   ├── 002_param_schema.sql
-│   ├── 003_data_schema.sql
-│   └── 004_indexes.sql
-├── Makefile                    # 编译脚本
+│   └── *.sql                 # 数据库迁移脚本
+├── Makefile                  # 编译脚本
 ├── config/
-│   └── config.yaml             # 配置文件
+│   └── config.yaml           # 配置文件
 └── README.md
 ```
 
@@ -197,111 +187,29 @@ cd xunjiFsu
 # 安装前端依赖
 cd ui/frontend && npm install && cd ../..
 
-# (可选) 调整前端鉴权探测节流间隔（毫秒）
-# 开发默认 600，生产默认 1200
-export VITE_AUTH_CHECK_INTERVAL_MS=800
-
-# (可选) 调整前端轮询间隔（毫秒）
-# Dashboard 状态轮询：开发默认 3000，生产默认 5000
-export VITE_DASHBOARD_STATUS_POLL_MS=4000
-# 网关指标轮询：开发默认 5000，生产默认 8000
-export VITE_GATEWAY_METRICS_POLL_MS=6000
-# 最新采集轮询：开发默认 3000，生产默认 4000
-export VITE_REALTIME_MINI_POLL_MS=3500
-# 北向默认上报间隔：开发/生产默认 5000
-export VITE_NORTHBOUND_DEFAULT_UPLOAD_INTERVAL_MS=7000
-
-# 提示：开发模式会在浏览器控制台打印一次当前生效的前端运行时配置
-# 如果 VITE_* 配置非法或越界，开发模式会输出警告并自动回退默认值
-
 # 编译前端
 make ui
 
 # 编译后端（当前平台）
 make build
 
-# 编译北向插件
-make northbound-plugins
-
 # 运行
-./gogw
+./fsu
 
 # 或使用 make 运行
 make run
 ```
 
-### 北向插件配置
+### 北向配置
 
-默认插件目录：`plugin_north/`，可在 `config/config.yaml` 中设置：
+FSU 内置以下北向适配器：
 
-```yaml
-northbound:
-  plugins_dir: "plugin_north"
-```
-
-如果需要为单个北向配置指定插件路径，可在配置 JSON 中设置 `plugin_path`。
-
-#### 配置示例
-
-HTTP:
-
-```json
-{
-  "url": "http://127.0.0.1:8080/ingest",
-  "headers": { "Authorization": "Bearer xxx" },
-  "timeout": 30
-}
-```
-
-MQTT:
-
-```json
-{
-  "broker": "tcp://127.0.0.1:1883",
-  "topic": "gogw/data",
-  "alarm_topic": "gogw/alarm",
-  "client_id": "gogw-mqtt-1",
-  "username": "",
-  "password": "",
-  "qos": 0,
-  "retain": false,
-  "keep_alive": 60,
-  "connect_timeout": 10
-}
-```
-
-XunJi:
-
-```json
-{
-  "productKey": "pk",
-  "deviceKey": "dk",
-  "serverUrl": "tcp://127.0.0.1:1883",
-  "username": "",
-  "password": "",
-  "topic": "xunji/pk/dk",
-  "alarmTopic": "xunji/pk/dk/alarm",
-  "uploadIntervalMs": 5000,
-  "grpcAddress": "127.0.0.1:32001",
-  "alarmFlushIntervalMs": 2000,
-  "alarmBatchSize": 20,
-  "alarmQueueSize": 1000,
-  "realtimeQueueSize": 1000,
-  "qos": 0,
-  "retain": false,
-  "keepAlive": 60,
-  "connectTimeout": 10
-}
-```
-
-说明：
-
-- 主程序与 XUNJI 插件使用 gRPC 通信。
-- 主程序将实时数据和报警数据主动推送到插件 gRPC 服务。
-- `grpcAddress` 可显式指定；若为空，插件与主程序会按 `productKey + deviceKey` 计算同一默认地址。
-- `uploadIntervalMs` 为插件侧 MQTT 上报周期，报警批量参数由插件侧管理。
-- XUNJI 配置参数采用类似 Terraform SDK Schema 的定义方式（必填/可选/默认值/类型校验）。
-- 对接细节与上下行报文示例见：`doc/xunji.md`。
+| 类型 | 说明 | 用途 |
+|------|------|------|
+| **sagoo** | SagooIoT 平台 | 寻迹平台对接 |
+| **pandax** | PandaX 平台 | PandaX 平台对接 |
+| **mqtt** | 标准 MQTT | 通用 MQTT Broker |
+| **http** | HTTP POST | 第三方 HTTP 服务 |
 
 ### 开发模式
 
@@ -312,30 +220,6 @@ make run
 # 前端开发服务器（热重载）
 make ui-dev
 ```
-
-### 前端 API 调用约定
-
-- 页面/区块统一通过 `ui/frontend/src/api/services.js`（`default export`）访问后端接口。
-- 业务代码使用 `api.<domain>.<method>()`（例如 `api.devices.listDevices()`），避免直接在页面里拼 `/api/...`。
-- 统一错误处理、鉴权和响应解析由 `ui/frontend/src/api.js` 负责；领域文件仅封装路径与参数。
-- 错误码到用户提示文案映射集中在 `ui/frontend/src/api/errorMessages.js`，并按通用/设备/驱动/资源/网关/北向/存储分组维护。
-- 当前前端错误码映射已覆盖后端 `internal/handlers/messages.go` 中定义的业务错误码。
-- 页面 `toast` 错误提示可通过 `ui/frontend/src/utils/errors.js` 的 `showErrorToast(toast, err, fallback)` 统一调用。
-- Dashboard/设备/驱动/北向/资源/阈值/告警/实时等页面已统一按该约定处理错误提示。
-- `ui/frontend/src/api/errorMessages.test.js` 提供错误码映射的纯函数测试（可用 `npm --prefix ui/frontend run test` 执行）。
-- 新增接口时，优先在 `ui/frontend/src/api/<domain>.js` 增加方法，再在页面中调用。
-
-### API 错误契约
-
-- 后端统一返回格式：`{ success, data, error, code, message }`。
-- 失败时前端优先展示 `message`，其次按 `code` 映射默认提示。
-- 常见错误码示例：
-  - 通用：`E_BAD_REQUEST`、`E_UNAUTHORIZED`、`E_NOT_FOUND`、`E_SERVER_ERROR`
-  - 设备：`E_DEVICE_NOT_FOUND`、`E_CREATE_DEVICE_FAILED`、`E_UPDATE_DEVICE_FAILED`
-  - 驱动：`E_DRIVER_NOT_FOUND`、`E_DRIVER_NOT_LOADED`、`E_RELOAD_DRIVER_FAILED`
-  - 北向：`E_NORTHBOUND_CONFIG_INVALID`、`E_NORTHBOUND_INITIALIZE_FAILED`、`E_NORTHBOUND_RELOAD_FAILED`
-  - 资源/存储：`E_CREATE_RESOURCE_FAILED`、`E_LIST_STORAGE_CONFIGS_FAILED`、`E_CLEANUP_BY_POLICY_FAILED`
-
 
 ### 跨平台编译
 
@@ -364,82 +248,68 @@ make deploy-windows  # Windows
 | 默认用户 | `admin` |
 | 默认密码 | `123456` |
 
-## 配置说明
+## 北向适配器
 
-### 运行时环境变量（驱动 / 采集 / 北向）
+### Sagoo (原 XunJi) 适配器
 
-| 环境变量 | 默认值 | 说明 |
-|------|------|------|
-| `COLLECTOR_DEVICE_SYNC_INTERVAL` | `10s` | 采集器设备状态同步周期 |
-| `COLLECTOR_COMMAND_POLL_INTERVAL` | `500ms` | 采集器北向命令拉取周期 |
-| `NORTHBOUND_MQTT_RECONNECT_INTERVAL` | `5s` | MQTT 北向断线重连重试间隔 |
-| `DRIVER_SERIAL_READ_TIMEOUT` | `200ms`（驱动默认） | 串口读超时 |
-| `DRIVER_SERIAL_OPEN_RETRIES` | `0` | 串口打开重试次数（实际次数=配置+1） |
-| `DRIVER_SERIAL_OPEN_BACKOFF` | `200ms`（驱动默认） | 串口打开重试退避 |
-| `DRIVER_TCP_DIAL_TIMEOUT` | `5s`（驱动默认） | TCP 建连超时 |
-| `DRIVER_TCP_DIAL_RETRIES` | `0` | TCP 建连重试次数（实际次数=配置+1） |
-| `DRIVER_TCP_DIAL_BACKOFF` | `200ms`（驱动默认） | TCP 建连重试退避 |
-| `DRIVER_TCP_READ_TIMEOUT` | `500ms`（驱动默认） | TCP 读超时 |
+用于对接 SagooIoT 平台，上报设备数据并接收平台命令。
 
-### 运行时热更新接口
+**配置参数：**
 
-- `GET /api/gateway/runtime`：获取当前生效中的采集/驱动/北向运行参数。
-- `PUT /api/gateway/runtime`：在线更新运行参数（无需重启服务）。
-- `GET /api/gateway/runtime/audits?limit=20`：查询运行参数变更审计日志（谁改了什么、何时改、来源 IP）。
-- 支持字段：
-  - `collector_device_sync_interval`
-  - `collector_command_poll_interval`
-  - `northbound_mqtt_reconnect_interval`
-  - `driver_serial_read_timeout`
-  - `driver_tcp_dial_timeout`
-  - `driver_tcp_read_timeout`
-  - `driver_serial_open_backoff`
-  - `driver_tcp_dial_backoff`
-  - `driver_serial_open_retries`
-  - `driver_tcp_dial_retries`
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| productKey | string | 是 | 网关 ProductKey |
+| deviceKey | string | 是 | 网关 DeviceKey |
+| serverUrl | string | 是 | MQTT 地址，如 `tcp://192.168.1.100:1883` |
+| username | string | 否 | MQTT 用户名 |
+| password | string | 否 | MQTT 密码 |
+| uploadIntervalMs | int | 否 | 上报周期（毫秒），默认 5000 |
 
-### 资源配置
+**说明：**
+- `productKey` 和 `deviceKey` 用于网关系统属性上报
+- 子设备数据通过网关批量上报
 
-| 类型 | 类型字段 | 配置示例 |
-|------|----------|----------|
-| 串口 | `serial` | `/dev/ttyUSB0`, `COM1` |
-| TCP | `tcp` | `192.168.1.100:502` |
-| UDP | `udp` | `192.168.1.100:502` |
+### PandaX 适配器
 
-### 设备配置
+用于对接 PandaX 平台，支持 TDengine 时序数据库。
 
-| 参数 | 说明 |
-|------|------|
-| 名称 | 设备唯一标识 |
-| 资源 | 关联的资源 |
-| 驱动类型 | `modbus_rtu` / `modbus_tcp`（旧）或 `modbus_rtu_wasm` / `modbus_tcp_wasm` / `modbus_rtu_excel` / `modbus_tcp_excel` |
-| 通信参数 | 波特率、数据位、停止位、校验位 / IP、端口 |
-| 设备地址 | Modbus 从机地址 |
-| 采集周期 | 毫秒 |
-| 存储周期 | 秒（默认 300） |
-| 使能 | 启用/禁用采集 |
+**配置参数：**
 
-### 北向配置
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| serverUrl | string | 是 | TDengine REST API 地址 |
+| username | string | 是 | TDengine 用户名 |
+| password | string | 是 | TDengine 密码 |
 
-```json
-{
-    "type": "http",
-    "config": {
-        "url": "http://server/api/upload",
-        "method": "POST"
-    },
-    "upload_interval": 5000
-}
-```
+### MQTT 适配器
 
-### 阈值配置
+通用 MQTT 客户端，用于对接任意 MQTT Broker。
 
-| 参数 | 说明 |
-|------|------|
-| 字段 | 数据字段名 |
-| 条件 | `>`, `<`, `>=`, `<=`, `==`, `!=` |
-| 阈值 | 数值 |
-| 严重程度 | `info`, `warning`, `error`, `critical` |
+**配置参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| broker | string | 是 | MQTT Broker 地址 |
+| topic | string | 是 | 数据上报 Topic |
+| clientId | string | 否 | 客户端 ID |
+| username | string | 否 | 用户名 |
+| password | string | 否 | 密码 |
+| qos | int | 否 | QoS 等级 (0-2)，默认 0 |
+| retain | bool | 否 | Retain 标记，默认 false |
+| keepAlive | int | 否 | 心跳周期（秒），默认 60 |
+
+### HTTP 适配器
+
+HTTP POST 推送适配器。
+
+**配置参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| url | string | 是 | HTTP 端点地址 |
+| method | string | 否 | HTTP 方法，默认 POST |
+| headers | object | 否 | 请求头 |
+| timeout | int | 否 | 超时时间（秒），默认 30 |
 
 ## API 接口
 
@@ -465,8 +335,6 @@ make deploy-windows  # Windows
 | GET | `/devices` | 设备管理 |
 | GET | `/drivers` | 驱动管理 |
 | GET | `/northbound` | 北向配置 |
-| GET | `/storage` | 存储策略 |
-| GET | `/thresholds` | 阈值配置 |
 
 ### 健康检查
 
@@ -505,7 +373,6 @@ make deploy-windows  # Windows
 | DELETE | `/api/devices/{id}` | 删除设备 |
 | POST | `/api/devices/{id}/toggle` | 切换状态 |
 | POST | `/api/devices/{id}/execute` | 执行驱动函数（读/写） |
-| GET | `/api/devices/{id}/writables` | 获取可写字段元数据 |
 
 ### 驱动
 
@@ -517,10 +384,8 @@ make deploy-windows  # Windows
 | PUT | `/api/drivers/{id}` | 更新驱动 |
 | DELETE | `/api/drivers/{id}` | 删除驱动 |
 | GET | `/api/drivers/{id}/runtime` | 获取驱动运行态 |
-| GET | `/api/drivers/runtime` | 获取所有驱动运行态 |
 | POST | `/api/drivers/{id}/reload` | 重载驱动 |
 | POST | `/api/drivers/upload` | 上传 WASM 文件 |
-| GET | `/api/drivers/{id}/download` | 下载驱动文件 |
 
 ### 北向
 
@@ -528,7 +393,7 @@ make deploy-windows  # Windows
 |------|------|------|
 | GET | `/api/northbound` | 北向配置列表 |
 | GET | `/api/northbound/status` | 北向运行状态列表 |
-| GET | `/api/northbound/schema?type=xunji` | 获取 XUNJI 配置 Schema（前端动态表单） |
+| GET | `/api/northbound/schema?type=xunji` | 获取 Sagoo 配置 Schema |
 | POST | `/api/northbound` | 创建北向配置 |
 | PUT | `/api/northbound/{id}` | 更新配置 |
 | DELETE | `/api/northbound/{id}` | 删除配置 |
@@ -546,66 +411,8 @@ make deploy-windows  # Windows
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/data` | 缓存概览 |
 | GET | `/api/data/cache/{id}` | 设备缓存 |
 | GET | `/api/data/history` | 历史数据 |
-
-### 数据存储说明
-
-- `data_cache` 存在 `data.db` 的**内存库**中，保存每个设备字段的最新值。
-- `data_points` 先写入内存数据库，达到阈值或周期触发时**增量同步**到磁盘 `data.db`。
-- 同步到磁盘后，内存中已同步的数据会被清理，减少内存占用和磁盘频繁写入。
-- 历史查询会**合并内存 + 磁盘**数据，确保读取完整历史。
-
-### 缓存流程图
-
-```
-采集器采集数据
-        │
-        ├─> 更新 data_cache（内存，最新值）
-        │
-        └─> 是否到达 storage_interval？
-                │
-                ├─ 否 → 仅更新缓存
-                │
-                └─ 是 → 写入 data_points（内存历史）
-                         │
-                         ├─ 达到 SyncInterval / SyncBatchTrigger
-                         │      └─ 增量同步到磁盘 data.db
-                         │             └─ 清理内存中已同步数据
-                         │
-                         └─ 历史查询：合并内存 + 磁盘返回
-```
-
-### 存储
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/storage` | 存储策略列表 |
-| POST | `/api/storage` | 创建存储策略 |
-| PUT | `/api/storage/{id}` | 更新存储策略 |
-| DELETE | `/api/storage/{id}` | 删除存储策略 |
-| POST | `/api/storage/run` | 按策略清理 |
-| POST | `/api/storage/cleanup` | 手动清理 |
-
-### 阈值
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/thresholds` | 阈值列表 |
-| POST | `/api/thresholds` | 创建阈值 |
-| PUT | `/api/thresholds/{id}` | 更新阈值 |
-| DELETE | `/api/thresholds/{id}` | 删除阈值 |
-
-### 用户
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/users` | 用户列表 |
-| POST | `/api/users` | 创建用户 |
-| PUT | `/api/users/{id}` | 更新用户 |
-| DELETE | `/api/users/{id}` | 删除用户 |
-| PUT | `/api/users/password` | 修改密码 |
 
 ### 网关配置
 
@@ -656,163 +463,41 @@ make deploy-windows  # Windows
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 代码结构规范
+### Host Functions
 
-每个驱动文件分为以下清晰的部分：
+驱动可通过以下 Host Functions 与主程序交互：
 
-| 区域 | 标记 | 说明 | 是否需要修改 |
-|------|------|------|------------|
-| Host 函数声明 | `【固定不变】` | 串口/网络通信接口 | 否 |
-| 配置结构 | `【固定不变】` | DriverConfig | 否 |
-| 点表定义 | `【用户修改】` | 寄存器地址常量 | **是** |
-| 点表配置 | `【用户修改】` | pointConfig 数组 | **是** |
-| 驱动入口 | `【固定不变】` | handle(), describe() | 否 |
-| 读取逻辑 | `【用户修改】` | readAllPoints() | **是** |
-| 写入逻辑 | `【用户修改】` | doWrite() | **是** |
-| 通信函数 | `【固定不变】` | Modbus 收发、帧构建、CRC | 否 |
-| 工具函数 | `【固定不变】` | 配置获取、格式化输出 | 否 |
+| 函数 | 说明 |
+|------|------|
+| `serial_transceive(port, baudrate, data)` | 串口收发 |
+| `tcp_transceive(host, port, data)` | TCP 收发 |
+| `getDeviceConfig(key)` | 获取设备配置 |
+| `setValue(key, value)` | 设置采集值 |
 
-### 快速开始
+### 驱动目录结构
+
+```
+drvs/
+├── air_conditioning/     # 空调驱动
+│   ├── Makefile
+│   ├── README.md
+│   └── *.go
+├── ups/                  # UPS 驱动
+├── electric_meter/       # 电表驱动
+├── temperature_humidity/ # 温湿度驱动
+├── water_leak/           # 漏水驱动
+└── cabinet_header/       # 机柜 header 驱动
+```
+
+### 编译驱动
 
 ```bash
-# 进入驱动目录
-cd drvs
-
 # 编译所有驱动
-make
+cd drvs && make
 
 # 编译单个驱动
-tinygo build -o th_modbusrtu.wasm -target=wasip1 -buildmode=c-shared ./th_modbusrtu.go
-tinygo build -o th_modbustcp.wasm -target=wasip1 -buildmode=c-shared ./th_modbustcp.go
-tinygo build -o ups_kstar.wasm -target=wasip1 -buildmode=c-shared ./ups_kstar.go
+cd drvs/air_conditioning && make
 ```
-
-### 内置驱动
-
-| 驱动文件 | 协议 | 说明 | 文档 |
-|---------|------|------|------|
-| `th_modbusrtu.go` | Modbus RTU | 温湿度传感器 RTU 驱动 | [README_th_modbusrtu.md](./drvs/README_th_modbusrtu.md) |
-| `th_modbustcp.go` | Modbus TCP | 温湿度传感器 TCP 驱动 | [README_th_modbustcp.md](./drvs/README_th_modbustcp.md) |
-| `temperature_humidity.go` | Modbus RTU | 温湿度传感器通用驱动 | [README_temhumidity.md](./drvs/README_temhumidity.md) |
-| `ups_kstar.go` | Modbus TCP | 科士达 UPS 驱动 | [README_ups_kstar.md](./drvs/README_ups_kstar.md) |
-
-### 编写新驱动
-
-参考以下模板创建新驱动：
-
-```go
-// =============================================================================
-// [设备名称] - [协议] 驱动
-// =============================================================================
-//
-// 设备点表:
-//   - [字段1]: FC=03, 地址=0x0000, 长度=1, 缩放=0.1, 1位小数
-//   - [字段2]: FC=03, 地址=0x0001, 长度=1, 缩放=1, 0位小数
-//
-// Host 提供: serial_transceive / tcp_transceive
-//
-// =============================================================================
-package main
-
-import (
-	"encoding/json"
-	"strconv"
-	"strings"
-
-	pdk "github.com/extism/go-pdk"
-)
-
-// =============================================================================
-// 【固定不变】Host 函数声明
-// =============================================================================
-//go:wasmimport extism:host/user serial_transceive  // 或 tcp_transceive
-func serial_transceive(wPtr uint64, wSize uint64, rPtr uint64, rCap uint64, timeoutMs uint64) uint64
-
-// =============================================================================
-// 【固定不变】配置结构
-// =============================================================================
-type DriverConfig struct {
-	DeviceAddress int    `json:"device_address"`
-	FuncName      string `json:"func_name"`
-	FieldName     string `json:"field_name"`
-	Value         string `json:"value"`
-}
-
-// =============================================================================
-// 【用户修改】点表定义
-// =============================================================================
-const (
-	REG_POINT1 = 0x0000 // 寄存器1
-	REG_POINT2 = 0x0001 // 寄存器2
-
-	FUNC_CODE_READ  = 0x03
-	FUNC_CODE_WRITE = 0x06
-)
-
-// =============================================================================
-// 【用户修改】点表配置
-// =============================================================================
-var pointConfig = []PointConfig{
-	{Field: "point1", Address: REG_POINT1, Length: 1, Scale: 0.1, Decimals: 1, RW: "R", Unit: "unit", Label: "字段1"},
-	{Field: "point2", Address: REG_POINT2, Length: 1, Scale: 1, Decimals: 0, RW: "R", Unit: "unit", Label: "字段2"},
-}
-
-type PointConfig struct {
-	Field    string
-	Address  uint16
-	Length   uint16
-	Scale    float64
-	Decimals int
-	RW       string
-	Unit     string
-	Label    string
-}
-
-// =============================================================================
-// 【固定不变】驱动入口
-// =============================================================================
-//go:wasmexport handle
-func handle() int32 {
-	cfg := getConfig()
-	points := readAllPoints(cfg.DeviceAddress)
-	outputJSON(map[string]interface{}{"success": true, "points": points})
-	return 0
-}
-
-// =============================================================================
-// 【固定不变】描述可写字段
-// =============================================================================
-//go:wasmexport describe
-func describe() int32 {
-	outputJSON(map[string]interface{}{"success": true, "data": map[string]string{}})
-	return 0
-}
-
-// =============================================================================
-// 【用户修改】读取所有测点
-// =============================================================================
-func readAllPoints(devAddr int) []map[string]interface{} {
-	// 根据 pointConfig 批量读取寄存器并转换为实际值
-	...
-}
-
-// =============================================================================
-// 【固定不变】Modbus 通信函数 (参考现有驱动)
-// =============================================================================
-func serialTransceive(...) {...}
-func buildReadFrame(...) {...}
-func parseReadResponse(...) {...}
-func crc16(...) {...}
-
-// =============================================================================
-// 【固定不变】工具函数
-// =============================================================================
-func getConfig() DriverConfig {...}
-func formatFloat(val float64, decimals int) string {...}
-func outputJSON(v interface{}) {...}
-```
-
-详细开发指南请参考 [drvs/README.md](./drvs/README.md)
 
 ## 数据库架构
 
@@ -820,33 +505,48 @@ func outputJSON(v interface{}) {...}
 
 | 表名 | 说明 |
 |------|------|
-| users | 用户表 |
-| resources | 资源表 |
-| devices | 设备表 |
-| drivers | 驱动表 |
-| northbound_configs | 北向配置表 |
-| thresholds | 阈值配置表 |
-| alarm_logs | 报警日志表 |
-| storage_configs | 存储配置表 |
+| gateway_config | 网关配置 |
+| resources | 资源（串口/TCP） |
+| devices | 设备 |
+| drivers | 驱动 |
+| northbound_configs | 北向配置 |
+| thresholds | 阈值配置 |
+| users | 用户 |
 
-### data.db (历史数据数据库)
+### data.db (数据数据库)
 
 | 表名 | 说明 |
 |------|------|
-| data_points | 采集数据点 |
+| data_cache | 设备最新值缓存（内存表） |
+| data_points | 历史数据点（归档表） |
 
-**同步策略**: 内存模式 + 每 5 分钟持久化到磁盘
+### 数据存储策略
 
-## 资源访问控制
-
-- 同一资源（串口/TCP）同一时间只允许一个设备访问
-- 使用互斥锁防止并发读取导致数据乱码
-- 支持超时等待机制
+- **data_cache**: 存在内存数据库中，保存每个设备字段的最新值
+- **data_points**: 先写入内存，达到阈值或周期触发时增量同步到磁盘
+- **历史查询**: 自动合并内存 + 磁盘数据
 
 ## 系统监控
 
-### 状态指标
+### 监控指标
 
+| 指标 | 说明 |
+|------|------|
+| CPU 使用率 | 系统 CPU 使用百分比 |
+| 内存使用率 | 内存使用百分比 |
+| 磁盘使用率 | 磁盘使用百分比 |
+| 运行时间 | 网关运行时长 |
+| 负载均值 | 1/5/15 分钟负载 |
+
+### 监控数据
+
+- 采集周期：1 分钟
+- 数据保留：与网关数据一致
+- 上报方式：北向适配器自动上报
+
+### 仪表盘展示
+
+- 网关状态卡片
 - 采集器运行状态
 - 设备总数 / 已启用数量
 - 北向配置总数 / 已启用数量
@@ -860,6 +560,19 @@ func outputJSON(v interface{}) {...}
 - 北向发送日志
 
 ## 更新日志
+
+### v1.2.0 (2026-02)
+
+#### 架构优化
+- 移除 gRPC 北向插件，改为内置适配器
+- 新增 PandaX 北向适配器，支持 TDengine
+- 重构北向调度器，支持热重载
+- 驱动目录独立为 Git 子模块
+
+#### 功能变更
+- **移除** "同步网关身份" 功能
+- `productKey`/`deviceKey` 仅用于 Sagoo 北向
+- 网关系统属性自动上报
 
 ### v1.1.0 (2026-02-10)
 
