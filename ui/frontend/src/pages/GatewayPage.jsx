@@ -189,13 +189,6 @@ function GatewayPage() {
         </Show>
       </Card>
 
-      <Card title="说明" style="margin-top:16px;">
-        <div style="color:var(--text-secondary); font-size:0.875rem; line-height:1.8;">
-          <p><strong>历史数据保留天数</strong>：全局生效，系统每天执行一次过期数据清理。</p>
-          <p><strong>ProductKey / DeviceKey</strong> 仅在 Sagoo 北向配置中设置。</p>
-        </div>
-      </Card>
-
       <Card title="运行时参数热更新" style="margin-top:16px;">
         <form class="form" onSubmit={submitRuntime} style="max-width:640px;">
           <div class="form-group">
