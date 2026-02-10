@@ -59,16 +59,16 @@ type MQTTAdapter struct {
 	alarmMu       sync.RWMutex
 
 	// 控制通道
-	stopChan chan struct{}
-	dataChan chan struct{}
-	wg       sync.WaitGroup
+	stopChan     chan struct{}
+	dataChan     chan struct{}
+	reconnectNow chan struct{}
+	wg           sync.WaitGroup
 
 	// 状态
 	mu                sync.RWMutex
 	initialized       bool
 	enabled           bool
 	connected         bool
-	reconnecting      bool
 	reconnectInterval time.Duration
 }
 
@@ -81,6 +81,7 @@ func NewMQTTAdapter(name string) *MQTTAdapter {
 		reconnectInterval: 5 * time.Second,
 		stopChan:          make(chan struct{}),
 		dataChan:          make(chan struct{}, 1),
+		reconnectNow:      make(chan struct{}, 1),
 		pendingData:       make([]*models.CollectData, 0),
 		pendingAlarms:     make([]*models.AlarmPayload, 0),
 	}
@@ -195,9 +196,7 @@ func (a *MQTTAdapter) connectMQTT() (mqtt.Client, error) {
 		if err != nil {
 			log.Printf("MQTT [%s] connection lost: %v", a.name, err)
 		}
-		a.mu.Lock()
-		a.connected = false
-		a.mu.Unlock()
+		a.markDisconnected()
 	}
 	opts.OnConnect = func(_ mqtt.Client) {
 		log.Printf("MQTT [%s] connected: %s", a.name, a.broker)
@@ -219,80 +218,96 @@ func (a *MQTTAdapter) connectMQTT() (mqtt.Client, error) {
 	return client, nil
 }
 
-// reconnect 断线重连
-func (a *MQTTAdapter) reconnect() {
-	a.mu.Lock()
-	if a.reconnecting {
-		a.mu.Unlock()
+func (a *MQTTAdapter) signalReconnect() {
+	a.mu.RLock()
+	reconnectNow := a.reconnectNow
+	a.mu.RUnlock()
+	if reconnectNow == nil {
 		return
 	}
-	a.reconnecting = true
+	select {
+	case reconnectNow <- struct{}{}:
+	default:
+	}
+}
+
+func (a *MQTTAdapter) markDisconnected() {
+	a.mu.Lock()
+	a.connected = false
+	enabled := a.enabled
+	a.mu.Unlock()
+	if enabled {
+		a.signalReconnect()
+	}
+}
+
+func (a *MQTTAdapter) reconnectOnce() error {
+	log.Printf("MQTT [%s] attempting to reconnect...", a.name)
+	client, err := a.connectMQTT()
+	if err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	oldClient := a.client
+	a.client = client
+	a.connected = true
 	a.mu.Unlock()
 
-	defer func() {
-		a.mu.Lock()
-		a.reconnecting = false
-		a.mu.Unlock()
-	}()
-
-	for {
-		select {
-		case <-a.stopChan:
-			return
-		default:
-			log.Printf("MQTT [%s] attempting to reconnect...", a.name)
-			client, err := a.connectMQTT()
-			if err != nil {
-				a.mu.RLock()
-				reconnectInterval := a.reconnectInterval
-				a.mu.RUnlock()
-				if reconnectInterval <= 0 {
-					reconnectInterval = 5 * time.Second
-				}
-				log.Printf("MQTT [%s] reconnect failed: %v, retry in %v", a.name, err, reconnectInterval)
-				select {
-				case <-time.After(reconnectInterval):
-				case <-a.stopChan:
-					return
-				}
-				continue
-			}
-
-			a.mu.Lock()
-			a.client = client
-			a.mu.Unlock()
-			log.Printf("MQTT [%s] reconnected successfully", a.name)
-			return
-		}
+	if oldClient != nil && oldClient != client && oldClient.IsConnected() {
+		oldClient.Disconnect(250)
 	}
+
+	log.Printf("MQTT [%s] reconnected successfully", a.name)
+	return nil
 }
 
 // Start 启动适配器的后台线程
 func (a *MQTTAdapter) Start() {
+	needReconnect := false
 	a.mu.Lock()
 	if a.initialized && !a.enabled {
-		a.stopChan = make(chan struct{})
+		if a.stopChan == nil {
+			a.stopChan = make(chan struct{})
+		}
+		if a.dataChan == nil {
+			a.dataChan = make(chan struct{}, 1)
+		}
+		if a.reconnectNow == nil {
+			a.reconnectNow = make(chan struct{}, 1)
+		}
 		a.enabled = true
-		a.wg.Add(2)
-		go a.sendLoop()
-		go a.alarmLoop()
+		needReconnect = !a.connected
+		a.wg.Add(1)
+		go a.runLoop()
 		log.Printf("MQTT adapter started: %s", a.name)
 	}
 	a.mu.Unlock()
+
+	if needReconnect {
+		a.signalReconnect()
+	}
 }
 
 // Stop 停止适配器的后台线程
 func (a *MQTTAdapter) Stop() {
 	a.mu.Lock()
+	stopChan := a.stopChan
 	if a.enabled {
 		a.enabled = false
-		stopChan := a.stopChan
 		if stopChan != nil {
 			close(stopChan)
 		}
 	}
 	a.mu.Unlock()
 	a.wg.Wait()
+	if stopChan != nil {
+		a.mu.Lock()
+		if a.stopChan == stopChan {
+			a.stopChan = nil
+		}
+		a.mu.Unlock()
+	}
 	log.Printf("MQTT adapter stopped: %s", a.name)
 }
 
@@ -358,60 +373,131 @@ func (a *MQTTAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	}
 	a.alarmMu.Unlock()
 
-	return a.flushAlarms()
+	select {
+	case a.dataChan <- struct{}{}:
+	default:
+	}
+
+	return nil
 }
 
 // Close 关闭
 func (a *MQTTAdapter) Close() error {
 	a.Stop()
 
+	a.flushPendingData()
+	_ = a.flushAlarms()
+
 	a.mu.Lock()
+	client := a.client
 	a.initialized = false
 	a.connected = false
+	a.enabled = false
+	a.client = nil
+	a.stopChan = nil
+	a.dataChan = nil
+	a.reconnectNow = nil
 	a.mu.Unlock()
 
-	if a.client != nil && a.client.IsConnected() {
-		a.client.Disconnect(250)
+	if client != nil && client.IsConnected() {
+		client.Disconnect(250)
 	}
-	a.client = nil
 
 	return nil
 }
 
-// sendLoop 数据发送循环（独立线程）
-func (a *MQTTAdapter) sendLoop() {
+// runLoop 单协程事件循环（数据/报警/重连）
+func (a *MQTTAdapter) runLoop() {
 	defer a.wg.Done()
 
-	ticker := time.NewTicker(a.interval)
-	defer ticker.Stop()
+	a.mu.RLock()
+	interval := a.interval
+	stopChan := a.stopChan
+	dataChan := a.dataChan
+	reconnectNow := a.reconnectNow
+	a.mu.RUnlock()
 
-	for {
-		select {
-		case <-a.stopChan:
-			// 关闭前发送剩余数据
-			a.flushPendingData()
-			return
-		case <-a.dataChan:
-			a.flushPendingData()
-		case <-ticker.C:
-			a.flushPendingData()
-		}
+	if interval < 500*time.Millisecond {
+		interval = 500 * time.Millisecond
 	}
-}
 
-// alarmLoop 报警发送循环（独立线程）
-func (a *MQTTAdapter) alarmLoop() {
-	defer a.wg.Done()
+	dataTicker := time.NewTicker(interval)
+	alarmTicker := time.NewTicker(2 * time.Second)
+	defer dataTicker.Stop()
+	defer alarmTicker.Stop()
 
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
+	var reconnectTimer *time.Timer
+	var reconnectTimerCh <-chan time.Time
+
+	scheduleReconnect := func(delay time.Duration) {
+		if reconnectTimer == nil {
+			reconnectTimer = time.NewTimer(delay)
+			reconnectTimerCh = reconnectTimer.C
+			return
+		}
+		if !reconnectTimer.Stop() {
+			select {
+			case <-reconnectTimer.C:
+			default:
+			}
+		}
+		reconnectTimer.Reset(delay)
+		reconnectTimerCh = reconnectTimer.C
+	}
+
+	stopReconnect := func() {
+		if reconnectTimer == nil {
+			reconnectTimerCh = nil
+			return
+		}
+		if !reconnectTimer.Stop() {
+			select {
+			case <-reconnectTimer.C:
+			default:
+			}
+		}
+		reconnectTimerCh = nil
+	}
+
+	defer func() {
+		if reconnectTimer != nil {
+			if !reconnectTimer.Stop() {
+				select {
+				case <-reconnectTimer.C:
+				default:
+				}
+			}
+		}
+	}()
 
 	for {
 		select {
-		case <-a.stopChan:
+		case <-stopChan:
+			a.flushPendingData()
+			_ = a.flushAlarms()
+			stopReconnect()
 			return
-		case <-ticker.C:
-			a.flushAlarms()
+		case <-dataChan:
+			a.flushPendingData()
+			_ = a.flushAlarms()
+		case <-dataTicker.C:
+			a.flushPendingData()
+		case <-alarmTicker.C:
+			_ = a.flushAlarms()
+		case <-reconnectNow:
+			scheduleReconnect(0)
+		case <-reconnectTimerCh:
+			if !a.shouldReconnect() {
+				stopReconnect()
+				continue
+			}
+			if err := a.reconnectOnce(); err != nil {
+				delay := a.currentReconnectInterval()
+				log.Printf("MQTT [%s] reconnect failed: %v, retry in %v", a.name, err, delay)
+				scheduleReconnect(delay)
+				continue
+			}
+			stopReconnect()
 		}
 	}
 }
@@ -435,7 +521,7 @@ func (a *MQTTAdapter) flushPendingData() {
 			log.Printf("MQTT [%s] send data failed: %v", a.name, err)
 			// 断线重连
 			if !a.IsConnected() {
-				go a.reconnect()
+				a.signalReconnect()
 			}
 		}
 	}
@@ -459,7 +545,7 @@ func (a *MQTTAdapter) flushAlarms() error {
 			log.Printf("MQTT [%s] send alarm failed: %v", a.name, err)
 			// 断线重连
 			if !a.IsConnected() {
-				go a.reconnect()
+				a.signalReconnect()
 			}
 		}
 	}
@@ -515,9 +601,7 @@ func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
 		return fmt.Errorf("mqtt publish timeout")
 	}
 	if err := token.Error(); err != nil {
-		a.mu.Lock()
-		a.connected = false
-		a.mu.Unlock()
+		a.markDisconnected()
 		return err
 	}
 
@@ -527,6 +611,24 @@ func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
 	a.mu.Unlock()
 
 	return nil
+}
+
+func (a *MQTTAdapter) currentReconnectInterval() time.Duration {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.reconnectInterval <= 0 {
+		return 5 * time.Second
+	}
+	return a.reconnectInterval
+}
+
+func (a *MQTTAdapter) shouldReconnect() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.initialized || !a.enabled || a.client == nil {
+		return false
+	}
+	return !a.client.IsConnected()
 }
 
 // GetStats 获取适配器统计信息

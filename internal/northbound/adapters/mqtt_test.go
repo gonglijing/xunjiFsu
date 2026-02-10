@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"testing"
+	"time"
 )
 
 func TestMQTTAdapterStartStopCanRestart(t *testing.T) {
@@ -9,6 +10,8 @@ func TestMQTTAdapterStartStopCanRestart(t *testing.T) {
 
 	a.mu.Lock()
 	a.initialized = true
+	a.connected = true
+	a.interval = time.Hour
 	a.mu.Unlock()
 
 	a.Start()
@@ -29,20 +32,20 @@ func TestMQTTAdapterStartStopCanRestart(t *testing.T) {
 	a.Stop()
 }
 
-func TestMQTTAdapterReconnectGuard(t *testing.T) {
+func TestMQTTSingleLoop_StopThenCloseSafe(t *testing.T) {
 	a := NewMQTTAdapter("mqtt-test")
-
 	a.mu.Lock()
-	a.reconnecting = true
+	a.initialized = true
+	a.connected = true
+	a.interval = time.Hour
 	a.mu.Unlock()
 
-	a.reconnect()
-
-	a.mu.RLock()
-	stillReconnecting := a.reconnecting
-	a.mu.RUnlock()
-
-	if !stillReconnecting {
-		t.Fatalf("expected reconnect guard to keep reconnecting=true unchanged")
+	a.Start()
+	a.Stop()
+	if err := a.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if a.IsEnabled() {
+		t.Fatalf("expected adapter disabled after Close")
 	}
 }
