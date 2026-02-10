@@ -19,7 +19,7 @@ function DeviceDetailDrawer(props) {
             <h3 class="card-title">
               设备详情 {device() ? `- ${device().name}` : ''}
             </h3>
-            <button class="btn btn-ghost btn-no-icon btn-only-icon" onClick={onClose} style="padding:4px 8px;">✕</button>
+            <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={onClose}>✕</button>
           </div>
 
           <div style="flex:1; overflow:auto; padding:12px 16px 16px;">

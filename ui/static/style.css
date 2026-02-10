@@ -896,10 +896,10 @@ nav .container {
 }
 
 .table-actions .btn {
-  height: 28px;
-  min-height: 28px;
-  min-width: 58px;
-  padding: 0 10px;
+  height: 26px;
+  min-height: 26px;
+  min-width: 54px;
+  padding: 0 9px;
   border-radius: 7px;
   font-size: 0.75rem;
 }
@@ -912,6 +912,30 @@ nav .container {
 
 .table-actions a.btn {
   text-decoration: none;
+}
+
+.table-actions .btn-outline-primary {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(96, 165, 250, 0.38);
+  color: #a5c8f7;
+}
+
+.table-actions .btn-outline-primary:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.52);
+  color: #dbeafe;
+}
+
+.table-actions .btn-soft-primary {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #a5c8f7;
+}
+
+.table-actions .btn-soft-primary:hover {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(96, 165, 250, 0.44);
+  color: #dbeafe;
 }
 
 table {
@@ -1033,18 +1057,30 @@ tbody tr:last-child td {
 }
 
 .card-header .btn-only-icon {
-  font-size: 1.25rem;
-  border-radius: 8px;
-  width: 36px;
-  height: 36px;
+  font-size: 1.1rem;
+  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.card-header .btn-only-icon:hover {
-  background: rgba(255, 255, 255, 0.1);
+.card-header .btn-close-lite {
+  border-color: rgba(148, 163, 184, 0.16);
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
 }
+
+.card-header .btn-close-lite:hover {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: var(--text-primary);
+}
+
 
 /* Toast 通知 */
 .toast-container {
