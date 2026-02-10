@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
@@ -213,6 +214,9 @@ func TestNumericFieldLookup_CacheParsedValue(t *testing.T) {
 	lookup := newNumericFieldLookup(map[string]string{
 		"temperature": "42.1",
 	})
+	if lookup.parsed != nil {
+		t.Fatalf("parsed cache should be lazily initialized")
+	}
 
 	v1, ok1 := lookup.getFloat("temperature")
 	v2, ok2 := lookup.getFloat(" temperature ")
@@ -222,6 +226,39 @@ func TestNumericFieldLookup_CacheParsedValue(t *testing.T) {
 
 	if len(lookup.parsed) != 1 {
 		t.Fatalf("expected parsed cache size 1, got %d", len(lookup.parsed))
+	}
+}
+
+func TestDriverResultToCollectData_TrimAndOverrideFields(t *testing.T) {
+	device := &models.Device{
+		ID:         1,
+		Name:       "dev1",
+		ProductKey: " pk ",
+		DeviceKey:  " dk ",
+	}
+	res := &driver.DriverResult{
+		Data: map[string]string{
+			" temp ": "10.5",
+			"   ":    "invalid",
+		},
+		Points: []driver.DriverPoint{
+			{FieldName: " temp ", Value: 11.2},
+			{FieldName: "", Value: 1},
+		},
+	}
+
+	collect := driverResultToCollectData(device, res)
+	if collect == nil {
+		t.Fatalf("collect data should not be nil")
+	}
+	if collect.ProductKey != "pk" || collect.DeviceKey != "dk" {
+		t.Fatalf("expected trimmed identity, got product=%q device=%q", collect.ProductKey, collect.DeviceKey)
+	}
+	if got := collect.Fields["temp"]; got != "11.2" {
+		t.Fatalf("expected point value override temp=11.2, got %q", got)
+	}
+	if _, exists := collect.Fields[""]; exists {
+		t.Fatalf("blank field name should be ignored")
 	}
 }
 

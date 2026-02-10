@@ -666,8 +666,7 @@ type numericFieldLookup struct {
 
 func newNumericFieldLookup(fields map[string]string) *numericFieldLookup {
 	return &numericFieldLookup{
-		raw:    fields,
-		parsed: make(map[string]float64),
+		raw: fields,
 	}
 }
 
@@ -686,10 +685,10 @@ func (l *numericFieldLookup) getRawValue(field string) (normalized string, value
 	}
 
 	if value, ok = l.raw[trimmed]; ok {
-		return normalizeFieldName(trimmed), value, true
+		return trimmed, value, true
 	}
 
-	normalized = normalizeFieldName(trimmed)
+	normalized = strings.ToLower(trimmed)
 	if normalized == "" {
 		return "", "", false
 	}
@@ -713,13 +712,15 @@ func (l *numericFieldLookup) getRawValue(field string) (normalized string, value
 }
 
 func (l *numericFieldLookup) getFloat(field string) (float64, bool) {
-	normalized, valueStr, ok := l.getRawValue(field)
+	cacheKey, valueStr, ok := l.getRawValue(field)
 	if !ok {
 		return 0, false
 	}
 
-	if cached, exists := l.parsed[normalized]; exists {
-		return cached, true
+	if l.parsed != nil {
+		if cached, exists := l.parsed[cacheKey]; exists {
+			return cached, true
+		}
 	}
 
 	value, err := strconv.ParseFloat(strings.TrimSpace(valueStr), 64)
@@ -727,7 +728,10 @@ func (l *numericFieldLookup) getFloat(field string) (float64, bool) {
 		return 0, false
 	}
 
-	l.parsed[normalized] = value
+	if l.parsed == nil {
+		l.parsed = make(map[string]float64, 8)
+	}
+	l.parsed[cacheKey] = value
 	return value, true
 }
 
@@ -819,14 +823,19 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	fields := make(map[string]string, len(res.Data)+len(res.Points))
 	if len(res.Data) > 0 {
 		for k, v := range res.Data {
-			fields[k] = v
+			name := strings.TrimSpace(k)
+			if name == "" {
+				continue
+			}
+			fields[name] = v
 		}
 	}
 	for _, p := range res.Points {
-		if strings.TrimSpace(p.FieldName) == "" {
+		name := strings.TrimSpace(p.FieldName)
+		if name == "" {
 			continue
 		}
-		fields[p.FieldName] = driverPointValueToString(p.Value)
+		fields[name] = driverPointValueToString(p.Value)
 	}
 	ts := res.Timestamp
 	if ts.IsZero() {
