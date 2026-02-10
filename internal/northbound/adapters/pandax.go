@@ -1172,8 +1172,8 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 
 	obj, ok := params.(map[string]interface{})
 	if ok {
-		pk := pickFirstNonEmpty(pandaXPickString(obj, "productKey", "product_key"), defaultPK)
-		dk := pickFirstNonEmpty(pandaXPickString(obj, "deviceKey", "device_key"), defaultDK)
+		pk := pickFirstNonEmpty(pickConfigString(obj, "productKey", "product_key"), defaultPK)
+		dk := pickFirstNonEmpty(pickConfigString(obj, "deviceKey", "device_key"), defaultDK)
 
 		if props, ok := mapFromAny(obj["properties"]); ok {
 			appendProperties(pk, dk, props)
@@ -1187,8 +1187,8 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 			subPK := pk
 			subDK := dk
 			if identity, ok := mapFromAny(sub["identity"]); ok {
-				subPK = pickFirstNonEmpty(pandaXPickString(identity, "productKey", "product_key"), subPK)
-				subDK = pickFirstNonEmpty(pandaXPickString(identity, "deviceKey", "device_key"), subDK)
+				subPK = pickFirstNonEmpty(pickConfigString(identity, "productKey", "product_key"), subPK)
+				subDK = pickFirstNonEmpty(pickConfigString(identity, "deviceKey", "device_key"), subDK)
 			}
 			if props, ok := mapFromAny(sub["properties"]); ok {
 				appendProperties(subPK, subDK, props)
@@ -1208,8 +1208,8 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 				subPK := pk
 				subDK := dk
 				if identity, ok := mapFromAny(row["identity"]); ok {
-					subPK = pickFirstNonEmpty(pandaXPickString(identity, "productKey", "product_key"), subPK)
-					subDK = pickFirstNonEmpty(pandaXPickString(identity, "deviceKey", "device_key"), subDK)
+					subPK = pickFirstNonEmpty(pickConfigString(identity, "productKey", "product_key"), subPK)
+					subDK = pickFirstNonEmpty(pickConfigString(identity, "deviceKey", "device_key"), subDK)
 				}
 				if props, ok := mapFromAny(row["properties"]); ok {
 					appendProperties(subPK, subDK, props)
@@ -1217,7 +1217,7 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 			}
 		}
 
-		if fieldName := strings.TrimSpace(pandaXPickString(obj, "fieldName", "field_name")); fieldName != "" {
+		if fieldName := strings.TrimSpace(pickConfigString(obj, "fieldName", "field_name")); fieldName != "" {
 			if rawValue, exists := obj["value"]; exists {
 				appendProperties(pk, dk, map[string]interface{}{fieldName: rawValue})
 			}
@@ -1387,39 +1387,39 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 
 	cfg := &PandaXConfig{
 		ServerURL: normalizePandaXServerURL(
-			pandaXPickString(raw, "serverUrl", "broker", "server_url"),
-			pandaXPickString(raw, "protocol"),
-			pandaXPickInt(raw, 0, "port"),
+			pickConfigString(raw, "serverUrl", "broker", "server_url"),
+			pickConfigString(raw, "protocol"),
+			pickConfigInt(raw, 0, "port"),
 		),
-		Username:               strings.TrimSpace(pandaXPickString(raw, "username", "token", "deviceToken")),
-		Password:               strings.TrimSpace(pandaXPickString(raw, "password")),
-		ClientID:               strings.TrimSpace(pandaXPickString(raw, "clientId", "client_id")),
-		QOS:                    pandaXPickInt(raw, 0, "qos"),
-		Retain:                 pandaXPickBool(raw, false, "retain"),
-		KeepAlive:              pandaXPickInt(raw, 60, "keepAlive", "keep_alive"),
-		Timeout:                pandaXPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
-		UploadIntervalMs:       pandaXPickInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
-		AlarmFlushIntervalMs:   pandaXPickInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs"),
-		AlarmBatchSize:         pandaXPickInt(raw, defaultAlarmBatch, "alarmBatchSize"),
-		AlarmQueueSize:         pandaXPickInt(raw, defaultAlarmQueue, "alarmQueueSize"),
-		RealtimeQueueSize:      pandaXPickInt(raw, defaultRealtimeQueue, "realtimeQueueSize"),
-		GatewayMode:            pandaXPickBool(raw, true, "gatewayMode"),
-		SubDeviceTokenMode:     strings.TrimSpace(pandaXPickString(raw, "subDeviceTokenMode")),
-		TelemetryTopic:         strings.TrimSpace(pandaXPickString(raw, "telemetryTopic", "topic")),
-		AttributesTopic:        strings.TrimSpace(pandaXPickString(raw, "attributesTopic")),
-		RowTopic:               strings.TrimSpace(pandaXPickString(raw, "rowTopic")),
-		GatewayTelemetryTopic:  strings.TrimSpace(pandaXPickString(raw, "gatewayTelemetryTopic")),
-		GatewayAttributesTopic: strings.TrimSpace(pandaXPickString(raw, "gatewayAttributesTopic")),
-		EventTopicPrefix:       strings.TrimSpace(pandaXPickString(raw, "eventTopicPrefix")),
-		AlarmTopic:             strings.TrimSpace(pandaXPickString(raw, "alarmTopic")),
-		AlarmIdentifier:        strings.TrimSpace(pandaXPickString(raw, "alarmIdentifier")),
-		RPCRequestTopic:        strings.TrimSpace(pandaXPickString(raw, "rpcRequestTopic")),
-		RPCResponseTopic:       strings.TrimSpace(pandaXPickString(raw, "rpcResponseTopic")),
-		ProductKey:             strings.TrimSpace(pandaXPickString(raw, "productKey", "product_key")),
-		DeviceKey:              strings.TrimSpace(pandaXPickString(raw, "deviceKey", "device_key")),
+		Username:               strings.TrimSpace(pickConfigString(raw, "username", "token", "deviceToken")),
+		Password:               strings.TrimSpace(pickConfigString(raw, "password")),
+		ClientID:               strings.TrimSpace(pickConfigString(raw, "clientId", "client_id")),
+		QOS:                    pickConfigInt(raw, 0, "qos"),
+		Retain:                 pickConfigBool(raw, false, "retain"),
+		KeepAlive:              pickConfigInt(raw, 60, "keepAlive", "keep_alive"),
+		Timeout:                pickConfigInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:       pickConfigInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
+		AlarmFlushIntervalMs:   pickConfigInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs"),
+		AlarmBatchSize:         pickConfigInt(raw, defaultAlarmBatch, "alarmBatchSize"),
+		AlarmQueueSize:         pickConfigInt(raw, defaultAlarmQueue, "alarmQueueSize"),
+		RealtimeQueueSize:      pickConfigInt(raw, defaultRealtimeQueue, "realtimeQueueSize"),
+		GatewayMode:            pickConfigBool(raw, true, "gatewayMode"),
+		SubDeviceTokenMode:     strings.TrimSpace(pickConfigString(raw, "subDeviceTokenMode")),
+		TelemetryTopic:         strings.TrimSpace(pickConfigString(raw, "telemetryTopic", "topic")),
+		AttributesTopic:        strings.TrimSpace(pickConfigString(raw, "attributesTopic")),
+		RowTopic:               strings.TrimSpace(pickConfigString(raw, "rowTopic")),
+		GatewayTelemetryTopic:  strings.TrimSpace(pickConfigString(raw, "gatewayTelemetryTopic")),
+		GatewayAttributesTopic: strings.TrimSpace(pickConfigString(raw, "gatewayAttributesTopic")),
+		EventTopicPrefix:       strings.TrimSpace(pickConfigString(raw, "eventTopicPrefix")),
+		AlarmTopic:             strings.TrimSpace(pickConfigString(raw, "alarmTopic")),
+		AlarmIdentifier:        strings.TrimSpace(pickConfigString(raw, "alarmIdentifier")),
+		RPCRequestTopic:        strings.TrimSpace(pickConfigString(raw, "rpcRequestTopic")),
+		RPCResponseTopic:       strings.TrimSpace(pickConfigString(raw, "rpcResponseTopic")),
+		ProductKey:             strings.TrimSpace(pickConfigString(raw, "productKey", "product_key")),
+		DeviceKey:              strings.TrimSpace(pickConfigString(raw, "deviceKey", "device_key")),
 	}
 
-	cfg.CommandQueueSize = pandaXPickInt(raw, cfg.RealtimeQueueSize, "commandQueueSize")
+	cfg.CommandQueueSize = pickConfigInt(raw, cfg.RealtimeQueueSize, "commandQueueSize")
 
 	if err := normalizePandaXConfig(cfg); err != nil {
 		return nil, err
@@ -1469,18 +1469,6 @@ func normalizePandaXConfig(cfg *PandaXConfig) error {
 
 func normalizePandaXServerURL(serverURL, protocol string, port int) string {
 	return normalizeServerURLWithPort(serverURL, protocol, port)
-}
-
-func pandaXPickString(data map[string]interface{}, keys ...string) string {
-	return pickConfigString(data, keys...)
-}
-
-func pandaXPickInt(data map[string]interface{}, fallback int, keys ...string) int {
-	return pickConfigInt(data, fallback, keys...)
-}
-
-func pandaXPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
-	return pickConfigBool(data, fallback, keys...)
 }
 
 func requestIDFromPandaXRPCTopic(topic string) string {
