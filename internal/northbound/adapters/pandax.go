@@ -394,11 +394,10 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 		limit = len(a.commandQueue)
 	}
 
-	items := make([]*models.NorthboundCommand, 0, limit)
-	for i := 0; i < limit; i++ {
-		items = append(items, a.commandQueue[0])
-		a.commandQueue = a.commandQueue[1:]
-	}
+	items := make([]*models.NorthboundCommand, limit)
+	copy(items, a.commandQueue[:limit])
+	clear(a.commandQueue[:limit])
+	a.commandQueue = a.commandQueue[limit:]
 
 	log.Printf("[PandaX-%s] PullCommands: 取出 %d 条命令", a.name, len(items))
 	return items, nil
@@ -681,9 +680,8 @@ func (a *PandaXAdapter) flushRealtime() error {
 		return nil
 	}
 	batch := make([]*models.CollectData, len(a.realtimeQueue))
-	for i := 0; i < len(a.realtimeQueue); i++ {
-		batch[i] = cloneCollectData(a.realtimeQueue[i])
-	}
+	copy(batch, a.realtimeQueue)
+	clear(a.realtimeQueue)
 	a.realtimeQueue = a.realtimeQueue[:0]
 	a.dataMu.Unlock()
 
@@ -771,6 +769,7 @@ func (a *PandaXAdapter) flushAlarmBatch() error {
 	}
 	batch := make([]*models.AlarmPayload, count)
 	copy(batch, a.alarmQueue[:count])
+	clear(a.alarmQueue[:count])
 	a.alarmQueue = a.alarmQueue[count:]
 	a.alarmMu.Unlock()
 
@@ -1155,6 +1154,7 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 			continue
 		}
 		if len(a.commandQueue) >= a.commandCap && len(a.commandQueue) > 0 {
+			a.commandQueue[0] = nil
 			a.commandQueue = a.commandQueue[1:]
 		}
 		a.commandQueue = append(a.commandQueue, cmd)
@@ -1309,6 +1309,7 @@ func (a *PandaXAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 		a.realtimeCap = defaultRealtimeQueue
 	}
 	if len(a.realtimeQueue) >= a.realtimeCap {
+		a.realtimeQueue[0] = nil
 		a.realtimeQueue = a.realtimeQueue[1:]
 	}
 	a.realtimeQueue = append(a.realtimeQueue, item)
@@ -1338,6 +1339,7 @@ func (a *PandaXAdapter) enqueueAlarmLocked(item *models.AlarmPayload) {
 		a.alarmCap = defaultAlarmQueue
 	}
 	if len(a.alarmQueue) >= a.alarmCap {
+		a.alarmQueue[0] = nil
 		a.alarmQueue = a.alarmQueue[1:]
 	}
 	a.alarmQueue = append(a.alarmQueue, item)
@@ -1427,76 +1429,86 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	cfg := &PandaXConfig{}
-	cfg.ServerURL = normalizePandaXServerURL(
-		pandaXPickString(raw, "serverUrl", "broker", "server_url"),
-		pandaXPickString(raw, "protocol"),
-		pandaXPickInt(raw, 0, "port"),
-	)
+	cfg := &PandaXConfig{
+		ServerURL: normalizePandaXServerURL(
+			pandaXPickString(raw, "serverUrl", "broker", "server_url"),
+			pandaXPickString(raw, "protocol"),
+			pandaXPickInt(raw, 0, "port"),
+		),
+		Username:               strings.TrimSpace(pandaXPickString(raw, "username", "token", "deviceToken")),
+		Password:               strings.TrimSpace(pandaXPickString(raw, "password")),
+		ClientID:               strings.TrimSpace(pandaXPickString(raw, "clientId", "client_id")),
+		QOS:                    pandaXPickInt(raw, 0, "qos"),
+		Retain:                 pandaXPickBool(raw, false, "retain"),
+		KeepAlive:              pandaXPickInt(raw, 60, "keepAlive", "keep_alive"),
+		Timeout:                pandaXPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:       pandaXPickInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
+		AlarmFlushIntervalMs:   pandaXPickInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs"),
+		AlarmBatchSize:         pandaXPickInt(raw, defaultAlarmBatch, "alarmBatchSize"),
+		AlarmQueueSize:         pandaXPickInt(raw, defaultAlarmQueue, "alarmQueueSize"),
+		RealtimeQueueSize:      pandaXPickInt(raw, defaultRealtimeQueue, "realtimeQueueSize"),
+		GatewayMode:            pandaXPickBool(raw, true, "gatewayMode"),
+		SubDeviceTokenMode:     strings.TrimSpace(pandaXPickString(raw, "subDeviceTokenMode")),
+		TelemetryTopic:         strings.TrimSpace(pandaXPickString(raw, "telemetryTopic", "topic")),
+		AttributesTopic:        strings.TrimSpace(pandaXPickString(raw, "attributesTopic")),
+		RowTopic:               strings.TrimSpace(pandaXPickString(raw, "rowTopic")),
+		GatewayTelemetryTopic:  strings.TrimSpace(pandaXPickString(raw, "gatewayTelemetryTopic")),
+		GatewayAttributesTopic: strings.TrimSpace(pandaXPickString(raw, "gatewayAttributesTopic")),
+		EventTopicPrefix:       strings.TrimSpace(pandaXPickString(raw, "eventTopicPrefix")),
+		AlarmTopic:             strings.TrimSpace(pandaXPickString(raw, "alarmTopic")),
+		AlarmIdentifier:        strings.TrimSpace(pandaXPickString(raw, "alarmIdentifier")),
+		RPCRequestTopic:        strings.TrimSpace(pandaXPickString(raw, "rpcRequestTopic")),
+		RPCResponseTopic:       strings.TrimSpace(pandaXPickString(raw, "rpcResponseTopic")),
+		ProductKey:             strings.TrimSpace(pandaXPickString(raw, "productKey", "product_key")),
+		DeviceKey:              strings.TrimSpace(pandaXPickString(raw, "deviceKey", "device_key")),
+	}
 
-	cfg.Username = strings.TrimSpace(pandaXPickString(raw, "username", "token", "deviceToken"))
-	cfg.Password = strings.TrimSpace(pandaXPickString(raw, "password"))
-	cfg.ClientID = strings.TrimSpace(pandaXPickString(raw, "clientId", "client_id"))
-	cfg.QOS = pandaXPickInt(raw, 0, "qos")
-	cfg.Retain = pandaXPickBool(raw, false, "retain")
-	cfg.KeepAlive = pandaXPickInt(raw, 60, "keepAlive", "keep_alive")
-	cfg.Timeout = pandaXPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout")
-
-	cfg.UploadIntervalMs = pandaXPickInt(raw, 5000, "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs")
-	cfg.AlarmFlushIntervalMs = pandaXPickInt(raw, 2000, "alarmFlushIntervalMs")
-	cfg.AlarmBatchSize = pandaXPickInt(raw, 20, "alarmBatchSize")
-	cfg.AlarmQueueSize = pandaXPickInt(raw, 1000, "alarmQueueSize")
-	cfg.RealtimeQueueSize = pandaXPickInt(raw, 1000, "realtimeQueueSize")
 	cfg.CommandQueueSize = pandaXPickInt(raw, cfg.RealtimeQueueSize, "commandQueueSize")
 
-	cfg.GatewayMode = pandaXPickBool(raw, true, "gatewayMode")
-	cfg.SubDeviceTokenMode = strings.TrimSpace(pandaXPickString(raw, "subDeviceTokenMode"))
-	cfg.TelemetryTopic = strings.TrimSpace(pandaXPickString(raw, "telemetryTopic", "topic"))
-	cfg.AttributesTopic = strings.TrimSpace(pandaXPickString(raw, "attributesTopic"))
-	cfg.RowTopic = strings.TrimSpace(pandaXPickString(raw, "rowTopic"))
-	cfg.GatewayTelemetryTopic = strings.TrimSpace(pandaXPickString(raw, "gatewayTelemetryTopic"))
-	cfg.GatewayAttributesTopic = strings.TrimSpace(pandaXPickString(raw, "gatewayAttributesTopic"))
-	cfg.EventTopicPrefix = strings.TrimSpace(pandaXPickString(raw, "eventTopicPrefix"))
-	cfg.AlarmTopic = strings.TrimSpace(pandaXPickString(raw, "alarmTopic"))
-	cfg.AlarmIdentifier = strings.TrimSpace(pandaXPickString(raw, "alarmIdentifier"))
-	cfg.RPCRequestTopic = strings.TrimSpace(pandaXPickString(raw, "rpcRequestTopic"))
-	cfg.RPCResponseTopic = strings.TrimSpace(pandaXPickString(raw, "rpcResponseTopic"))
+	if err := normalizePandaXConfig(cfg); err != nil {
+		return nil, err
+	}
 
-	cfg.ProductKey = strings.TrimSpace(pandaXPickString(raw, "productKey", "product_key"))
-	cfg.DeviceKey = strings.TrimSpace(pandaXPickString(raw, "deviceKey", "device_key"))
+	return cfg, nil
+}
+
+func normalizePandaXConfig(cfg *PandaXConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
 
 	if cfg.ServerURL == "" {
-		return nil, fmt.Errorf("serverUrl is required")
+		return fmt.Errorf("serverUrl is required")
 	}
 	if cfg.Username == "" {
-		return nil, fmt.Errorf("username is required")
+		return fmt.Errorf("username is required")
 	}
 	if !cfg.GatewayMode {
-		return nil, fmt.Errorf("PandaX adapter only supports gatewayMode=true")
+		return fmt.Errorf("PandaX adapter only supports gatewayMode=true")
 	}
 	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return nil, fmt.Errorf("qos must be between 0 and 2")
+		return fmt.Errorf("qos must be between 0 and 2")
 	}
 	if cfg.UploadIntervalMs <= 0 {
-		cfg.UploadIntervalMs = 5000
+		cfg.UploadIntervalMs = int(defaultReportInterval.Milliseconds())
 	}
 	if cfg.AlarmFlushIntervalMs <= 0 {
-		cfg.AlarmFlushIntervalMs = 2000
+		cfg.AlarmFlushIntervalMs = int(defaultAlarmInterval.Milliseconds())
 	}
 	if cfg.AlarmBatchSize <= 0 {
-		cfg.AlarmBatchSize = 20
+		cfg.AlarmBatchSize = defaultAlarmBatch
 	}
 	if cfg.AlarmQueueSize <= 0 {
-		cfg.AlarmQueueSize = 1000
+		cfg.AlarmQueueSize = defaultAlarmQueue
 	}
 	if cfg.RealtimeQueueSize <= 0 {
-		cfg.RealtimeQueueSize = 1000
+		cfg.RealtimeQueueSize = defaultRealtimeQueue
 	}
 	if cfg.CommandQueueSize <= 0 {
 		cfg.CommandQueueSize = cfg.RealtimeQueueSize
 	}
 
-	return cfg, nil
+	return nil
 }
 
 func normalizePandaXServerURL(serverURL, protocol string, port int) string {

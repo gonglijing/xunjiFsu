@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"sort"
 	"sync"
@@ -28,69 +27,28 @@ func DefaultTimeoutConfig() *TimeoutConfig {
 
 // TimeoutMiddleware 创建超时中间件
 func TimeoutMiddleware(cfg *TimeoutConfig) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 为请求创建带超时的上下文
-			ctx, cancel := context.WithTimeout(r.Context(), cfg.ReadTimeout)
-			defer cancel()
-
-			// 创建自定义ResponseWriter以捕获状态码
-			lrw := &lateResponseWriter{
-				ResponseWriter: w,
-				statusCode:     http.StatusOK,
-			}
-
-			// 完成后检查是否超时
-			done := make(chan struct{})
-			go func() {
-				next.ServeHTTP(lrw, r.WithContext(ctx))
-				close(done)
-			}()
-
-			select {
-			case <-done:
-				// 请求完成正常
-				lrw.WriteHeader(lrw.statusCode)
-			case <-ctx.Done():
-				// 超时
-				if ctx.Err() == context.DeadlineExceeded {
-					http.Error(w, "Request timeout", http.StatusServiceUnavailable)
-				}
-			}
-		})
+	timeout := 30 * time.Second
+	if cfg != nil && cfg.ReadTimeout > 0 {
+		timeout = cfg.ReadTimeout
 	}
-}
 
-// lateResponseWriter 延迟写入响应头
-type lateResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (w *lateResponseWriter) WriteHeader(code int) {
-	if w.statusCode == http.StatusOK {
-		w.statusCode = code
+	return func(next http.Handler) http.Handler {
+		if timeout <= 0 {
+			return next
+		}
+		return http.TimeoutHandler(next, timeout, "Request timeout")
 	}
 }
 
 // WithTimeout 为处理器添加超时
 func WithTimeout(handler http.HandlerFunc, timeout time.Duration) http.HandlerFunc {
+	if timeout <= 0 {
+		return handler
+	}
+
+	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handler), timeout, "Request timeout")
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), timeout)
-		defer cancel()
-
-		done := make(chan struct{})
-		go func() {
-			handler(w, r)
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			// 完成
-		case <-ctx.Done():
-			http.Error(w, "Request timeout", http.StatusServiceUnavailable)
-		}
+		timeoutHandler.ServeHTTP(w, r)
 	}
 }
 

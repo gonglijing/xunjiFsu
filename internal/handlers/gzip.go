@@ -6,20 +6,36 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+var gzipWriterPool = sync.Pool{
+	New: func() interface{} {
+		return gzip.NewWriter(io.Discard)
+	},
+}
 
 // GzipMiddleware Gzip压缩中间件
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 检查客户端是否支持gzip
-		acceptEncoding := r.Header.Get("Accept-Encoding")
-		if !strings.Contains(acceptEncoding, "gzip") {
+		if !acceptGzip(r.Header.Get("Accept-Encoding")) || hasUpgradeConnection(r.Header.Get("Connection")) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// 创建gzip响应写入器
-		gz := gzip.NewWriter(w)
-		defer gz.Close()
+
+		if headerContainsToken(w.Header().Get("Content-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		gz := gzipWriterPool.Get().(*gzip.Writer)
+		gz.Reset(w)
+		defer func() {
+			_ = gz.Close()
+			gz.Reset(io.Discard)
+			gzipWriterPool.Put(gz)
+		}()
+
 		// 包装ResponseWriter
 		gzw := &gzipResponseWriter{
 			ResponseWriter: w,
@@ -27,7 +43,7 @@ func GzipMiddleware(next http.Handler) http.Handler {
 		}
 		// 设置响应头
 		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
+		w.Header().Set("Vary", appendVaryToken(w.Header().Get("Vary"), "Accept-Encoding"))
 		next.ServeHTTP(gzw, r)
 	})
 }
@@ -43,7 +59,14 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (w *gzipResponseWriter) WriteString(s string) (int, error) {
-	return w.Writer.Write([]byte(s))
+	return io.WriteString(w.Writer, s)
+}
+
+func (w *gzipResponseWriter) Flush() {
+	_ = w.Writer.Flush()
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // GzipResponse 压缩响应数据
@@ -66,4 +89,41 @@ func GunzipRequest(body io.Reader) ([]byte, error) {
 	}
 	defer gr.Close()
 	return io.ReadAll(gr)
+}
+
+func acceptGzip(acceptEncoding string) bool {
+	return headerContainsToken(acceptEncoding, "gzip")
+}
+
+func hasUpgradeConnection(connection string) bool {
+	return headerContainsToken(connection, "upgrade")
+}
+
+func headerContainsToken(value string, token string) bool {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return false
+	}
+	for _, part := range strings.Split(value, ",") {
+		if strings.ToLower(strings.TrimSpace(part)) == token {
+			return true
+		}
+	}
+	return false
+}
+
+func appendVaryToken(existing string, token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return existing
+	}
+	if existing == "" {
+		return token
+	}
+	for _, part := range strings.Split(existing, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), token) {
+			return existing
+		}
+	}
+	return existing + ", " + token
 }

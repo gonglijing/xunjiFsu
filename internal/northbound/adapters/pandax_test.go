@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func TestNormalizePandaXServerURL(t *testing.T) {
@@ -134,5 +136,45 @@ func TestPandaXAdapter_SetReconnectIntervalClamp(t *testing.T) {
 	adapter.SetReconnectInterval(30 * time.Second)
 	if adapter.reconnectInterval != 30*time.Second {
 		t.Fatalf("reconnectInterval = %v, want %v", adapter.reconnectInterval, 30*time.Second)
+	}
+}
+
+func TestParsePandaXConfig_Defaults(t *testing.T) {
+	config := `{"serverUrl":"tcp://localhost:1883","username":"token","gatewayMode":true}`
+
+	cfg, err := parsePandaXConfig(config)
+	if err != nil {
+		t.Fatalf("parsePandaXConfig() error = %v", err)
+	}
+
+	if cfg.UploadIntervalMs != int((5 * time.Second).Milliseconds()) {
+		t.Fatalf("UploadIntervalMs=%d, want=%d", cfg.UploadIntervalMs, int((5 * time.Second).Milliseconds()))
+	}
+	if cfg.AlarmFlushIntervalMs != int((2 * time.Second).Milliseconds()) {
+		t.Fatalf("AlarmFlushIntervalMs=%d, want=%d", cfg.AlarmFlushIntervalMs, int((2 * time.Second).Milliseconds()))
+	}
+	if cfg.CommandQueueSize != cfg.RealtimeQueueSize {
+		t.Fatalf("CommandQueueSize=%d, want same as RealtimeQueueSize=%d", cfg.CommandQueueSize, cfg.RealtimeQueueSize)
+	}
+}
+
+func TestPandaXPullCommands_PopsInBatch(t *testing.T) {
+	adapter := NewPandaXAdapter("pandax-test")
+	adapter.initialized = true
+	adapter.commandQueue = []*models.NorthboundCommand{
+		{RequestID: "1"},
+		{RequestID: "2"},
+		{RequestID: "3"},
+	}
+
+	items, err := adapter.PullCommands(2)
+	if err != nil {
+		t.Fatalf("PullCommands() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("len(items)=%d, want=2", len(items))
+	}
+	if len(adapter.commandQueue) != 1 {
+		t.Fatalf("remaining queue=%d, want=1", len(adapter.commandQueue))
 	}
 }
