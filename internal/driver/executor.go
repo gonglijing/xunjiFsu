@@ -13,7 +13,6 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
-	"go.bug.st/serial"
 )
 
 // DriverExecutor 驱动执行器
@@ -97,20 +96,17 @@ func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Devic
 		dataBits = 8
 	}
 
-	parity := serial.NoParity
-	switch strings.ToUpper(strings.TrimSpace(device.Parity)) {
-	case "E", "EVEN":
-		parity = serial.EvenParity
-	case "O", "ODD":
-		parity = serial.OddParity
+	parity := strings.ToUpper(strings.TrimSpace(device.Parity))
+	if parity == "" {
+		parity = "N"
 	}
 
-	stopBits := serial.OneStopBit
-	if device.StopBits == 2 {
-		stopBits = serial.TwoStopBits
+	stopBits := device.StopBits
+	if stopBits != 2 {
+		stopBits = 1
 	}
 
-	mode := &serial.Mode{
+	mode := serialOpenMode{
 		BaudRate: baud,
 		DataBits: dataBits,
 		Parity:   parity,
@@ -121,7 +117,7 @@ func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Devic
 	var port SerialPort
 	var openErr error
 	for i := 0; i < attempts; i++ {
-		port, openErr = serial.Open(res.Path, mode)
+		port, openErr = openSerialPort(res.Path, mode)
 		if openErr == nil {
 			break
 		}
@@ -136,7 +132,7 @@ func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Devic
 		_ = setter.SetReadTimeout(e.serialReadTimeout())
 	}
 	e.RegisterSerialPort(resourceID, port)
-	logger.Info("Serial port opened", "resource_id", resourceID, "path", res.Path, "baud", baud, "data_bits", dataBits, "stop_bits", device.StopBits, "parity", device.Parity)
+	logger.Info("Serial port opened", "resource_id", resourceID, "path", res.Path, "baud", baud, "data_bits", dataBits, "stop_bits", stopBits, "parity", parity)
 	return nil
 }
 

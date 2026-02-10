@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -17,7 +16,6 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/handlers"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 // Run boots the application and blocks until shutdown completes.
@@ -98,20 +96,7 @@ func Run(cfg *config.Config) error {
 	// TLS 优先级：1) 自动证书 2) 指定证书 3) HTTP
 	switch {
 	case cfg.TLSAuto && cfg.TLSDomain != "":
-		m := &autocert.Manager{
-			Cache:      autocert.DirCache(cfg.TLSCacheDir),
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(cfg.TLSDomain),
-		}
-		server.TLSConfig = &tls.Config{
-			GetCertificate: m.GetCertificate,
-			MinVersion:     tls.VersionTLS12,
-		}
-		go func() {
-			_ = http.ListenAndServe(":80", m.HTTPHandler(nil))
-		}()
-		logger.Info("Starting HTTPS (auto-cert)", "addr", cfg.ListenAddr, "domain", cfg.TLSDomain)
-		if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+		if err := listenAndServeWithAutoCert(server, cfg); err != nil && err != http.ErrServerClosed {
 			return fmt.Errorf("server error: %w", err)
 		}
 	case cfg.TLSCertFile != "" && cfg.TLSKeyFile != "":
