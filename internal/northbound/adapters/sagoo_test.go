@@ -276,3 +276,25 @@ func TestSagooSysTopic(t *testing.T) {
 		t.Fatalf("sagooSysTopic() empty suffix=%q", got)
 	}
 }
+
+func TestExtractCommandProperties_SubDeviceSnakeCase(t *testing.T) {
+	params := map[string]interface{}{
+		"sub_device": map[string]interface{}{
+			"identity": map[string]interface{}{
+				"productKey": "sub-pk-snake",
+				"deviceKey":  "sub-dk-snake",
+			},
+			"properties": map[string]interface{}{
+				"switch": 1,
+			},
+		},
+	}
+
+	properties, pk, dk := extractCommandProperties(params)
+	if pk != "sub-pk-snake" || dk != "sub-dk-snake" {
+		t.Fatalf("expected snake identity sub-pk-snake/sub-dk-snake, got %q/%q", pk, dk)
+	}
+	if len(properties) != 1 || properties["switch"] != 1 {
+		t.Fatalf("unexpected properties: %+v", properties)
+	}
+}

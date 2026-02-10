@@ -1060,55 +1060,30 @@ func extractIdentity(topic string) (string, string, bool) {
 func extractCommandProperties(params map[string]interface{}) (map[string]interface{}, string, string) {
 	identityPK, identityDK := "", ""
 	if identity, ok := mapFromAny(params["identity"]); ok {
-		if v, ok := identity["productKey"].(string); ok {
-			identityPK = strings.TrimSpace(v)
-		}
-		if v, ok := identity["deviceKey"].(string); ok {
-			identityDK = strings.TrimSpace(v)
-		}
+		identityPK, identityDK = parseIdentityMap(identity)
 	}
 
 	if props, ok := mapFromAny(params["properties"]); ok {
 		return props, identityPK, identityDK
 	}
 
-	for _, key := range []string{"sub_device", "subDevice"} {
-		sub, ok := mapFromAny(params[key])
-		if !ok {
-			continue
-		}
+	if sub, ok := mapFromAnyByKey2(params, "sub_device", "subDevice"); ok {
 		if identity, ok := mapFromAny(sub["identity"]); ok {
-			if v, ok := identity["productKey"].(string); ok {
-				identityPK = strings.TrimSpace(v)
-			}
-			if v, ok := identity["deviceKey"].(string); ok {
-				identityDK = strings.TrimSpace(v)
-			}
+			identityPK, identityDK = parseIdentityMap(identity)
 		}
 		if props, ok := mapFromAny(sub["properties"]); ok {
 			return props, identityPK, identityDK
 		}
 	}
 
-	for _, key := range []string{"sub_devices", "subDevices"} {
-		list, ok := params[key].([]interface{})
-		if !ok || len(list) == 0 {
-			continue
-		}
-		item, ok := mapFromAny(list[0])
-		if !ok {
-			continue
-		}
-		if identity, ok := mapFromAny(item["identity"]); ok {
-			if v, ok := identity["productKey"].(string); ok {
-				identityPK = strings.TrimSpace(v)
+	if list, ok := interfaceSliceByKey2(params, "sub_devices", "subDevices"); ok && len(list) > 0 {
+		if item, ok := mapFromAny(list[0]); ok {
+			if identity, ok := mapFromAny(item["identity"]); ok {
+				identityPK, identityDK = parseIdentityMap(identity)
 			}
-			if v, ok := identity["deviceKey"].(string); ok {
-				identityDK = strings.TrimSpace(v)
+			if props, ok := mapFromAny(item["properties"]); ok {
+				return props, identityPK, identityDK
 			}
-		}
-		if props, ok := mapFromAny(item["properties"]); ok {
-			return props, identityPK, identityDK
 		}
 	}
 
@@ -1160,6 +1135,21 @@ func isReservedCommandKeyNormalized(normalized string) bool {
 	default:
 		return false
 	}
+}
+
+func mapFromAnyByKey2(values map[string]interface{}, key1, key2 string) (map[string]interface{}, bool) {
+	if out, ok := mapFromAny(values[key1]); ok {
+		return out, true
+	}
+	return mapFromAny(values[key2])
+}
+
+func interfaceSliceByKey2(values map[string]interface{}, key1, key2 string) ([]interface{}, bool) {
+	if list, ok := values[key1].([]interface{}); ok {
+		return list, true
+	}
+	list, ok := values[key2].([]interface{})
+	return list, ok
 }
 
 func mapFromAny(value interface{}) (map[string]interface{}, bool) {
