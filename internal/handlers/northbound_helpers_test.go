@@ -60,10 +60,11 @@ func TestValidateNorthboundConfig_SchemaConfigBypassesLegacyRequiredFields(t *te
 	}
 }
 
-func TestValidateNorthboundConfig_RejectsLegacyXunJiType(t *testing.T) {
+func TestValidateNorthboundConfig_RejectsLegacyType(t *testing.T) {
+	legacyType := "xunji"
 	config := &models.NorthboundConfig{
 		Name:   "demo",
-		Type:   "xunji",
+		Type:   legacyType,
 		Config: `{"serverUrl":"tcp://127.0.0.1:1883","productKey":"pk","deviceKey":"dk"}`,
 	}
 
@@ -74,8 +75,8 @@ func TestValidateNorthboundConfig_RejectsLegacyXunJiType(t *testing.T) {
 	if !strings.Contains(err.Error(), "invalid type") {
 		t.Fatalf("error = %q, want invalid type", err.Error())
 	}
-	if config.Type != "xunji" {
-		t.Fatalf("config.Type = %q, want %q", config.Type, "xunji")
+	if config.Type != legacyType {
+		t.Fatalf("config.Type = %q, want %q", config.Type, legacyType)
 	}
 }
 
