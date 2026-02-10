@@ -8,7 +8,14 @@ import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
 import { getNorthboundDefaultUploadIntervalMs } from '../utils/runtimeConfig';
-import { NORTHBOUND_TYPE, getNorthboundTypeLabel, isSagooType, normalizeNorthboundType } from '../utils/northboundType';
+import {
+  NORTHBOUND_TYPE,
+  getNorthboundTypeLabel,
+  isIThingsType,
+  isPandaXType,
+  isSchemaDrivenType,
+  normalizeNorthboundType,
+} from '../utils/northboundType';
 
 const DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS = getNorthboundDefaultUploadIntervalMs();
 const empty = {
@@ -75,22 +82,6 @@ function normalizeConfig(raw, schemaFields, uploadIntervalFallback = DEFAULT_NOR
   }
 
   return out;
-}
-
-function isXunJiType(nbType) {
-  return isSagooType(nbType);
-}
-
-function isPandaXType(nbType) {
-  return normalizeNorthboundType(nbType) === NORTHBOUND_TYPE.PANDAX;
-}
-
-function isIThingsType(nbType) {
-  return normalizeNorthboundType(nbType) === NORTHBOUND_TYPE.ITHINGS;
-}
-
-function isSchemaDrivenType(nbType) {
-  return isXunJiType(nbType) || isPandaXType(nbType) || isIThingsType(nbType);
 }
 
 function safeParseJSON(value, fallback = {}) {
@@ -238,7 +229,7 @@ export function Northbound() {
 
   onMount(() => {
     load();
-    loadSchema('pandax', true);
+    loadSchema(NORTHBOUND_TYPE.PANDAX, true);
   });
 
   const submit = (e) => {
@@ -330,7 +321,7 @@ export function Northbound() {
     setConfig(normalizeConfig({}, [], DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS));
     setConfigErrors({});
     // 确保加载了对应类型的 schema
-    const currentType = form().type || 'mqtt';
+    const currentType = form().type || NORTHBOUND_TYPE.MQTT;
     if (isSchemaDrivenType(currentType) && schema().length === 0) {
       loadSchema(currentType, true);
     }
@@ -338,13 +329,19 @@ export function Northbound() {
 
   const edit = (item) => {
     const upload = toInt(item.upload_interval, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
-	const normalizedType = normalizeNorthboundType(item.type);
-	const base = { name: item.name, type: normalizedType, upload_interval: upload, config: item.config, enabled: item.enabled };
+    const normalizedType = normalizeNorthboundType(item.type);
+    const base = {
+      name: item.name,
+      type: normalizedType,
+      upload_interval: upload,
+      config: item.config,
+      enabled: item.enabled,
+    };
 
     const parsed = safeParseJSON(item.config, {});
 
-	if (isSchemaDrivenType(normalizedType)) {
-		loadSchema(normalizedType, true).then(() => {
+    if (isSchemaDrivenType(normalizedType)) {
+      loadSchema(normalizedType, true).then(() => {
         const cfg = normalizeConfig(parsed, schema(), upload);
         if (hasSchemaField(schema(), 'uploadIntervalMs')) {
           base.upload_interval = toInt(cfg.uploadIntervalMs, upload);
@@ -362,10 +359,10 @@ export function Northbound() {
     setConfigErrors({});
   };
 
-	const updateType = (nextType) => {
-		nextType = normalizeNorthboundType(nextType);
-		const current = form();
-		const next = { ...current, type: nextType };
+  const updateType = (nextType) => {
+    nextType = normalizeNorthboundType(nextType);
+    const current = form();
+    const next = { ...current, type: nextType };
 
     if (isSchemaDrivenType(nextType)) {
       loadSchema(nextType, true).then(() => {

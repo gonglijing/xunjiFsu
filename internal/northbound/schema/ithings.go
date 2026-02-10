@@ -27,7 +27,3 @@ var IThingsConfigSchema = []Field{
 	{Key: "realtimeQueueSize", Label: "实时队列长度", Type: FieldTypeInt, Optional: true, Default: 1000, Description: "超过后丢弃最旧"},
 	{Key: "commandQueueSize", Label: "命令队列长度", Type: FieldTypeInt, Optional: true, Default: 1000, Description: "超过后丢弃最旧"},
 }
-
-func init() {
-	SupportedNorthboundSchemaTypes = append(SupportedNorthboundSchemaTypes, "ithings")
-}

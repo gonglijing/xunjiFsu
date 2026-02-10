@@ -52,13 +52,13 @@ type NorthboundAdapterWithCommands interface {
 // NewAdapter 创建指定类型的适配器
 func NewAdapter(northboundType, name string) NorthboundAdapter {
 	switch nbtype.Normalize(northboundType) {
-	case "mqtt":
+	case nbtype.TypeMQTT:
 		return NewMQTTAdapter(name)
-	case "pandax":
+	case nbtype.TypePandaX:
 		return NewPandaXAdapter(name)
-	case "ithings":
+	case nbtype.TypeIThings:
 		return NewIThingsAdapter(name)
-	case "sagoo":
+	case nbtype.TypeSagoo:
 		return NewXunJiAdapter(name)
 	default:
 		return nil

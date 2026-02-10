@@ -11,6 +11,8 @@ const (
 	LegacyTypeXunJi = "xunji"
 )
 
+var supportedTypes = []string{TypeMQTT, TypePandaX, TypeIThings, TypeSagoo}
+
 func Normalize(raw string) string {
 	nbType := strings.ToLower(strings.TrimSpace(raw))
 	if nbType == LegacyTypeXunJi {
@@ -20,7 +22,7 @@ func Normalize(raw string) string {
 }
 
 func SupportedTypes() []string {
-	return []string{TypeMQTT, TypePandaX, TypeIThings, TypeSagoo}
+	return append([]string(nil), supportedTypes...)
 }
 
 func IsSupported(raw string) bool {

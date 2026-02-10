@@ -19,15 +19,6 @@ type requiredFieldRule struct {
 	present   func(*models.NorthboundConfig) bool
 }
 
-var supportedNorthboundTypes = nbtype.SupportedTypes()
-
-var northboundTypeDisplayName = map[string]string{
-	nbtype.TypeMQTT:    "MQTT",
-	nbtype.TypePandaX:  "PandaX",
-	nbtype.TypeIThings: "iThings",
-	nbtype.TypeSagoo:   "Sagoo",
-}
-
 var northboundRequiredFieldRules = map[string][]requiredFieldRule{
 	nbtype.TypeMQTT: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
@@ -149,8 +140,8 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 	}
 
 	config.Type = normalizeNorthboundType(config.Type)
-	if !isSupportedNorthboundType(config.Type) {
-		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, ithings, sagoo", config.Type)
+	if !nbtype.IsSupported(config.Type) {
+		return fmt.Errorf("invalid type: %s, must be one of: %s", config.Type, strings.Join(nbtype.SupportedTypes(), ", "))
 	}
 
 	// 如果有 config JSON 字段，验证 schema
@@ -171,15 +162,6 @@ func normalizeNorthboundType(raw string) string {
 	return nbtype.Normalize(raw)
 }
 
-func isSupportedNorthboundType(nbType string) bool {
-	for _, candidate := range supportedNorthboundTypes {
-		if nbType == candidate {
-			return true
-		}
-	}
-	return false
-}
-
 func hasSchemaConfig(config *models.NorthboundConfig) bool {
 	if config == nil {
 		return false
@@ -198,7 +180,7 @@ func validateRequiredFields(config *models.NorthboundConfig) error {
 		return nil
 	}
 
-	typeName := northboundTypeDisplayName[config.Type]
+	typeName := nbtype.DisplayName(config.Type)
 	for _, rule := range rules {
 		if !rule.present(config) {
 			return fmt.Errorf("%s or config is required for %s type", rule.fieldName, typeName)

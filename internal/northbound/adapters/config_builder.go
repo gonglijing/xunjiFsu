@@ -150,7 +150,7 @@ func (b *NorthboundConfigBuilder) SetExtConfig(extConfig string) *NorthboundConf
 func (b *NorthboundConfigBuilder) Build() string {
 	// 根据类型设置默认值
 	switch nbtype.Normalize(b.northboundType) {
-	case "mqtt":
+	case nbtype.TypeMQTT:
 		if _, ok := b.config["broker"]; !ok {
 			b.config["broker"] = ""
 		}
@@ -188,7 +188,7 @@ func (b *NorthboundConfigBuilder) Build() string {
 		if _, ok := b.config["uploadIntervalMs"]; !ok {
 			b.config["uploadIntervalMs"] = 5000
 		}
-	case "pandax":
+	case nbtype.TypePandaX:
 		if _, ok := b.config["serverUrl"]; !ok {
 			if v, exists := b.config["broker"]; exists {
 				b.config["serverUrl"] = v
@@ -211,7 +211,7 @@ func (b *NorthboundConfigBuilder) Build() string {
 		if _, ok := b.config["uploadIntervalMs"]; !ok {
 			b.config["uploadIntervalMs"] = 5000
 		}
-	case "ithings":
+	case nbtype.TypeIThings:
 		if _, ok := b.config["serverUrl"]; !ok {
 			if v, exists := b.config["broker"]; exists {
 				b.config["serverUrl"] = v
@@ -254,7 +254,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 	builder := NewConfigBuilder(cfg.Type)
 
 	switch nbtype.Normalize(cfg.Type) {
-	case "mqtt":
+	case nbtype.TypeMQTT:
 		// 构建MQTT配置
 		broker := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(broker)
@@ -295,7 +295,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		builder.SetUploadIntervalMs(cfg.UploadInterval)
 		builder.SetExtConfig(cfg.ExtConfig)
 
-	case "pandax":
+	case nbtype.TypePandaX:
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(serverURL)
 		builder.SetClientID(cfg.ClientID)
@@ -312,7 +312,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		builder.SetUploadIntervalMs(cfg.UploadInterval)
 		builder.SetExtConfig(cfg.ExtConfig)
 
-	case "ithings":
+	case nbtype.TypeIThings:
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(serverURL)
 		builder.SetClientID(cfg.ClientID)
@@ -372,7 +372,7 @@ func ParseConnectionInfoFromModel(cfg *models.NorthboundConfig) *ConnectionInfo 
 // GetSupportedTypes 返回支持的北向类型及其字段描述
 func GetSupportedTypes() map[string][]string {
 	return map[string][]string{
-		"mqtt": {
+		nbtype.TypeMQTT: {
 			"server_url: Broker地址",
 			"port: 端口 (默认1883)",
 			"client_id: 客户端ID (可选)",
@@ -385,7 +385,7 @@ func GetSupportedTypes() map[string][]string {
 			"keep_alive: 心跳周期秒数",
 			"timeout: 连接超时秒数",
 		},
-		"sagoo": {
+		nbtype.TypeSagoo: {
 			"server_url: 服务器地址",
 			"port: 端口 (默认1883)",
 			"product_key: 产品密钥",
@@ -401,7 +401,7 @@ func GetSupportedTypes() map[string][]string {
 			"timeout: 连接超时秒数",
 			"upload_interval: 上传周期毫秒数",
 		},
-		"pandax": {
+		nbtype.TypePandaX: {
 			"server_url: PandaX Broker 地址",
 			"port: 端口 (默认1883)",
 			"username: 设备 Token（MQTT Username）",
@@ -413,7 +413,7 @@ func GetSupportedTypes() map[string][]string {
 			"timeout: 连接超时秒数",
 			"upload_interval: 上传周期毫秒数",
 		},
-		"ithings": {
+		nbtype.TypeIThings: {
 			"server_url: iThings Broker 地址",
 			"port: 端口 (默认1883)",
 			"username: MQTT 用户名",
@@ -434,7 +434,7 @@ func GetSupportedTypes() map[string][]string {
 // ValidateConfig 验证配置是否有效
 func ValidateConfig(northboundType string, config map[string]interface{}) error {
 	switch nbtype.Normalize(northboundType) {
-	case "mqtt":
+	case nbtype.TypeMQTT:
 		if broker, ok := config["broker"].(string); !ok || strings.TrimSpace(broker) == "" {
 			return fmt.Errorf("broker is required for MQTT adapter")
 		}
@@ -451,7 +451,7 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 		if deviceKey, ok := config["deviceKey"].(string); !ok || strings.TrimSpace(deviceKey) == "" {
 			return fmt.Errorf("deviceKey is required for Sagoo adapter")
 		}
-	case "pandax":
+	case nbtype.TypePandaX:
 		serverURL, _ := config["serverUrl"].(string)
 		if strings.TrimSpace(serverURL) == "" {
 			if broker, ok := config["broker"].(string); ok {
@@ -477,7 +477,7 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 				}
 			}
 		}
-	case "ithings":
+	case nbtype.TypeIThings:
 		serverURL, _ := config["serverUrl"].(string)
 		if strings.TrimSpace(serverURL) == "" {
 			if broker, ok := config["broker"].(string); ok {

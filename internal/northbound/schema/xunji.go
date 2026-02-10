@@ -1,6 +1,6 @@
 package schema
 
-import "strings"
+import "github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
 
 // FieldType defines the supported config value types in northbound schema.
 type FieldType string
@@ -13,10 +13,12 @@ const (
 
 const XunJiSchemaVersion = "1.0.0"
 
-const NorthboundTypeSagoo = "sagoo"
-const NorthboundTypeXunJi = "xunji"
-
-var SupportedNorthboundSchemaTypes = []string{NorthboundTypeSagoo}
+var SupportedNorthboundSchemaTypes = []string{
+	nbtype.TypeMQTT,
+	nbtype.TypePandaX,
+	nbtype.TypeIThings,
+	nbtype.TypeSagoo,
+}
 
 // Field describes one config field in Terraform SDK Schema-like style.
 type Field struct {
@@ -40,14 +42,14 @@ var XunJiConfigSchema = []Field{
 }
 
 func FieldsByType(nbType string) ([]Field, bool) {
-	switch strings.ToLower(strings.TrimSpace(nbType)) {
-	case "", NorthboundTypeSagoo, NorthboundTypeXunJi:
+	switch nbtype.Normalize(nbType) {
+	case "", nbtype.TypeSagoo:
 		return cloneFields(XunJiConfigSchema), true
-	case "mqtt":
+	case nbtype.TypeMQTT:
 		return cloneFields(MQTTConfigSchema), true
-	case "pandax":
+	case nbtype.TypePandaX:
 		return cloneFields(PandaXConfigSchema), true
-	case "ithings":
+	case nbtype.TypeIThings:
 		return cloneFields(IThingsConfigSchema), true
 	default:
 		return nil, false

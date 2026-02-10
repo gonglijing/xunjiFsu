@@ -3,10 +3,9 @@ import api from '../api/services';
 import Card from '../components/cards';
 import { usePageLoader } from '../utils/pageLoader';
 import { getGatewayMetricsPollIntervalMs } from '../utils/runtimeConfig';
-import { getNorthboundTypeLabel, normalizeNorthboundType, NORTHBOUND_TYPE } from '../utils/northboundType';
+import { getNorthboundTypeLabel, normalizeNorthboundType, NORTHBOUND_TYPE_ORDER } from '../utils/northboundType';
 
 const GATEWAY_METRICS_POLL_INTERVAL_MS = getGatewayMetricsPollIntervalMs();
-const NORTHBOUND_TYPE_ORDER = [NORTHBOUND_TYPE.MQTT, NORTHBOUND_TYPE.PANDAX, NORTHBOUND_TYPE.ITHINGS, NORTHBOUND_TYPE.SAGOO];
 
 export function GatewayStatus() {
   const [metrics, setMetrics] = createSignal(null);

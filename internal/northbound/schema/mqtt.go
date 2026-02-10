@@ -15,8 +15,3 @@ var MQTTConfigSchema = []Field{
 	{Key: "connectTimeout", Label: "连接超时(秒)", Type: FieldTypeInt, Optional: true, Default: 10, Description: "MQTT 连接超时"},
 	{Key: "uploadIntervalMs", Label: "上报周期(ms)", Type: FieldTypeInt, Optional: true, Default: 5000, Description: "数据上报周期"},
 }
-
-func init() {
-	// Register MQTT schema
-	SupportedNorthboundSchemaTypes = append(SupportedNorthboundSchemaTypes, "mqtt")
-}
