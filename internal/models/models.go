@@ -25,10 +25,11 @@ type Resource struct {
 
 // GatewayConfig 网关配置模型
 type GatewayConfig struct {
-	ID          int64  `json:"id" db:"id"`
-	ProductKey  string `json:"product_key" db:"product_key"`
-	DeviceKey   string `json:"device_key" db:"device_key"`
-	GatewayName string `json:"gateway_name" db:"gateway_name"`
+	ID                int64  `json:"id" db:"id"`
+	ProductKey        string `json:"product_key" db:"product_key"`
+	DeviceKey         string `json:"device_key" db:"device_key"`
+	GatewayName       string `json:"gateway_name" db:"gateway_name"`
+	DataRetentionDays int    `json:"data_retention_days" db:"data_retention_days"`
 }
 
 // Driver 驱动模型

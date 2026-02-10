@@ -19,7 +19,6 @@ func registerAPIRoutes(r *mux.Router, h *handlers.Handler, authManager *auth.JWT
 	registerThresholdRoutes(api, h)
 	registerAlarmRoutes(api, h)
 	registerDataRoutes(api, h)
-	registerStorageRoutes(api, h)
 	registerUserRoutes(api, h)
 	registerResourceRoutes(api, h)
 	registerGatewayRoutes(api, h)
@@ -82,15 +81,6 @@ func registerDataRoutes(api *mux.Router, h *handlers.Handler) {
 	api.HandleFunc("/data/history", h.GetHistoryData).Methods("GET")
 }
 
-func registerStorageRoutes(api *mux.Router, h *handlers.Handler) {
-	api.HandleFunc("/storage", h.GetStorageConfigs).Methods("GET")
-	api.HandleFunc("/storage", h.CreateStorageConfig).Methods("POST")
-	api.HandleFunc("/storage/{id}", h.UpdateStorageConfig).Methods("PUT")
-	api.HandleFunc("/storage/{id}", h.DeleteStorageConfig).Methods("DELETE")
-	api.HandleFunc("/storage/cleanup", h.CleanupData).Methods("POST")
-	api.HandleFunc("/storage/run", h.CleanupDataByPolicy).Methods("POST")
-}
-
 func registerUserRoutes(api *mux.Router, h *handlers.Handler) {
 	api.HandleFunc("/users", h.GetUsers).Methods("GET")
 	api.HandleFunc("/users", h.CreateUser).Methods("POST")
@@ -113,5 +103,4 @@ func registerGatewayRoutes(api *mux.Router, h *handlers.Handler) {
 	api.HandleFunc("/gateway/runtime", h.GetGatewayRuntimeConfig).Methods("GET")
 	api.HandleFunc("/gateway/runtime", h.UpdateGatewayRuntimeConfig).Methods("PUT")
 	api.HandleFunc("/gateway/runtime/audits", h.GetGatewayRuntimeAudits).Methods("GET")
-	api.HandleFunc("/gateway/northbound/sync-identity", h.SyncGatewayIdentityToNorthbound).Methods("POST")
 }

@@ -76,7 +76,8 @@ func TestSyncDataToDisk(t *testing.T) {
 	}
 }
 
-func TestCleanupOldDataByConfig(t *testing.T) {
+func TestCleanupOldDataByGatewayRetention(t *testing.T) {
+	gatewayColumnsEnsured = false
 	if ParamDB != nil {
 		_ = ParamDB.Close()
 	}
@@ -86,6 +87,7 @@ func TestCleanupOldDataByConfig(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	paramDBFile = filepath.Join(tmpDir, "param.db")
+	dataDBFile = filepath.Join(tmpDir, "data.db")
 
 	var err error
 	ParamDB, err = openSQLite(paramDBFile, 1, 1)
@@ -104,48 +106,22 @@ func TestCleanupOldDataByConfig(t *testing.T) {
 		_ = DataDB.Close()
 	})
 
-	_, err = ParamDB.Exec(`CREATE TABLE devices (
+	_, err = ParamDB.Exec(`CREATE TABLE gateway_config (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		product_key TEXT,
-		device_key TEXT
-	)`)
-	if err != nil {
-		t.Fatalf("create devices: %v", err)
-	}
-	_, err = ParamDB.Exec(`CREATE TABLE storage_policies (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		product_key TEXT,
-		device_key TEXT,
-		storage_days INTEGER DEFAULT 30,
-		enabled INTEGER DEFAULT 1,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		product_key TEXT NOT NULL,
+		device_key TEXT NOT NULL,
+		gateway_name TEXT DEFAULT 'HuShu智能网关',
+		data_retention_days INTEGER DEFAULT 30,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
 	if err != nil {
-		t.Fatalf("create storage_policies: %v", err)
+		t.Fatalf("create gateway_config: %v", err)
 	}
 
-	res, err := ParamDB.Exec(`INSERT INTO devices (product_key, device_key) VALUES (?, ?)`, "p1", "d1")
+	_, err = ParamDB.Exec(`INSERT INTO gateway_config (product_key, device_key, gateway_name, data_retention_days)
+		VALUES ('', '', 'HuShu智能网关', 1)`)
 	if err != nil {
-		t.Fatalf("insert device1: %v", err)
-	}
-	device1ID, _ := res.LastInsertId()
-	res, err = ParamDB.Exec(`INSERT INTO devices (product_key, device_key) VALUES (?, ?)`, "p2", "d2")
-	if err != nil {
-		t.Fatalf("insert device2: %v", err)
-	}
-	device2ID, _ := res.LastInsertId()
-
-	_, err = ParamDB.Exec(`INSERT INTO storage_policies (name, product_key, device_key, storage_days, enabled)
-		VALUES (?, ?, ?, ?, ?)`, "device1", "p1", "d1", 1, 1)
-	if err != nil {
-		t.Fatalf("insert device policy: %v", err)
-	}
-	_, err = ParamDB.Exec(`INSERT INTO storage_policies (name, product_key, device_key, storage_days, enabled)
-		VALUES (?, ?, ?, ?, ?)`, "global", "", "", 10, 1)
-	if err != nil {
-		t.Fatalf("insert global policy: %v", err)
+		t.Fatalf("insert gateway config: %v", err)
 	}
 
 	_, err = DataDB.Exec(`CREATE TABLE data_points (
@@ -158,41 +134,62 @@ func TestCleanupOldDataByConfig(t *testing.T) {
 		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`)
 	if err != nil {
-		t.Fatalf("create data_points: %v", err)
+		t.Fatalf("create memory data_points: %v", err)
 	}
 
 	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, ?, datetime('now', '-2 days'))`, device1ID, "dev1", "temp", "20", "string")
+		VALUES (?, ?, ?, ?, ?, datetime('now', '-2 days'))`, 1, "dev1", "temp", "20", "string")
 	if err != nil {
-		t.Fatalf("insert data point device1: %v", err)
+		t.Fatalf("insert memory old point: %v", err)
 	}
 	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, ?, datetime('now', '-2 days'))`, device2ID, "dev2", "temp", "21", "string")
+		VALUES (?, ?, ?, ?, ?, datetime('now', '-12 hours'))`, 1, "dev1", "temp", "21", "string")
 	if err != nil {
-		t.Fatalf("insert data point device2: %v", err)
+		t.Fatalf("insert memory fresh point: %v", err)
 	}
 
-	deleted, err := CleanupOldDataByConfig()
+	diskDB, err := openSQLite(dataDBFile, 1, 1)
 	if err != nil {
-		t.Fatalf("CleanupOldDataByConfig: %v", err)
+		t.Fatalf("open disk db: %v", err)
 	}
-	if deleted != 1 {
-		t.Fatalf("expected 1 deleted row, got %d", deleted)
+	defer diskDB.Close()
+
+	if err := ensureDiskDataSchema(diskDB); err != nil {
+		t.Fatalf("ensure disk schema: %v", err)
 	}
 
-	var count1 int
-	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ?", device1ID).Scan(&count1); err != nil {
-		t.Fatalf("count device1 data points: %v", err)
+	_, err = diskDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now', '-3 days'))`, 2, "dev2", "hum", "45", "string")
+	if err != nil {
+		t.Fatalf("insert disk old point: %v", err)
 	}
-	if count1 != 0 {
-		t.Fatalf("expected device1 data points to be deleted, got %d", count1)
+	_, err = diskDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now', '-2 hours'))`, 2, "dev2", "hum", "47", "string")
+	if err != nil {
+		t.Fatalf("insert disk fresh point: %v", err)
 	}
 
-	var count2 int
-	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ?", device2ID).Scan(&count2); err != nil {
-		t.Fatalf("count device2 data points: %v", err)
+	deleted, err := CleanupOldDataByGatewayRetention()
+	if err != nil {
+		t.Fatalf("CleanupOldDataByGatewayRetention: %v", err)
 	}
-	if count2 != 1 {
-		t.Fatalf("expected device2 data points to remain, got %d", count2)
+	if deleted != 2 {
+		t.Fatalf("expected 2 deleted rows(total memory+disk), got %d", deleted)
+	}
+
+	var memCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&memCount); err != nil {
+		t.Fatalf("count memory points: %v", err)
+	}
+	if memCount != 1 {
+		t.Fatalf("expected 1 memory point remain, got %d", memCount)
+	}
+
+	var diskCount int
+	if err := diskDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&diskCount); err != nil {
+		t.Fatalf("count disk points: %v", err)
+	}
+	if diskCount != 1 {
+		t.Fatalf("expected 1 disk point remain, got %d", diskCount)
 	}
 }

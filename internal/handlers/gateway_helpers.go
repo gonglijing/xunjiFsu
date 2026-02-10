@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -22,6 +20,9 @@ func normalizeGatewayConfigInput(cfg *models.GatewayConfig) {
 	if cfg.GatewayName == "" {
 		cfg.GatewayName = defaultGatewayName
 	}
+	if cfg.DataRetentionDays <= 0 {
+		cfg.DataRetentionDays = database.DefaultRetentionDays
+	}
 }
 
 func toDatabaseGatewayConfig(cfg *models.GatewayConfig) *database.GatewayConfig {
@@ -29,56 +30,12 @@ func toDatabaseGatewayConfig(cfg *models.GatewayConfig) *database.GatewayConfig 
 		return nil
 	}
 	return &database.GatewayConfig{
-		ID:          cfg.ID,
-		ProductKey:  cfg.ProductKey,
-		DeviceKey:   cfg.DeviceKey,
-		GatewayName: cfg.GatewayName,
+		ID:                cfg.ID,
+		ProductKey:        cfg.ProductKey,
+		DeviceKey:         cfg.DeviceKey,
+		GatewayName:       cfg.GatewayName,
+		DataRetentionDays: cfg.DataRetentionDays,
 	}
-}
-
-func (h *Handler) syncGatewayIdentityToNorthboundTypes(productKey, deviceKey string) ([]string, []string, map[string]string) {
-	configs, err := database.GetAllNorthboundConfigs()
-	if err != nil {
-		return nil, nil, map[string]string{"_system": err.Error()}
-	}
-
-	updated := make([]string, 0)
-	skipped := make([]string, 0)
-	failed := make(map[string]string)
-
-	for _, cfg := range configs {
-		if !shouldSyncGatewayIdentity(cfg) {
-			continue
-		}
-
-		nextCfg, changed, err := buildNorthboundIdentityPatch(cfg, productKey, deviceKey)
-		if err != nil {
-			failed[cfg.Name] = "配置 JSON 无效"
-			continue
-		}
-		if !changed {
-			skipped = append(skipped, cfg.Name)
-			continue
-		}
-
-		if err := h.applyNorthboundIdentityPatch(cfg, nextCfg); err != nil {
-			failed[cfg.Name] = err.Error()
-			continue
-		}
-		updated = append(updated, cfg.Name)
-	}
-
-	sort.Strings(updated)
-	sort.Strings(skipped)
-	return updated, skipped, failed
-}
-
-func shouldSyncGatewayIdentity(cfg *models.NorthboundConfig) bool {
-	if cfg == nil {
-		return false
-	}
-	nbType := strings.ToLower(strings.TrimSpace(cfg.Type))
-	return isGatewayIdentityNorthboundType(nbType)
 }
 
 func loadGatewayConfigOrWriteServerError(w http.ResponseWriter) (*database.GatewayConfig, bool) {
@@ -88,50 +45,4 @@ func loadGatewayConfigOrWriteServerError(w http.ResponseWriter) (*database.Gatew
 		return nil, false
 	}
 	return cfg, true
-}
-
-func extractGatewayIdentity(cfg *database.GatewayConfig) (string, string, bool) {
-	if cfg == nil {
-		return "", "", false
-	}
-	productKey := strings.TrimSpace(cfg.ProductKey)
-	deviceKey := strings.TrimSpace(cfg.DeviceKey)
-	if productKey == "" || deviceKey == "" {
-		return "", "", false
-	}
-	return productKey, deviceKey, true
-}
-
-func buildNorthboundIdentityPatch(current *models.NorthboundConfig, productKey, deviceKey string) (*models.NorthboundConfig, bool, error) {
-	oldPK := strings.TrimSpace(current.ProductKey)
-	oldDK := strings.TrimSpace(current.DeviceKey)
-	newPK := strings.TrimSpace(productKey)
-	newDK := strings.TrimSpace(deviceKey)
-
-	if oldPK == newPK && oldDK == newDK {
-		return nil, false, nil
-	}
-
-	next := *current
-	next.ProductKey = newPK
-	next.DeviceKey = newDK
-	return &next, true, nil
-}
-
-func (h *Handler) applyNorthboundIdentityPatch(prevCfg, nextCfg *models.NorthboundConfig) error {
-	if prevCfg == nil || nextCfg == nil {
-		return fmt.Errorf("invalid northbound config")
-	}
-
-	if err := database.UpdateNorthboundConfig(nextCfg); err != nil {
-		return err
-	}
-
-	if err := h.rebuildNorthboundRuntime(nextCfg); err != nil {
-		_ = database.UpdateNorthboundConfig(prevCfg)
-		_ = h.rebuildNorthboundRuntime(prevCfg)
-		return fmt.Errorf("运行时重载失败: %w", err)
-	}
-
-	return nil
 }

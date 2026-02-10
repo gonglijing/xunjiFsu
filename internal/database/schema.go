@@ -22,25 +22,6 @@ func InitParamSchema() error {
 	return nil
 }
 
-// InitStoragePolicyTable 创建存储策略表
-func InitStoragePolicyTable() error {
-	// 不做向前兼容，直接使用当前结构重建
-	if _, err := ParamDB.Exec(`DROP TABLE IF EXISTS storage_policies`); err != nil {
-		return err
-	}
-	_, err := ParamDB.Exec(`CREATE TABLE storage_policies (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		product_key TEXT,
-		device_key TEXT,
-		storage_days INTEGER DEFAULT 30,
-		enabled INTEGER DEFAULT 1,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	)`)
-	return err
-}
-
 // InitDataSchema 初始化历史数据数据库schema
 func InitDataSchema() error {
 	migration, err := os.ReadFile("migrations/003_data_schema.sql")

@@ -35,22 +35,10 @@ var DataDB *sql.DB
 
 var paramDBFile = DefaultParamDBFile
 var dataDBFile = DataDBFile
-var retentionDaysDefault = 30 // fallback if no storage policy
 var maxDataPointsLimit = MaxDataPoints
 var maxDataCacheLimit = MaxDataCache
 var syncBatchTrigger = SyncBatchTrigger
 var syncDataToDiskFn = syncDataToDisk
-
-// StoragePolicy 数据保留策略
-type StoragePolicy struct {
-	ID         int64     `json:"id" db:"id"`
-	ProductKey string    `json:"product_key" db:"product_key"`
-	DeviceKey  string    `json:"device_key" db:"device_key"`
-	Retention  int       `json:"retention" db:"retention"` // days
-	Enabled    int       `json:"enabled" db:"enabled"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
-}
 
 // InitParamDB 初始化配置数据库（持久化文件）
 func InitParamDB() error {

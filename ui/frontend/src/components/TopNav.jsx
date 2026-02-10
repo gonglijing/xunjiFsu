@@ -13,7 +13,6 @@ export const settingsLinks = [
   { to: '/devices', label: '设备', icon: '◑' },
   { to: '/drivers', label: '驱动', icon: '▣' },
   { to: '/northbound', label: '北向', icon: '◉' },
-  { to: '/storage', label: '存储策略', icon: '◫' },
   { to: '/thresholds', label: '阈值', icon: '◐' },
 ];
 
@@ -89,7 +88,7 @@ function TopNav(props) {
           ))}
           <div class="dropdown" ref={dropdownRef}>
             <button
-              class={`nav-btn dropdown-toggle ${isActive(props.path, '/resources') || isActive(props.path, '/devices') || isActive(props.path, '/drivers') || isActive(props.path, '/northbound') || isActive(props.path, '/storage') || isActive(props.path, '/thresholds') ? 'active' : ''}`}
+              class={`nav-btn dropdown-toggle ${isActive(props.path, '/resources') || isActive(props.path, '/devices') || isActive(props.path, '/drivers') || isActive(props.path, '/northbound') || isActive(props.path, '/thresholds') ? 'active' : ''}`}
               onClick={() => setDropdownOpen(!dropdownOpen())}
             >
               <span class="nav-btn-icon">⚙</span>

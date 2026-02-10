@@ -9,7 +9,6 @@ import * as metrics from './metrics';
 import * as northbound from './northbound';
 import * as resources from './resources';
 import * as status from './status';
-import * as storage from './storage';
 import * as thresholds from './thresholds';
 
 const api = {
@@ -24,7 +23,6 @@ const api = {
   northbound,
   resources,
   status,
-  storage,
   thresholds,
 };
 

@@ -34,11 +34,10 @@ test('getErrorMessage 其次 message', () => {
 
 test('getErrorMessage 再次 code 映射', () => {
   const got = getErrorMessage({ code: 'E_CLEANUP_BY_POLICY_FAILED' }, 'fallback');
-  assert.equal(got, '按策略清理失败');
+  assert.equal(got, '按保留天数清理失败');
 });
 
 test('getErrorMessage 空对象回退 fallback', () => {
   const got = getErrorMessage({}, 'fallback');
   assert.equal(got, 'fallback');
 });
-

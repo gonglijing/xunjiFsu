@@ -45,6 +45,7 @@ function GatewayPage() {
     product_key: '',
     device_key: '',
     gateway_name: 'HuShu智能网关',
+    data_retention_days: 30,
   });
   const [runtimeForm, setRuntimeForm] = createSignal({
     collector_device_sync_interval: '10s',
@@ -69,6 +70,7 @@ function GatewayPage() {
       product_key: data.product_key || '',
       device_key: data.device_key || '',
       gateway_name: data.gateway_name || 'HuShu智能网关',
+      data_retention_days: data.data_retention_days || 30,
     });
     setRuntimeForm({
       collector_device_sync_interval: runtime.collector_device_sync_interval || '10s',
@@ -202,6 +204,19 @@ function GatewayPage() {
               <div class="form-hint">用于北向平台设备认证</div>
             </div>
 
+            <div class="form-group">
+              <label class="form-label">历史数据保留天数</label>
+              <input
+                class="form-input"
+                type="number"
+                min="1"
+                value={form().data_retention_days}
+                onInput={(e) => setForm({ ...form(), data_retention_days: Number(e.target.value || 30) })}
+                placeholder="例如 30"
+              />
+              <div class="form-hint">超过该天数的历史数据将由系统每天自动清理一次</div>
+            </div>
+
             <Show when={err()}>
               <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
             </Show>
@@ -222,6 +237,7 @@ function GatewayPage() {
         <div style="color:var(--text-secondary); font-size:0.875rem; line-height:1.8;">
           <p><strong>ProductKey</strong>：网关产品的唯一标识符，用于区分不同型号的网关产品。</p>
           <p><strong>DeviceKey</strong>：网关设备的唯一标识符，用于在同一产品下区分不同设备。</p>
+          <p><strong>历史数据保留天数</strong>：全局生效，系统每天执行一次过期数据清理。</p>
           <p>这两个密钥将在数据上报到北向平台时使用，用于设备认证和数据路由。</p>
         </div>
       </Card>

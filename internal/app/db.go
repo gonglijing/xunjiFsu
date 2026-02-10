@@ -44,11 +44,6 @@ func initSchemasAndDefaultData() error {
 		return fmt.Errorf("failed to initialize runtime config audit table: %w", err)
 	}
 
-	logger.Info("Initializing storage policy table...")
-	if err := database.InitStoragePolicyTable(); err != nil {
-		return fmt.Errorf("failed to initialize storage policy table: %w", err)
-	}
-
 	logger.Info("Initializing device table...")
 	if err := database.InitDeviceTable(); err != nil {
 		return fmt.Errorf("failed to initialize device table: %w", err)

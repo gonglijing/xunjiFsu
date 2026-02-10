@@ -11,7 +11,6 @@ import { NorthboundPage } from './pages/NorthboundPage';
 import { ThresholdsPage } from './pages/ThresholdsPage';
 import AlarmsPage from './pages/AlarmsPage';
 import Realtime from './pages/Realtime';
-import { StoragePage } from './pages/StoragePage';
 import Topology from './pages/Topology';
 import { useAuthGuard } from './utils/authGuard';
 
@@ -38,8 +37,6 @@ function App() {
         return <DriversPage />;
       case currentPath.startsWith('/northbound'):
         return <NorthboundPage />;
-      case currentPath.startsWith('/storage'):
-        return <StoragePage />;
       case currentPath.startsWith('/thresholds'):
         return <ThresholdsPage />;
       case currentPath.startsWith('/alarms'):

@@ -37,7 +37,7 @@ func Run(cfg *config.Config) error {
 	logger.Info("Starting data sync task...")
 	database.StartDataSync()
 	logger.Info("Starting retention cleanup task...")
-	database.StartRetentionCleanup(6 * time.Hour)
+	database.StartRetentionCleanup(24 * time.Hour)
 
 	if cfg.ThresholdCacheEnabled {
 		logger.Info("Starting threshold cache...")
