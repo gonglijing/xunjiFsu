@@ -158,13 +158,13 @@ export function Thresholds() {
               onClick={saveRepeatInterval}
               disabled={savingRepeatInterval() || loading()}
             >
-              {savingRepeatInterval() ? '保存中...' : '保存间隔'}
+              {savingRepeatInterval() ? '⏳ 保存中...' : '⏱ 保存间隔'}
             </button>
             <button
               class="btn btn-primary btn-pill btn-sm"
               onClick={() => { setForm(empty); setErr(''); setShowModal(true); }}
             >
-              新增阈值
+              ＋ 新增阈值
             </button>
           </div>
         )}
@@ -203,9 +203,9 @@ export function Thresholds() {
                     <td>
                       <div style="display:flex; gap:8px; align-items:center;">
                         <button class="btn btn-outline-primary btn-sm" onClick={() => toggleShield(item)}>
-                          {item.shielded === 1 ? '取消屏蔽' : '屏蔽'}
+                          {item.shielded === 1 ? '◉ 取消屏蔽' : '◌ 屏蔽'}
                         </button>
-                        <button class="btn btn-outline-danger btn-sm" onClick={() => remove(item.id)}>删除</button>
+                        <button class="btn btn-outline-danger btn-sm" onClick={() => remove(item.id)}><span class="btn-ico" aria-hidden="true">✕</span>删除</button>
                       </div>
                     </td>
                   </tr>

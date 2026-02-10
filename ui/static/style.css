@@ -595,6 +595,13 @@ nav .container {
   gap: 5px;
 }
 
+.btn-ico {
+  font-size: 0.9em;
+  line-height: 1;
+  opacity: 0.88;
+  transform: translateY(-0.5px);
+}
+
 .btn-pill {
   border-radius: 999px;
   padding-left: 14px;
