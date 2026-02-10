@@ -2,7 +2,7 @@ import { createSignal, Show } from 'solid-js';
 import { isActive } from '../router';
 
 export const mainLinks = [
-  { to: '/', label: '仪表盘', icon: '◉' },
+  { to: '/', label: '拓扑视图', icon: '⛓' },
   { to: '/alarms', label: '报警', icon: '⚠' },
   { to: '/realtime', label: '实时', icon: '◈' },
 ];

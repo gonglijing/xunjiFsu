@@ -1,7 +1,6 @@
 import { Show } from 'solid-js';
 import { usePath, navigate } from './router';
 import SidebarNav from './components/SidebarNav';
-import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import GatewayPage from './pages/GatewayPage';
 import Resources from './pages/Resources';
@@ -26,7 +25,7 @@ function App() {
       case currentPath === '/login':
         return <Login onSuccess={() => setNavigate('/')} />;
       case currentPath === '/':
-        return <Dashboard />;
+        return <Topology />;
       case currentPath.startsWith('/gateway'):
         return <GatewayPage />;
       case currentPath.startsWith('/resources'):
@@ -46,7 +45,7 @@ function App() {
       case currentPath.startsWith('/topology'):
         return <Topology />;
       default:
-        return <Dashboard />;
+        return <Topology />;
     }
   };
 
