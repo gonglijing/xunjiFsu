@@ -859,6 +859,17 @@ func outputJSON(v interface{}) {...}
 - 报警触发日志
 - 北向发送日志
 
+## 更新日志
+
+### v1.1.0 (2026-02-10)
+
+#### 移除功能
+- 移除"同步网关身份"功能（原 `POST /api/gateway/northbound/sync-identity`）
+- 北向配置中的 `productKey`/`deviceKey` 现在由系统在启动时自动从网关配置填充，无需手动同步
+
+#### 优化
+- 简化北向配置管理，去除冗余操作步骤
+
 ## 许可证
 
 MIT License
