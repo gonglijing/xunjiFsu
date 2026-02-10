@@ -59,6 +59,9 @@ func TestHeaderContainsToken(t *testing.T) {
 	if !headerContainsToken("br, gzip", "gzip") {
 		t.Fatal("expected gzip token found")
 	}
+	if !headerContainsToken("br, gzip;q=1.0", "gzip") {
+		t.Fatal("expected gzip token with q parameter found")
+	}
 	if headerContainsToken("br, deflate", "gzip") {
 		t.Fatal("unexpected gzip token found")
 	}

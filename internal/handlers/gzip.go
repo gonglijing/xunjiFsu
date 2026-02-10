@@ -105,7 +105,11 @@ func headerContainsToken(value string, token string) bool {
 		return false
 	}
 	for _, part := range strings.Split(value, ",") {
-		if strings.ToLower(strings.TrimSpace(part)) == token {
+		segment := strings.TrimSpace(part)
+		if idx := strings.IndexByte(segment, ';'); idx >= 0 {
+			segment = segment[:idx]
+		}
+		if strings.ToLower(strings.TrimSpace(segment)) == token {
 			return true
 		}
 	}
