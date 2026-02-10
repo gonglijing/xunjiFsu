@@ -76,7 +76,7 @@ export function Drivers() {
     <Card
       title="驱动管理"
       extra={
-        <div class="flex" style="gap:8px;">
+        <div class="table-actions">
           <button class="btn" onClick={load} disabled={loading()}>
             刷新
           </button>
@@ -133,12 +133,12 @@ export function Drivers() {
             },
           ]}
           renderActions={(d) => (
-            <div class="flex" style="gap:8px;">
-              <button class="btn" onClick={() => reloadDriver(d)} disabled={busyId() === d.id}>
+            <div class="table-actions">
+              <button class="btn btn-soft-primary" onClick={() => reloadDriver(d)} disabled={busyId() === d.id}>
                 {busyId() === d.id ? '重载中...' : '重载'}
               </button>
-              <a class="btn" href={`/api/drivers/${d.id}/download`}>下载</a>
-              <button class="btn btn-danger" onClick={() => remove(d.id, d.name)}>删除</button>
+              <a class="btn btn-outline-primary" href={`/api/drivers/${d.id}/download`}>下载</a>
+              <button class="btn btn-outline-danger" onClick={() => remove(d.id, d.name)}>删除</button>
             </div>
           )}
         />

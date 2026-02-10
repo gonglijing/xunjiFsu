@@ -201,7 +201,7 @@ export function Thresholds() {
                       </span>
                     </td>
                     <td>
-                      <div style="display:flex; gap:8px; align-items:center;">
+                      <div class="table-actions">
                         <button class="btn btn-outline-primary btn-sm" onClick={() => toggleShield(item)}>
                           {item.shielded === 1 ? '取消屏蔽' : '屏蔽'}
                         </button>

@@ -115,15 +115,16 @@ function Resources() {
                         {r.enabled === 1 ? '启用' : '禁用'}
                       </span>
                     </td>
-                    <td class="flex" style="gap:8px;">
-                      <button 
-                        class="btn" 
+                    <td><div class="table-actions">
+                      <button
+                        class="btn btn-outline-primary"
                         onClick={() => { setEditing(r.id); setForm({ name: r.name, type: r.type, path: r.path, enabled: r.enabled }); setErr(''); setShowModal(true); }}
                       >
                         编辑
                       </button>
-                      <button class="btn" onClick={() => toggle(r)}>{r.enabled === 1 ? '禁用' : '启用'}</button>
-                      <button class="btn btn-danger" onClick={() => remove(r.id)}>删除</button>
+                      <button class="btn btn-soft-primary" onClick={() => toggle(r)}>{r.enabled === 1 ? '禁用' : '启用'}</button>
+                      <button class="btn btn-outline-danger" onClick={() => remove(r.id)}>删除</button>
+                      </div>
                     </td>
                   </tr>
                 )}

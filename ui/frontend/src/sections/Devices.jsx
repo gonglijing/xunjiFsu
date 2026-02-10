@@ -304,20 +304,14 @@ export function Devices() {
               },
             ]}
             renderActions={(d) => (
-              <div class="flex" style="gap:4px;">
-                <button class="btn" onClick={() => openDetail(d)}>详情</button>
-                <button class="btn" onClick={() => edit(d)}>编辑</button>
-                <button class="btn" onClick={() => toggle(d.id)}>
+              <div class="table-actions">
+                <button class="btn btn-outline-primary" onClick={() => openDetail(d)}>详情</button>
+                <button class="btn btn-outline-primary" onClick={() => edit(d)}>编辑</button>
+                <button class="btn btn-soft-primary" onClick={() => toggle(d.id)}>
                   {d.enabled === 1 ? '禁用' : '启用'}
                 </button>
-                <button
-                  class="btn btn-danger"
-                  style={{ 'padding-left': '8px', 'padding-right': '8px' }}
-                  onClick={() => remove(d.id)}
-                >
-                  删
-                </button>
-                <button class="btn" onClick={() => openWrite(d)}>写入</button>
+                <button class="btn btn-outline-danger" onClick={() => remove(d.id)}>删除</button>
+                <button class="btn btn-soft-primary" onClick={() => openWrite(d)}>写入</button>
               </div>
             )}
           />

@@ -839,6 +839,32 @@ nav .container {
   border: 1px solid var(--border-color);
 }
 
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.table-actions .btn {
+  height: 28px;
+  min-height: 28px;
+  min-width: 58px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 0.75rem;
+}
+
+.table-actions .btn.btn-only-icon {
+  min-width: 30px;
+  width: 30px;
+  padding: 0;
+}
+
+.table-actions a.btn {
+  text-decoration: none;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

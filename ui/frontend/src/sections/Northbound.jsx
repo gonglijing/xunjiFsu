@@ -487,11 +487,11 @@ export function Northbound() {
               },
             ]}
             renderActions={(n) => (
-              <div class="flex" style="gap:8px;">
-                <button class="btn" onClick={() => edit(n)}>编辑</button>
-                <button class="btn" onClick={() => toggle(n.id)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
-                <button class="btn" onClick={() => reload(n.id)}>重载</button>
-                <button class="btn btn-danger" onClick={() => remove(n.id)}>删除</button>
+              <div class="table-actions">
+                <button class="btn btn-outline-primary" onClick={() => edit(n)}>编辑</button>
+                <button class="btn btn-soft-primary" onClick={() => toggle(n.id)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
+                <button class="btn btn-outline-primary" onClick={() => reload(n.id)}>重载</button>
+                <button class="btn btn-outline-danger" onClick={() => remove(n.id)}>删除</button>
               </div>
             )}
           />
