@@ -49,3 +49,15 @@ func TestIThingsPullCommands_PopsInBatch(t *testing.T) {
 		t.Fatalf("remaining queue=%d, want=1", len(adapter.commandQueue))
 	}
 }
+
+func TestResolveDeviceNameByMode(t *testing.T) {
+	if got := resolveDeviceNameByMode("dev-name", "dev-key", "device_name"); got != "dev-name" {
+		t.Fatalf("device_name mode got=%q, want=dev-name", got)
+	}
+	if got := resolveDeviceNameByMode("dev-name", "dev-key", "device_key"); got != "dev-key" {
+		t.Fatalf("device_key mode got=%q, want=dev-key", got)
+	}
+	if got := resolveDeviceNameByMode("", " dev-key ", ""); got != "dev-key" {
+		t.Fatalf("default mode got=%q, want=dev-key", got)
+	}
+}

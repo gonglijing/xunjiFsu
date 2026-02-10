@@ -971,33 +971,26 @@ func (a *IThingsAdapter) resolveCollectDeviceName(data *models.CollectData, mode
 	if data == nil {
 		return ""
 	}
-	deviceName := strings.TrimSpace(data.DeviceName)
-	deviceKey := strings.TrimSpace(data.DeviceKey)
-	m := strings.ToLower(strings.TrimSpace(mode))
-	switch m {
-	case "devicename", "device_name":
-		return pickFirstNonEmpty2(deviceName, deviceKey)
-	case "devicekey", "device_key", "":
-		return pickFirstNonEmpty2(deviceKey, deviceName)
-	default:
-		return pickFirstNonEmpty2(deviceKey, deviceName)
-	}
+	return resolveDeviceNameByMode(data.DeviceName, data.DeviceKey, mode)
 }
 
 func (a *IThingsAdapter) resolveAlarmDeviceName(alarm *models.AlarmPayload, mode string) string {
 	if alarm == nil {
 		return ""
 	}
-	deviceName := strings.TrimSpace(alarm.DeviceName)
-	deviceKey := strings.TrimSpace(alarm.DeviceKey)
-	m := strings.ToLower(strings.TrimSpace(mode))
-	switch m {
+	return resolveDeviceNameByMode(alarm.DeviceName, alarm.DeviceKey, mode)
+}
+
+func resolveDeviceNameByMode(deviceName, deviceKey, mode string) string {
+	name := strings.TrimSpace(deviceName)
+	key := strings.TrimSpace(deviceKey)
+	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "devicename", "device_name":
-		return pickFirstNonEmpty2(deviceName, deviceKey)
+		return pickFirstNonEmpty2(name, key)
 	case "devicekey", "device_key", "":
-		return pickFirstNonEmpty2(deviceKey, deviceName)
+		return pickFirstNonEmpty2(key, name)
 	default:
-		return pickFirstNonEmpty2(deviceKey, deviceName)
+		return pickFirstNonEmpty2(key, name)
 	}
 }
 
