@@ -586,16 +586,20 @@ nav .container {
   border-color: var(--accent-blue-light);
 }
 
-.btn-danger {
-  background: linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);
-  border-color: var(--accent-red);
-  color: white;
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+.btn-danger,
+.btn-danger-muted {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fda4af;
+  box-shadow: none;
 }
 
-.btn-danger:hover {
-  background: linear-gradient(135deg, var(--accent-red-light) 0%, var(--accent-red) 100%);
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+.btn-danger:hover,
+.btn-danger-muted:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecdd3;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.16);
 }
 
 .btn-success {

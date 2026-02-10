@@ -112,8 +112,8 @@ function AlarmsPage() {
       extra={(
         <div style="display:flex; gap:8px; align-items:center;">
           <button class="btn" onClick={load} disabled={loading() || actionBusy()}>刷新</button>
-          <button class="btn btn-danger" onClick={removeBatch} disabled={loading() || actionBusy() || selectedIds().length === 0}>批量删除</button>
-          <button class="btn btn-danger" onClick={clearAll} disabled={loading() || actionBusy() || items().length === 0}>清空</button>
+          <button class="btn btn-danger-muted" onClick={removeBatch} disabled={loading() || actionBusy() || selectedIds().length === 0}>批量删除</button>
+          <button class="btn btn-danger-muted" onClick={clearAll} disabled={loading() || actionBusy() || items().length === 0}>清空</button>
         </div>
       )}
     >
@@ -175,7 +175,7 @@ function AlarmsPage() {
                       <Show when={a.acknowledged !== 1}>
                         <button class="btn btn-primary btn-sm" onClick={() => ack(a.id)} disabled={actionBusy()}>确认</button>
                       </Show>
-                      <button class="btn btn-danger btn-sm" onClick={() => removeOne(a.id)} disabled={actionBusy()}>删除</button>
+                      <button class="btn btn-danger-muted btn-sm" onClick={() => removeOne(a.id)} disabled={actionBusy()}>删除</button>
                     </div>
                   </td>
                 </tr>
