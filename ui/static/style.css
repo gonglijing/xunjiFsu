@@ -438,6 +438,34 @@ nav .container {
   border-radius: 7px;
 }
 
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-actions .btn,
+.toolbar-actions .form-input,
+.toolbar-actions .form-select {
+  height: 30px;
+  min-height: 30px;
+}
+
+.toolbar-actions .btn {
+  min-width: 64px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 0.75rem;
+}
+
+.toolbar-actions .form-input,
+.toolbar-actions .form-select {
+  padding: 0 10px;
+  font-size: 0.75rem;
+  border-radius: 7px;
+}
+
 .card-title {
   font-size: 1.125rem;
   font-weight: 600;

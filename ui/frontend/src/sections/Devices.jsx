@@ -244,7 +244,7 @@ export function Devices() {
       <Card
         title="设备列表"
         extra={
-          <div class="flex gap-3">
+          <div class="toolbar-actions">
             <input
               class="form-input"
               style="max-width:240px;"

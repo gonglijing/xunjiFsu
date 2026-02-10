@@ -143,7 +143,7 @@ export function Thresholds() {
       <Card
         title="阈值配置列表"
         extra={(
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <div class="toolbar-actions">
             <span class="text-muted text-xs">重复触发间隔(分钟)</span>
             <input
               class="form-input"

@@ -76,7 +76,7 @@ export function Drivers() {
     <Card
       title="驱动管理"
       extra={
-        <div class="table-actions">
+        <div class="toolbar-actions">
           <button class="btn" onClick={load} disabled={loading()}>
             刷新
           </button>

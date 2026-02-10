@@ -110,7 +110,7 @@ function AlarmsPage() {
     <Card
       title="报警日志"
       extra={(
-        <div class="table-actions">
+        <div class="toolbar-actions">
           <button class="btn btn-ghost btn-sm" onClick={load} disabled={loading() || actionBusy()}>刷新</button>
           <button class="btn btn-outline-danger btn-sm" onClick={removeBatch} disabled={loading() || actionBusy() || selectedIds().length === 0}>批量删除</button>
           <button class="btn btn-outline-danger btn-sm" onClick={clearAll} disabled={loading() || actionBusy() || items().length === 0}>清空</button>
