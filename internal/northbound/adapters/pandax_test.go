@@ -194,3 +194,57 @@ func TestIsPandaXReservedRPCKey(t *testing.T) {
 		}
 	}
 }
+
+type stubSystemStatsProvider struct {
+	stats *models.SystemStats
+}
+
+func (s stubSystemStatsProvider) CollectSystemStatsOnce() *models.SystemStats {
+	return s.stats
+}
+
+func TestFormatMetricFloat2(t *testing.T) {
+	if got := formatMetricFloat2(1.234); got != "1.23" {
+		t.Fatalf("formatMetricFloat2()=%q, want=1.23", got)
+	}
+	if got := formatMetricFloat2(1); got != "1.00" {
+		t.Fatalf("formatMetricFloat2()=%q, want=1.00", got)
+	}
+}
+
+func TestDefaultDeviceToken(t *testing.T) {
+	if got := defaultDeviceToken(42); got != "device_42" {
+		t.Fatalf("defaultDeviceToken()=%q, want=device_42", got)
+	}
+}
+
+func TestFetchCurrentSystemStats_FormatValues(t *testing.T) {
+	adapter := NewPandaXAdapter("pandax-test")
+	adapter.systemStatsProvider = stubSystemStatsProvider{stats: &models.SystemStats{
+		CpuUsage:     1.236,
+		MemTotal:     1024.5,
+		MemUsed:      600.1,
+		MemUsage:     58.63,
+		MemAvailable: 424.4,
+		DiskTotal:    256.0,
+		DiskUsed:     100.6,
+		DiskUsage:    39.3,
+		DiskFree:     155.4,
+		Uptime:       123,
+		Load1:        0.14,
+		Load5:        0.28,
+		Load15:       0.52,
+		Timestamp:    1700000000000,
+	}}
+
+	data := adapter.fetchCurrentSystemStats()
+	if data == nil {
+		t.Fatal("fetchCurrentSystemStats() returned nil")
+	}
+	if data.Fields["cpu_usage"] != "1.24" {
+		t.Fatalf("cpu_usage=%q, want=1.24", data.Fields["cpu_usage"])
+	}
+	if data.Fields["uptime"] != "123" {
+		t.Fatalf("uptime=%q, want=123", data.Fields["uptime"])
+	}
+}

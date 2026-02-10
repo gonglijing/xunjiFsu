@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -611,19 +612,19 @@ func (a *PandaXAdapter) fetchCurrentSystemStats() *models.CollectData {
 		DeviceName: models.SystemStatsDeviceName,
 		Timestamp:  time.Unix(0, stats.Timestamp*int64(time.Millisecond)),
 		Fields: map[string]string{
-			"cpu_usage":     fmt.Sprintf("%.2f", stats.CpuUsage),
-			"mem_total":     fmt.Sprintf("%.2f", stats.MemTotal),
-			"mem_used":      fmt.Sprintf("%.2f", stats.MemUsed),
-			"mem_usage":     fmt.Sprintf("%.2f", stats.MemUsage),
-			"mem_available": fmt.Sprintf("%.2f", stats.MemAvailable),
-			"disk_total":    fmt.Sprintf("%.2f", stats.DiskTotal),
-			"disk_used":     fmt.Sprintf("%.2f", stats.DiskUsed),
-			"disk_usage":    fmt.Sprintf("%.2f", stats.DiskUsage),
-			"disk_free":     fmt.Sprintf("%.2f", stats.DiskFree),
-			"uptime":        fmt.Sprintf("%d", stats.Uptime),
-			"load_1":        fmt.Sprintf("%.2f", stats.Load1),
-			"load_5":        fmt.Sprintf("%.2f", stats.Load5),
-			"load_15":       fmt.Sprintf("%.2f", stats.Load15),
+			"cpu_usage":     formatMetricFloat2(stats.CpuUsage),
+			"mem_total":     formatMetricFloat2(stats.MemTotal),
+			"mem_used":      formatMetricFloat2(stats.MemUsed),
+			"mem_usage":     formatMetricFloat2(stats.MemUsage),
+			"mem_available": formatMetricFloat2(stats.MemAvailable),
+			"disk_total":    formatMetricFloat2(stats.DiskTotal),
+			"disk_used":     formatMetricFloat2(stats.DiskUsed),
+			"disk_usage":    formatMetricFloat2(stats.DiskUsage),
+			"disk_free":     formatMetricFloat2(stats.DiskFree),
+			"uptime":        strconv.FormatInt(stats.Uptime, 10),
+			"load_1":        formatMetricFloat2(stats.Load1),
+			"load_5":        formatMetricFloat2(stats.Load5),
+			"load_15":       formatMetricFloat2(stats.Load15),
 		},
 	}
 }
@@ -1335,7 +1336,7 @@ func (a *PandaXAdapter) resolveSubDeviceToken(data *models.CollectData) string {
 		if strings.TrimSpace(data.DeviceKey) != "" {
 			return strings.TrimSpace(data.DeviceKey)
 		}
-		return fmt.Sprintf("device_%d", data.DeviceID)
+		return defaultDeviceToken(data.DeviceID)
 	}
 
 	pk := pickFirstNonEmpty(data.ProductKey, cfg.ProductKey)
@@ -1367,7 +1368,7 @@ func (a *PandaXAdapter) resolveSubDeviceToken(data *models.CollectData) string {
 	if name != "" {
 		return name
 	}
-	return fmt.Sprintf("device_%d", data.DeviceID)
+	return defaultDeviceToken(data.DeviceID)
 }
 
 func (a *PandaXAdapter) isInitialized() bool {
@@ -1488,5 +1489,14 @@ func maxInt2(left, right int) int {
 
 func (a *PandaXAdapter) nextID(prefix string) string {
 	n := atomic.AddUint64(&a.seq, 1)
-	return fmt.Sprintf("%s_%d_%d", prefix, time.Now().UnixMilli(), n)
+	millis := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	return prefix + "_" + millis + "_" + strconv.FormatUint(n, 10)
+}
+
+func formatMetricFloat2(value float64) string {
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+func defaultDeviceToken(deviceID int64) string {
+	return "device_" + strconv.FormatInt(deviceID, 10)
 }
