@@ -793,36 +793,6 @@ func (a *PandaXAdapter) flushAlarmBatch() error {
 	return nil
 }
 
-func (a *PandaXAdapter) buildRealtimePublish(data *models.CollectData) (string, []byte) {
-	if data == nil {
-		return a.gatewayTelemetryTopic, []byte("{}")
-	}
-
-	a.mu.RLock()
-	topic := a.gatewayTelemetryTopic
-	a.mu.RUnlock()
-
-	values := make(map[string]interface{}, len(data.Fields))
-	for key, value := range data.Fields {
-		values[key] = convertFieldValue(value)
-	}
-
-	ts := data.Timestamp.UnixMilli()
-	if ts <= 0 {
-		ts = time.Now().UnixMilli()
-	}
-
-	subToken := a.resolveSubDeviceToken(data)
-	payload := map[string]interface{}{
-		subToken: map[string]interface{}{
-			"ts":     ts,
-			"values": values,
-		},
-	}
-	body, _ := json.Marshal(payload)
-	return topic, body
-}
-
 func (a *PandaXAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, []byte) {
 	a.mu.RLock()
 	topic := a.alarmTopic
