@@ -48,10 +48,10 @@ func setupAlarmLogsTestDB(t *testing.T) {
 	}
 }
 
-func insertAlarmLogRow(t *testing.T, acknowledgedBy any, acknowledgedAt any) {
+func insertAlarmLogRow(t *testing.T, acknowledgedBy any, acknowledgedAt any) int64 {
 	t.Helper()
 
-	_, err := ParamDB.Exec(
+	result, err := ParamDB.Exec(
 		`INSERT INTO alarm_logs (device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, acknowledged, acknowledged_by, acknowledged_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		1, nil, "temperature", 101.1, 99.9, ">", "high", "too hot", 0, acknowledgedBy, acknowledgedAt,
@@ -59,6 +59,20 @@ func insertAlarmLogRow(t *testing.T, acknowledgedBy any, acknowledgedAt any) {
 	if err != nil {
 		t.Fatalf("insert alarm log: %v", err)
 	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id: %v", err)
+	}
+	return id
+}
+
+func countAlarmLogs(t *testing.T) int {
+	t.Helper()
+	var count int
+	if err := ParamDB.QueryRow("SELECT COUNT(*) FROM alarm_logs").Scan(&count); err != nil {
+		t.Fatalf("count alarm logs: %v", err)
+	}
+	return count
 }
 
 func TestGetRecentAlarmLogs_AllowsNullAcknowledgedBy(t *testing.T) {
@@ -93,5 +107,52 @@ func TestGetAlarmLogsByDeviceID_AllowsNullAcknowledgedBy(t *testing.T) {
 	}
 	if logs[0].AcknowledgedBy != "" {
 		t.Fatalf("expected empty acknowledged_by when NULL, got %q", logs[0].AcknowledgedBy)
+	}
+}
+
+func TestDeleteAlarmLog(t *testing.T) {
+	setupAlarmLogsTestDB(t)
+	id := insertAlarmLogRow(t, nil, nil)
+
+	if err := DeleteAlarmLog(id); err != nil {
+		t.Fatalf("DeleteAlarmLog: %v", err)
+	}
+	if got := countAlarmLogs(t); got != 0 {
+		t.Fatalf("expected 0 logs after deleting one, got %d", got)
+	}
+}
+
+func TestDeleteAlarmLogsByIDs(t *testing.T) {
+	setupAlarmLogsTestDB(t)
+	id1 := insertAlarmLogRow(t, nil, nil)
+	_ = insertAlarmLogRow(t, nil, nil)
+	id3 := insertAlarmLogRow(t, nil, nil)
+
+	deleted, err := DeleteAlarmLogsByIDs([]int64{id1, id3})
+	if err != nil {
+		t.Fatalf("DeleteAlarmLogsByIDs: %v", err)
+	}
+	if deleted != 2 {
+		t.Fatalf("expected deleted=2, got %d", deleted)
+	}
+	if got := countAlarmLogs(t); got != 1 {
+		t.Fatalf("expected 1 log remaining after batch delete, got %d", got)
+	}
+}
+
+func TestClearAlarmLogs(t *testing.T) {
+	setupAlarmLogsTestDB(t)
+	insertAlarmLogRow(t, nil, nil)
+	insertAlarmLogRow(t, nil, nil)
+
+	deleted, err := ClearAlarmLogs()
+	if err != nil {
+		t.Fatalf("ClearAlarmLogs: %v", err)
+	}
+	if deleted != 2 {
+		t.Fatalf("expected deleted=2 when clearing, got %d", deleted)
+	}
+	if got := countAlarmLogs(t); got != 0 {
+		t.Fatalf("expected 0 logs after clear, got %d", got)
 	}
 }

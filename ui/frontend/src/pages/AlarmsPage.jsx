@@ -1,4 +1,4 @@
-import { createSignal, onMount, For } from 'solid-js';
+import { createSignal, onMount, For, Show } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
 import { useToast } from '../components/Toast';
@@ -9,9 +9,12 @@ import { usePageLoader } from '../utils/pageLoader';
 function AlarmsPage() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
-  const { run: runAlarmsLoad } = usePageLoader(async () => {
+  const [selectedIds, setSelectedIds] = createSignal([]);
+  const [actionBusy, setActionBusy] = createSignal(false);
+  const { loading, run: runAlarmsLoad } = usePageLoader(async () => {
     const res = await api.alarms.listAlarms();
     setItems(res || []);
+    setSelectedIds([]);
   }, {
     onError: (err) => showErrorToast(toast, err, '加载告警失败'),
   });
@@ -22,18 +25,110 @@ function AlarmsPage() {
 
   onMount(load);
 
+  const isSelected = (id) => selectedIds().includes(id);
+
+  const toggleSelect = (id, checked) => {
+    if (checked) {
+      setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      return;
+    }
+    setSelectedIds((prev) => prev.filter((item) => item !== id));
+  };
+
+  const toggleSelectAll = (checked) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(items().map((item) => item.id));
+  };
+
   const ack = (id) => {
     api.alarms.acknowledgeAlarm(id)
       .then(() => { toast.show('success', '已确认'); load(); })
       .catch((err) => showErrorToast(toast, err, '确认失败'));
   };
 
+  const removeOne = async (id) => {
+    if (!window.confirm('确认删除这条告警吗？')) return;
+    setActionBusy(true);
+    try {
+      await api.alarms.deleteAlarm(id);
+      toast.show('success', '删除成功');
+      await load();
+    } catch (err) {
+      showErrorToast(toast, err, '删除失败');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const removeBatch = async () => {
+    const ids = selectedIds();
+    if (ids.length === 0) {
+      toast.show('warning', '请先选择要删除的告警');
+      return;
+    }
+    if (!window.confirm(`确认删除选中的 ${ids.length} 条告警吗？`)) return;
+
+    setActionBusy(true);
+    try {
+      const result = await api.alarms.batchDeleteAlarms(ids);
+      const deleted = result?.deleted ?? ids.length;
+      toast.show('success', `已删除 ${deleted} 条`);
+      await load();
+    } catch (err) {
+      showErrorToast(toast, err, '批量删除失败');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const clearAll = async () => {
+    if (items().length === 0) {
+      toast.show('info', '当前没有可清空的告警');
+      return;
+    }
+    if (!window.confirm('确认清空全部告警日志吗？此操作不可恢复。')) return;
+
+    setActionBusy(true);
+    try {
+      const result = await api.alarms.clearAlarms();
+      const deleted = result?.deleted ?? 0;
+      toast.show('success', `已清空 ${deleted} 条告警`);
+      await load();
+    } catch (err) {
+      showErrorToast(toast, err, '清空失败');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const allSelected = () => items().length > 0 && selectedIds().length === items().length;
+
   return (
-    <Card title="报警日志" extra={<button class="btn" onClick={load}>刷新</button>}>
+    <Card
+      title="报警日志"
+      extra={(
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn" onClick={load} disabled={loading() || actionBusy()}>刷新</button>
+          <button class="btn btn-danger" onClick={removeBatch} disabled={loading() || actionBusy() || selectedIds().length === 0}>批量删除</button>
+          <button class="btn btn-danger" onClick={clearAll} disabled={loading() || actionBusy() || items().length === 0}>清空</button>
+        </div>
+      )}
+    >
       <div class="table-container" style="max-height:600px; overflow:auto;">
         <table class="table">
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={allSelected()}
+                  onChange={(e) => toggleSelectAll(e.currentTarget.checked)}
+                  disabled={items().length === 0 || loading() || actionBusy()}
+                />
+              </th>
               <th>时间</th>
               <th>设备ID</th>
               <th>字段</th>
@@ -49,6 +144,14 @@ function AlarmsPage() {
             <For each={items()}>
               {(a) => (
                 <tr>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={isSelected(a.id)}
+                      onChange={(e) => toggleSelect(a.id, e.currentTarget.checked)}
+                      disabled={loading() || actionBusy()}
+                    />
+                  </td>
                   <td>{formatDateTime(a.triggered_at)}</td>
                   <td>{a.device_id}</td>
                   <td>{a.field_name}</td>
@@ -68,9 +171,12 @@ function AlarmsPage() {
                     )}
                   </td>
                   <td>
-                    {a.acknowledged !== 1 && (
-                      <button class="btn btn-primary btn-sm" onClick={() => ack(a.id)}>确认</button>
-                    )}
+                    <div style="display:flex; gap:8px; align-items:center;">
+                      <Show when={a.acknowledged !== 1}>
+                        <button class="btn btn-primary btn-sm" onClick={() => ack(a.id)} disabled={actionBusy()}>确认</button>
+                      </Show>
+                      <button class="btn btn-danger btn-sm" onClick={() => removeOne(a.id)} disabled={actionBusy()}>删除</button>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -78,7 +184,9 @@ function AlarmsPage() {
             <For each={items().length === 0 ? [1] : []}>
               {() => (
                 <tr>
-                  <td colSpan={9} style="text-align:center; padding:24px; color:var(--text-muted);">暂无告警</td>
+                  <td colSpan={10} style="text-align:center; padding:24px; color:var(--text-muted);">
+                    {loading() ? '加载中...' : '暂无告警'}
+                  </td>
                 </tr>
               )}
             </For>

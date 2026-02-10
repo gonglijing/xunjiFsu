@@ -72,6 +72,9 @@ func registerThresholdRoutes(api *mux.Router, h *handlers.Handler) {
 
 func registerAlarmRoutes(api *mux.Router, h *handlers.Handler) {
 	api.HandleFunc("/alarms", h.GetAlarmLogs).Methods("GET")
+	api.HandleFunc("/alarms", h.ClearAlarms).Methods("DELETE")
+	api.HandleFunc("/alarms/batch-delete", h.BatchDeleteAlarms).Methods("POST")
+	api.HandleFunc("/alarms/{id}", h.DeleteAlarm).Methods("DELETE")
 	api.HandleFunc("/alarms/{id}/acknowledge", h.AcknowledgeAlarm).Methods("POST")
 }
 

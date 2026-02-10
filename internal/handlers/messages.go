@@ -19,8 +19,9 @@ const (
 	errDriverConfigSchemaInvalidJSONError = "driver config_schema is invalid JSON"
 	errDeviceHasNoDriverMessage           = "Device has no driver"
 
-	errHistoryStartAfterEndDetail     = "start time must be before end time"
-	errHistoryFilterRequiresDevice    = "device_id is required when using field_name/start/end filters"
+	errHistoryStartAfterEndDetail  = "start time must be before end time"
+	errHistoryFilterRequiresDevice = "device_id is required when using field_name/start/end filters"
+	errAlarmIDsRequiredMessage     = "ids is required"
 )
 
 func newAPIError(code, message string) APIErrorDef {
@@ -71,6 +72,10 @@ var (
 	apiErrToggleDeviceFailed            = newAPIError("E_TOGGLE_DEVICE_FAILED", "切换设备状态失败")
 	apiErrListAlarmLogsFailed           = newAPIError("E_LIST_ALARM_LOGS_FAILED", "获取报警日志失败")
 	apiErrAcknowledgeAlarmFailed        = newAPIError("E_ACKNOWLEDGE_ALARM_FAILED", "确认报警失败")
+	apiErrDeleteAlarmFailed             = newAPIError("E_DELETE_ALARM_FAILED", "删除报警失败")
+	apiErrBatchDeleteAlarmFailed        = newAPIError("E_BATCH_DELETE_ALARM_FAILED", "批量删除报警失败")
+	apiErrClearAlarmLogsFailed          = newAPIError("E_CLEAR_ALARM_LOGS_FAILED", "清空报警失败")
+	apiErrAlarmIDsRequired              = newAPIError("E_ALARM_IDS_REQUIRED", errAlarmIDsRequiredMessage)
 	apiErrListDataCacheFailed           = newAPIError("E_LIST_DATA_CACHE_FAILED", "获取数据缓存失败")
 	apiErrGetDeviceDataCacheFailed      = newAPIError("E_GET_DEVICE_DATA_CACHE_FAILED", "获取设备缓存失败")
 	apiErrQueryHistoryDataFailed        = newAPIError("E_QUERY_HISTORY_DATA_FAILED", "查询历史数据失败")
