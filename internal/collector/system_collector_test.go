@@ -89,3 +89,37 @@ func TestSystemStatsCollector_RunCollectsImmediately(t *testing.T) {
 	c.wg.Wait()
 	t.Fatal("expected system stats to be collected immediately")
 }
+
+func TestStatsToCollectData_FormatAndFieldCount(t *testing.T) {
+	collector := NewSystemStatsCollector()
+	stats := &models.SystemStats{
+		Timestamp:    1700000000,
+		CpuUsage:     12.3456,
+		MemTotal:     2048.4,
+		MemUsed:      1024.2,
+		MemUsage:     50.01,
+		MemAvailable: 1024.2,
+		DiskTotal:    100.0,
+		DiskUsed:     33.3,
+		DiskUsage:    33.3,
+		DiskFree:     66.7,
+		Uptime:       12345,
+		Load1:        0.12,
+		Load5:        0.34,
+		Load15:       0.56,
+	}
+
+	data := collector.statsToCollectData(stats)
+	if data == nil {
+		t.Fatal("expected non-nil collect data")
+	}
+	if len(data.Fields) != 13 {
+		t.Fatalf("field count = %d, want 13", len(data.Fields))
+	}
+	if got := data.Fields["cpu_usage"]; got != "12.35" {
+		t.Fatalf("cpu_usage = %q, want 12.35", got)
+	}
+	if got := data.Fields["uptime"]; got != "12345" {
+		t.Fatalf("uptime = %q, want 12345", got)
+	}
+}

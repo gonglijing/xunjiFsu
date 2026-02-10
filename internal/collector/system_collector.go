@@ -379,9 +379,9 @@ func (c *SystemStatsCollector) getUptime() int64 {
 		return 0
 	}
 
-	parts := strings.Split(string(data), " ")
+	parts := strings.Fields(string(data))
 	if len(parts) >= 1 {
-		uptime, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+		uptime, err := strconv.ParseFloat(parts[0], 64)
 		if err == nil {
 			return int64(uptime)
 		}
@@ -401,7 +401,7 @@ func (c *SystemStatsCollector) getLoadAverage(stats *models.SystemStats) {
 		return
 	}
 
-	parts := strings.Split(string(data), " ")
+	parts := strings.Fields(string(data))
 	if len(parts) >= 3 {
 		load1, _ := strconv.ParseFloat(parts[0], 64)
 		load5, _ := strconv.ParseFloat(parts[1], 64)
@@ -414,25 +414,30 @@ func (c *SystemStatsCollector) getLoadAverage(stats *models.SystemStats) {
 }
 
 // statsToCollectData 将系统属性转换为采集数据
+func formatFixed2(value float64) string {
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
 func (c *SystemStatsCollector) statsToCollectData(stats *models.SystemStats) *models.CollectData {
+	fields := make(map[string]string, 13)
+	fields["cpu_usage"] = formatFixed2(stats.CpuUsage)
+	fields["mem_total"] = formatFixed2(stats.MemTotal)
+	fields["mem_used"] = formatFixed2(stats.MemUsed)
+	fields["mem_usage"] = formatFixed2(stats.MemUsage)
+	fields["mem_available"] = formatFixed2(stats.MemAvailable)
+	fields["disk_total"] = formatFixed2(stats.DiskTotal)
+	fields["disk_used"] = formatFixed2(stats.DiskUsed)
+	fields["disk_usage"] = formatFixed2(stats.DiskUsage)
+	fields["disk_free"] = formatFixed2(stats.DiskFree)
+	fields["uptime"] = strconv.FormatInt(stats.Uptime, 10)
+	fields["load_1"] = formatFixed2(stats.Load1)
+	fields["load_5"] = formatFixed2(stats.Load5)
+	fields["load_15"] = formatFixed2(stats.Load15)
+
 	return &models.CollectData{
 		DeviceID:   models.SystemStatsDeviceID,
 		DeviceName: models.SystemStatsDeviceName,
 		Timestamp:  time.Unix(stats.Timestamp, 0),
-		Fields: map[string]string{
-			"cpu_usage":     fmt.Sprintf("%.2f", stats.CpuUsage),
-			"mem_total":     fmt.Sprintf("%.2f", stats.MemTotal),
-			"mem_used":      fmt.Sprintf("%.2f", stats.MemUsed),
-			"mem_usage":     fmt.Sprintf("%.2f", stats.MemUsage),
-			"mem_available": fmt.Sprintf("%.2f", stats.MemAvailable),
-			"disk_total":    fmt.Sprintf("%.2f", stats.DiskTotal),
-			"disk_used":     fmt.Sprintf("%.2f", stats.DiskUsed),
-			"disk_usage":    fmt.Sprintf("%.2f", stats.DiskUsage),
-			"disk_free":     fmt.Sprintf("%.2f", stats.DiskFree),
-			"uptime":        fmt.Sprintf("%d", stats.Uptime),
-			"load_1":        fmt.Sprintf("%.2f", stats.Load1),
-			"load_5":        fmt.Sprintf("%.2f", stats.Load5),
-			"load_15":       fmt.Sprintf("%.2f", stats.Load15),
-		},
+		Fields:     fields,
 	}
 }

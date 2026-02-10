@@ -3,6 +3,7 @@ package collector
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -12,6 +13,9 @@ import (
 const (
 	defaultAlarmRepeatInterval       = time.Minute
 	alarmRepeatIntervalRefreshWindow = 5 * time.Second
+	defaultAlarmStateTTL             = 24 * time.Hour
+	maxAlarmStateTTL                 = 7 * 24 * time.Hour
+	alarmStatePruneEveryCalls        = 512
 )
 
 type alarmStateKey struct {
@@ -32,6 +36,8 @@ var alarmStates = struct {
 }{
 	data: make(map[alarmStateKey]alarmState),
 }
+
+var alarmStateCheckCounter uint64
 
 var alarmRepeatIntervalCache = struct {
 	mu        sync.Mutex
@@ -85,6 +91,49 @@ func resolveAlarmRepeatInterval() time.Duration {
 	return resolved
 }
 
+func resolveAlarmStateTTL(repeatInterval time.Duration) time.Duration {
+	ttl := defaultAlarmStateTTL
+	if repeatInterval > 0 {
+		candidate := repeatInterval * 120
+		if candidate > ttl {
+			ttl = candidate
+		}
+	}
+	if ttl > maxAlarmStateTTL {
+		ttl = maxAlarmStateTTL
+	}
+	return ttl
+}
+
+func maybePruneAlarmStates(now time.Time, repeatInterval time.Duration) {
+	if atomic.AddUint64(&alarmStateCheckCounter, 1)%alarmStatePruneEveryCalls != 0 {
+		return
+	}
+
+	ttl := resolveAlarmStateTTL(repeatInterval)
+	alarmStates.mu.Lock()
+	_ = pruneAlarmStatesLocked(now, ttl)
+	alarmStates.mu.Unlock()
+}
+
+func pruneAlarmStatesLocked(now time.Time, ttl time.Duration) int {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if ttl <= 0 {
+		ttl = defaultAlarmStateTTL
+	}
+
+	removed := 0
+	for key, state := range alarmStates.data {
+		if state.LastTriggered.IsZero() || now.Sub(state.LastTriggered) > ttl {
+			delete(alarmStates.data, key)
+			removed++
+		}
+	}
+	return removed
+}
+
 // InvalidateAlarmRepeatIntervalCache 清理重复上报间隔缓存
 func InvalidateAlarmRepeatIntervalCache() {
 	alarmRepeatIntervalCache.mu.Lock()
@@ -108,6 +157,8 @@ func shouldEmitAlarm(deviceID int64, threshold *models.Threshold, matched bool, 
 	if repeatInterval <= 0 {
 		repeatInterval = defaultAlarmRepeatInterval
 	}
+
+	maybePruneAlarmStates(now, repeatInterval)
 
 	key := buildAlarmStateKey(deviceID, threshold)
 

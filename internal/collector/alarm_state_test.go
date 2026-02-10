@@ -77,3 +77,35 @@ func TestBuildAlarmStateKey_UseThresholdIDAsPrimaryIdentity(t *testing.T) {
 		t.Fatalf("id-based key should not depend on field/operator/value, got %+v", first)
 	}
 }
+
+func TestPruneAlarmStatesLocked(t *testing.T) {
+	deviceID := int64(77)
+	threshold := &models.Threshold{ID: 7001}
+	key := buildAlarmStateKey(deviceID, threshold)
+
+	alarmStates.mu.Lock()
+	alarmStates.data[key] = alarmState{LastTriggered: time.Now().Add(-2 * time.Hour)}
+	alarmStates.mu.Unlock()
+	defer clearAlarmStateForDevice(deviceID)
+
+	alarmStates.mu.Lock()
+	removed := pruneAlarmStatesLocked(time.Now(), time.Hour)
+	_, exists := alarmStates.data[key]
+	alarmStates.mu.Unlock()
+
+	if removed == 0 {
+		t.Fatal("expected at least one stale state to be removed")
+	}
+	if exists {
+		t.Fatal("stale alarm state should be removed")
+	}
+}
+
+func TestResolveAlarmStateTTL(t *testing.T) {
+	if ttl := resolveAlarmStateTTL(0); ttl != defaultAlarmStateTTL {
+		t.Fatalf("ttl=%v, want %v", ttl, defaultAlarmStateTTL)
+	}
+	if ttl := resolveAlarmStateTTL(2 * time.Hour); ttl != maxAlarmStateTTL {
+		t.Fatalf("ttl=%v, want capped %v", ttl, maxAlarmStateTTL)
+	}
+}
