@@ -36,7 +36,100 @@ func InitDeviceTable() error {
 		ParamDB.Exec(fmt.Sprintf("ALTER TABLE devices ADD COLUMN %s %s", col.name, col.ctype))
 	}
 
-	return nil
+	return cleanupLegacyDeviceColumns()
+}
+
+func cleanupLegacyDeviceColumns() error {
+	hasDeviceConfig, err := columnExists(ParamDB, "devices", "device_config")
+	if err != nil {
+		return err
+	}
+	hasUploadInterval, err := columnExists(ParamDB, "devices", "upload_interval")
+	if err != nil {
+		return err
+	}
+	hasProtocol, err := columnExists(ParamDB, "devices", "protocol")
+	if err != nil {
+		return err
+	}
+	if !hasDeviceConfig && !hasUploadInterval && !hasProtocol {
+		return nil
+	}
+
+	tx, err := ParamDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`CREATE TABLE devices_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT UNIQUE NOT NULL,
+		description TEXT,
+		product_key TEXT,
+		device_key TEXT,
+		driver_type TEXT DEFAULT 'modbus_rtu',
+		serial_port TEXT,
+		resource_id INTEGER,
+		driver_id INTEGER,
+		collect_interval INTEGER DEFAULT 5000,
+		storage_interval INTEGER DEFAULT 300,
+		timeout INTEGER DEFAULT 1000,
+		baud_rate INTEGER DEFAULT 9600,
+		data_bits INTEGER DEFAULT 8,
+		stop_bits INTEGER DEFAULT 1,
+		parity TEXT DEFAULT 'N' CHECK(parity IN ('N', 'O', 'E')),
+		ip_address TEXT,
+		port_num INTEGER DEFAULT 502,
+		device_address TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE SET NULL,
+		FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`INSERT INTO devices_new (
+		id, name, description, product_key, device_key, driver_type,
+		serial_port, resource_id, driver_id,
+		collect_interval, storage_interval, timeout,
+		baud_rate, data_bits, stop_bits, parity,
+		ip_address, port_num, device_address,
+		enabled, created_at, updated_at
+	)
+	SELECT
+		id, name, description, product_key, device_key, COALESCE(driver_type, 'modbus_rtu'),
+		serial_port, resource_id, driver_id,
+		COALESCE(collect_interval, 5000), COALESCE(storage_interval, 300), COALESCE(timeout, 1000),
+		COALESCE(baud_rate, 9600), COALESCE(data_bits, 8), COALESCE(stop_bits, 1), COALESCE(parity, 'N'),
+		ip_address, COALESCE(port_num, 502), device_address,
+		COALESCE(enabled, 1), created_at, updated_at
+	FROM devices`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DROP TABLE devices`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`ALTER TABLE devices_new RENAME TO devices`)
+	if err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_devices_resource ON devices(resource_id)`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_devices_driver ON devices(driver_id)`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // CreateDevice 创建设备

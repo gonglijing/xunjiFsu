@@ -24,7 +24,7 @@ func CreateAlarmLog(log *models.AlarmLog) (int64, error) {
 // GetAlarmLogsByDeviceID 根据设备ID获取报警日志
 func GetAlarmLogsByDeviceID(deviceID int64, limit int) ([]*models.AlarmLog, error) {
 	return queryList[*models.AlarmLog](ParamDB,
-		`SELECT id, device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, triggered_at, acknowledged, acknowledged_by, acknowledged_at 
+		`SELECT id, device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, triggered_at, acknowledged, COALESCE(acknowledged_by, ''), acknowledged_at 
 		FROM alarm_logs WHERE device_id = ? ORDER BY triggered_at DESC LIMIT ?`,
 		[]any{deviceID, limit},
 		func(rows *sql.Rows) (*models.AlarmLog, error) {
@@ -41,7 +41,7 @@ func GetAlarmLogsByDeviceID(deviceID int64, limit int) ([]*models.AlarmLog, erro
 // GetRecentAlarmLogs 获取最近的报警日志
 func GetRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
 	return queryList[*models.AlarmLog](ParamDB,
-		`SELECT id, device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, triggered_at, acknowledged, acknowledged_by, acknowledged_at 
+		`SELECT id, device_id, threshold_id, field_name, actual_value, threshold_value, operator, severity, message, triggered_at, acknowledged, COALESCE(acknowledged_by, ''), acknowledged_at 
 		FROM alarm_logs ORDER BY triggered_at DESC LIMIT ?`,
 		[]any{limit},
 		func(rows *sql.Rows) (*models.AlarmLog, error) {

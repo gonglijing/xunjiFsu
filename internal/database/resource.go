@@ -25,7 +25,10 @@ func InitResourceTable() error {
 	if err := ensureResourcePathColumn(); err != nil {
 		return err
 	}
-	return ensureResourceTypeConstraint()
+	if err := ensureResourceTypeConstraint(); err != nil {
+		return err
+	}
+	return cleanupLegacyResourceColumns()
 }
 
 func AddResource(r *models.Resource) (int64, error) {
@@ -97,10 +100,78 @@ func ensureResourcePathColumn() error {
 		if _, err := ParamDB.Exec(`ALTER TABLE resources ADD COLUMN path TEXT`); err != nil {
 			return fmt.Errorf("add path column: %w", err)
 		}
-		// 尝试用旧 schema 的 port 字段回填
-		_, _ = ParamDB.Exec(`UPDATE resources SET path = COALESCE(path, port, '')`)
+		hasPort, err := columnExists(ParamDB, "resources", "port")
+		if err != nil {
+			return err
+		}
+		if hasPort {
+			// 尝试用旧 schema 的 port 字段回填
+			_, _ = ParamDB.Exec(`UPDATE resources SET path = COALESCE(path, port, '')`)
+		} else {
+			_, _ = ParamDB.Exec(`UPDATE resources SET path = COALESCE(path, '')`)
+		}
 	}
 	return nil
+}
+
+func cleanupLegacyResourceColumns() error {
+	hasPort, err := columnExists(ParamDB, "resources", "port")
+	if err != nil {
+		return err
+	}
+	hasAddress, err := columnExists(ParamDB, "resources", "address")
+	if err != nil {
+		return err
+	}
+	if !hasPort && !hasAddress {
+		return nil
+	}
+
+	tx, err := ParamDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`CREATE TABLE resources_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL CHECK(type IN ('serial', 'net', 'di', 'do')),
+		path TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		return err
+	}
+
+	pathExpr := "COALESCE(path, '')"
+	if hasPort {
+		pathExpr = "COALESCE(path, port, '')"
+	}
+
+	_, err = tx.Exec(fmt.Sprintf(`INSERT INTO resources_new (id, name, type, path, enabled, created_at, updated_at)
+		SELECT id, name,
+			CASE WHEN type IN ('network', 'tcp') THEN 'net' ELSE type END,
+			%s,
+			enabled, created_at, updated_at
+		FROM resources`, pathExpr))
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DROP TABLE resources`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`ALTER TABLE resources_new RENAME TO resources`)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // ensureResourceTypeConstraint rebuilds table if old CHECK constraint doesn't allow 'net'.

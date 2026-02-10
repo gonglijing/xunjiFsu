@@ -19,6 +19,10 @@ func InitParamSchema() error {
 		return fmt.Errorf("failed to execute param migration: %w", err)
 	}
 
+	if err := cleanupUnusedParamTables(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -32,6 +36,10 @@ func InitDataSchema() error {
 	_, err = DataDB.Exec(string(migration))
 	if err != nil {
 		return fmt.Errorf("failed to execute data migration: %w", err)
+	}
+
+	if err := cleanupUnusedDataTables(); err != nil {
+		return err
 	}
 
 	// 执行索引迁移
@@ -103,6 +111,20 @@ func ensureAlarmLogsTable() error {
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to ensure alarm_logs table: %w", err)
+	}
+	return nil
+}
+
+func cleanupUnusedParamTables() error {
+	if _, err := ParamDB.Exec(`DROP TABLE IF EXISTS storage_policies`); err != nil {
+		return fmt.Errorf("failed to drop unused table storage_policies: %w", err)
+	}
+	return nil
+}
+
+func cleanupUnusedDataTables() error {
+	if _, err := DataDB.Exec(`DROP TABLE IF EXISTS storage_config`); err != nil {
+		return fmt.Errorf("failed to drop unused table storage_config: %w", err)
 	}
 	return nil
 }
