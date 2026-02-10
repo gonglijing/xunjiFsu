@@ -77,7 +77,7 @@ function normalizeConfig(raw, schemaFields, uploadIntervalFallback = DEFAULT_NOR
 }
 
 function isXunJiType(nbType) {
-  return nbType === 'xunji';
+  return nbType === 'xunji' || nbType === 'sagoo';
 }
 
 function isPandaXType(nbType) {
@@ -405,12 +405,14 @@ export function Northbound() {
 
   const getTypeLabel = () => {
     const type = form().type;
-    return type === 'xunji' ? '寻迹' : (type === 'pandax' ? 'PandaX' : (type === 'ithings' ? 'iThings' : (type === 'mqtt' ? 'MQTT' : type.toUpperCase())));
+    return type === 'xunji' || type === 'sagoo'
+      ? 'Sagoo'
+      : (type === 'pandax' ? 'PandaX' : (type === 'ithings' ? 'iThings' : (type === 'mqtt' ? 'MQTT' : type.toUpperCase())));
   };
 
   const getSchemaTitle = () => {
     const type = form().type;
-    if (type === 'xunji') return '寻迹 Schema 配置';
+    if (type === 'xunji' || type === 'sagoo') return 'Sagoo Schema 配置';
     if (type === 'pandax') return 'PandaX Schema 配置';
     if (type === 'ithings') return 'iThings Schema 配置';
     if (type === 'mqtt') return 'MQTT Schema 配置';
@@ -528,7 +530,7 @@ export function Northbound() {
                     <option value="mqtt">MQTT</option>
                     <option value="pandax">PandaX</option>
                     <option value="ithings">iThings</option>
-                    <option value="xunji">寻迹</option>
+                    <option value="sagoo">Sagoo</option>
                   </select>
                 </div>
               </div>

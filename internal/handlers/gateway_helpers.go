@@ -14,8 +14,6 @@ func normalizeGatewayConfigInput(cfg *models.GatewayConfig) {
 	if cfg == nil {
 		return
 	}
-	cfg.ProductKey = strings.TrimSpace(cfg.ProductKey)
-	cfg.DeviceKey = strings.TrimSpace(cfg.DeviceKey)
 	cfg.GatewayName = strings.TrimSpace(cfg.GatewayName)
 	if cfg.GatewayName == "" {
 		cfg.GatewayName = defaultGatewayName
@@ -31,8 +29,6 @@ func toDatabaseGatewayConfig(cfg *models.GatewayConfig) *database.GatewayConfig 
 	}
 	return &database.GatewayConfig{
 		ID:                cfg.ID,
-		ProductKey:        cfg.ProductKey,
-		DeviceKey:         cfg.DeviceKey,
 		GatewayName:       cfg.GatewayName,
 		DataRetentionDays: cfg.DataRetentionDays,
 	}

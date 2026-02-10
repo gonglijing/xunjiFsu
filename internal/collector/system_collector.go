@@ -29,7 +29,7 @@ type SystemStatsCollector struct {
 
 var (
 	sysInstance *SystemStatsCollector
-	sysOnce    sync.Once
+	sysOnce     sync.Once
 )
 
 // GetSystemStatsCollector 获取系统属性采集器单例
@@ -371,22 +371,18 @@ func (c *SystemStatsCollector) getLoadAverage(stats *models.SystemStats) {
 
 // statsToCollectData 将系统属性转换为采集数据
 func (c *SystemStatsCollector) statsToCollectData(stats *models.SystemStats) *models.CollectData {
-	pk, dk := database.GetGatewayIdentity()
-
 	return &models.CollectData{
 		DeviceID:   models.SystemStatsDeviceID,
 		DeviceName: models.SystemStatsDeviceName,
-		ProductKey: pk,
-		DeviceKey:  dk,
 		Timestamp:  time.Unix(stats.Timestamp, 0),
 		Fields: map[string]string{
-			"cpu_usage":      fmt.Sprintf("%.2f", stats.CpuUsage),
-			"mem_total":      fmt.Sprintf("%.2f", stats.MemTotal),
-			"mem_used":       fmt.Sprintf("%.2f", stats.MemUsed),
-			"mem_usage":      fmt.Sprintf("%.2f", stats.MemUsage),
+			"cpu_usage":     fmt.Sprintf("%.2f", stats.CpuUsage),
+			"mem_total":     fmt.Sprintf("%.2f", stats.MemTotal),
+			"mem_used":      fmt.Sprintf("%.2f", stats.MemUsed),
+			"mem_usage":     fmt.Sprintf("%.2f", stats.MemUsage),
 			"mem_available": fmt.Sprintf("%.2f", stats.MemAvailable),
 			"disk_total":    fmt.Sprintf("%.2f", stats.DiskTotal),
-			"disk_used":      fmt.Sprintf("%.2f", stats.DiskUsed),
+			"disk_used":     fmt.Sprintf("%.2f", stats.DiskUsed),
 			"disk_usage":    fmt.Sprintf("%.2f", stats.DiskUsage),
 			"disk_free":     fmt.Sprintf("%.2f", stats.DiskFree),
 			"uptime":        fmt.Sprintf("%d", stats.Uptime),

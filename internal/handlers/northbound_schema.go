@@ -15,6 +15,9 @@ func (h *Handler) GetNorthboundSchema(w http.ResponseWriter, r *http.Request) {
 	if nbType == "" {
 		nbType = "pandax"
 	}
+	if nbType == northboundTypeXunJi {
+		nbType = northboundTypeSagoo
+	}
 
 	fields, ok := northboundschema.FieldsByType(nbType)
 	if !ok {
@@ -25,10 +28,10 @@ func (h *Handler) GetNorthboundSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"type":            nbType,
-		"schemaVersion":   northboundschema.XunJiSchemaVersion,
-		"supportedTypes":   northboundschema.SupportedNorthboundSchemaTypes,
-		"fields":          fields,
+		"type":           nbType,
+		"schemaVersion":  northboundschema.XunJiSchemaVersion,
+		"supportedTypes": northboundschema.SupportedNorthboundSchemaTypes,
+		"fields":         fields,
 	}
 
 	WriteSuccess(w, response)

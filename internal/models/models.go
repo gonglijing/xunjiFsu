@@ -26,8 +26,6 @@ type Resource struct {
 // GatewayConfig 网关配置模型
 type GatewayConfig struct {
 	ID                int64  `json:"id" db:"id"`
-	ProductKey        string `json:"product_key" db:"product_key"`
-	DeviceKey         string `json:"device_key" db:"device_key"`
 	GatewayName       string `json:"gateway_name" db:"gateway_name"`
 	DataRetentionDays int    `json:"data_retention_days" db:"data_retention_days"`
 }
@@ -281,16 +279,16 @@ type SystemStats struct {
 	MemUsage     float64 `json:"mem_usage"`     // 内存使用率 (%)
 	MemAvailable float64 `json:"mem_available"` // 可用内存 (MB)
 	// 硬盘
-	DiskTotal   float64 `json:"disk_total"`   // 硬盘总量 (GB)
-	DiskUsed    float64 `json:"disk_used"`    // 已使用硬盘 (GB)
-	DiskUsage   float64 `json:"disk_usage"`   // 硬盘使用率 (%)
-	DiskFree    float64 `json:"disk_free"`    // 可用硬盘 (GB)
+	DiskTotal float64 `json:"disk_total"` // 硬盘总量 (GB)
+	DiskUsed  float64 `json:"disk_used"`  // 已使用硬盘 (GB)
+	DiskUsage float64 `json:"disk_usage"` // 硬盘使用率 (%)
+	DiskFree  float64 `json:"disk_free"`  // 可用硬盘 (GB)
 	// 其他
-	Uptime      int64   `json:"uptime"`      // 运行时间 (秒)
-	Load1       float64 `json:"load_1"`       // 1分钟负载
-	Load5       float64 `json:"load_5"`       // 5分钟负载
-	Load15      float64 `json:"load_15"`      // 15分钟负载
-	Timestamp   int64   `json:"timestamp"`    // 采集时间戳
+	Uptime    int64   `json:"uptime"`    // 运行时间 (秒)
+	Load1     float64 `json:"load_1"`    // 1分钟负载
+	Load5     float64 `json:"load_5"`    // 5分钟负载
+	Load15    float64 `json:"load_15"`   // 15分钟负载
+	Timestamp int64   `json:"timestamp"` // 采集时间戳
 }
 
 // SystemStatsDeviceID FSU 系统属性的固定设备 ID

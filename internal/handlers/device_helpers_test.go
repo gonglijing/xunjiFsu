@@ -143,6 +143,27 @@ func TestBuildExecuteDriverConfig_Write(t *testing.T) {
 	}
 }
 
+func TestBuildExecuteDriverConfig_WriteWithoutIdentityDoesNotFallbackGateway(t *testing.T) {
+	params := map[string]interface{}{
+		"setpoint": 42,
+	}
+	device := &models.Device{
+		DeviceAddress: "1",
+	}
+
+	config, err := buildExecuteDriverConfig(params, device, "write")
+	if err != nil {
+		t.Fatalf("buildExecuteDriverConfig returned error: %v", err)
+	}
+
+	if got := config["product_key"]; got != "" {
+		t.Fatalf("product_key = %q, want empty", got)
+	}
+	if got := config["device_key"]; got != "" {
+		t.Fatalf("device_key = %q, want empty", got)
+	}
+}
+
 func TestBuildExecuteDriverContext(t *testing.T) {
 	resourceID := int64(9)
 	device := &models.Device{

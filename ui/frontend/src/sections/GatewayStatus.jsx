@@ -5,12 +5,13 @@ import { usePageLoader } from '../utils/pageLoader';
 import { getGatewayMetricsPollIntervalMs } from '../utils/runtimeConfig';
 
 const GATEWAY_METRICS_POLL_INTERVAL_MS = getGatewayMetricsPollIntervalMs();
-const NORTHBOUND_TYPE_ORDER = ['mqtt', 'pandax', 'ithings', 'xunji'];
+const NORTHBOUND_TYPE_ORDER = ['mqtt', 'pandax', 'ithings', 'sagoo'];
 const NORTHBOUND_TYPE_LABELS = {
   mqtt: 'MQTT',
   pandax: 'PandaX',
   ithings: 'iThings',
-  xunji: '寻迹',
+  sagoo: 'Sagoo',
+  xunji: 'Sagoo',
 };
 
 export function GatewayStatus() {

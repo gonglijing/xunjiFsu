@@ -13,7 +13,10 @@ const (
 
 const XunJiSchemaVersion = "1.0.0"
 
-var SupportedNorthboundSchemaTypes = []string{"xunji"}
+const NorthboundTypeSagoo = "sagoo"
+const NorthboundTypeXunJi = "xunji"
+
+var SupportedNorthboundSchemaTypes = []string{NorthboundTypeSagoo}
 
 // Field describes one config field in Terraform SDK Schema-like style.
 type Field struct {
@@ -38,7 +41,7 @@ var XunJiConfigSchema = []Field{
 
 func FieldsByType(nbType string) ([]Field, bool) {
 	switch strings.ToLower(strings.TrimSpace(nbType)) {
-	case "", "xunji":
+	case "", NorthboundTypeSagoo, NorthboundTypeXunJi:
 		return cloneFields(XunJiConfigSchema), true
 	case "mqtt":
 		return cloneFields(MQTTConfigSchema), true

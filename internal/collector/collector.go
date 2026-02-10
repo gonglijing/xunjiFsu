@@ -778,23 +778,11 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	if ts.IsZero() {
 		ts = time.Now()
 	}
-	productKey := device.ProductKey
-	deviceKey := device.DeviceKey
-	if productKey == "" || deviceKey == "" {
-		gwProductKey, gwDeviceKey := database.GetGatewayIdentity()
-		if productKey == "" {
-			productKey = gwProductKey
-		}
-		if deviceKey == "" {
-			deviceKey = gwDeviceKey
-		}
-	}
-
 	return &models.CollectData{
 		DeviceID:   device.ID,
 		DeviceName: device.Name,
-		ProductKey: productKey,
-		DeviceKey:  deviceKey,
+		ProductKey: strings.TrimSpace(device.ProductKey),
+		DeviceKey:  strings.TrimSpace(device.DeviceKey),
 		Timestamp:  ts,
 		Fields:     fields,
 	}

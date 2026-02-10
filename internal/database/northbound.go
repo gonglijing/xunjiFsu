@@ -266,6 +266,10 @@ func ensureNorthboundConfigColumns() error {
 		}
 	}
 
+	if _, err := ParamDB.Exec(`UPDATE northbound_configs SET type = 'sagoo' WHERE LOWER(TRIM(type)) = 'xunji'`); err != nil {
+		return err
+	}
+
 	northboundColumnsEnsured = true
 	return nil
 }

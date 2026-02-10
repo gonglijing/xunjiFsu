@@ -165,7 +165,7 @@ func (b *NorthboundConfigBuilder) Build() string {
 		if _, ok := b.config["connectTimeout"]; !ok {
 			b.config["connectTimeout"] = 30
 		}
-	case "xunji":
+	case "xunji", "sagoo":
 		if _, ok := b.config["serverUrl"]; !ok {
 			b.config["serverUrl"] = ""
 		}
@@ -272,7 +272,7 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 		builder.SetTimeout(cfg.Timeout)
 		builder.SetExtConfig(cfg.ExtConfig)
 
-	case "xunji":
+	case "xunji", "sagoo":
 		// 构建XunJi配置
 		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
 		builder.SetBrokerURL(serverURL)
@@ -384,7 +384,7 @@ func GetSupportedTypes() map[string][]string {
 			"keep_alive: 心跳周期秒数",
 			"timeout: 连接超时秒数",
 		},
-		"xunji": {
+		"sagoo": {
 			"server_url: 服务器地址",
 			"port: 端口 (默认1883)",
 			"product_key: 产品密钥",
@@ -440,15 +440,15 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 		if topic, ok := config["topic"].(string); !ok || strings.TrimSpace(topic) == "" {
 			return fmt.Errorf("topic is required for MQTT adapter")
 		}
-	case "xunji":
+	case "xunji", "sagoo":
 		if serverURL, ok := config["serverUrl"].(string); !ok || strings.TrimSpace(serverURL) == "" {
-			return fmt.Errorf("serverUrl is required for XunJi adapter")
+			return fmt.Errorf("serverUrl is required for Sagoo adapter")
 		}
 		if productKey, ok := config["productKey"].(string); !ok || strings.TrimSpace(productKey) == "" {
-			return fmt.Errorf("productKey is required for XunJi adapter")
+			return fmt.Errorf("productKey is required for Sagoo adapter")
 		}
 		if deviceKey, ok := config["deviceKey"].(string); !ok || strings.TrimSpace(deviceKey) == "" {
-			return fmt.Errorf("deviceKey is required for XunJi adapter")
+			return fmt.Errorf("deviceKey is required for Sagoo adapter")
 		}
 	case "pandax":
 		serverURL, _ := config["serverUrl"].(string)

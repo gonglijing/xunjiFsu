@@ -42,8 +42,6 @@ function renderAuditChanges(item) {
 function GatewayPage() {
   const toast = useToast();
   const [form, setForm] = createSignal({
-    product_key: '',
-    device_key: '',
     gateway_name: 'HuShu智能网关',
     data_retention_days: 30,
   });
@@ -67,8 +65,6 @@ function GatewayPage() {
       api.gateway.getGatewayRuntimeAudits(20),
     ]);
     setForm({
-      product_key: data.product_key || '',
-      device_key: data.device_key || '',
       gateway_name: data.gateway_name || 'HuShu智能网关',
       data_retention_days: data.data_retention_days || 30,
     });
@@ -168,28 +164,6 @@ function GatewayPage() {
             </div>
 
             <div class="form-group">
-              <label class="form-label">ProductKey <span style="color:var(--text-muted); font-weight:normal;">(产品标识)</span></label>
-              <input
-                class="form-input"
-                value={form().product_key}
-                onInput={(e) => setForm({ ...form(), product_key: e.target.value })}
-                placeholder="请输入产品密钥"
-              />
-              <div class="form-hint">用于北向平台身份认证</div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">DeviceKey <span style="color:var(--text-muted); font-weight:normal;">(设备标识)</span></label>
-              <input
-                class="form-input"
-                value={form().device_key}
-                onInput={(e) => setForm({ ...form(), device_key: e.target.value })}
-                placeholder="请输入设备密钥"
-              />
-              <div class="form-hint">用于北向平台设备认证</div>
-            </div>
-
-            <div class="form-group">
               <label class="form-label">历史数据保留天数</label>
               <input
                 class="form-input"
@@ -217,10 +191,8 @@ function GatewayPage() {
 
       <Card title="说明" style="margin-top:16px;">
         <div style="color:var(--text-secondary); font-size:0.875rem; line-height:1.8;">
-          <p><strong>ProductKey</strong>：网关产品的唯一标识符，用于区分不同型号的网关产品。</p>
-          <p><strong>DeviceKey</strong>：网关设备的唯一标识符，用于在同一产品下区分不同设备。</p>
           <p><strong>历史数据保留天数</strong>：全局生效，系统每天执行一次过期数据清理。</p>
-          <p>这两个密钥将在数据上报到北向平台时使用，用于设备认证和数据路由。</p>
+          <p><strong>ProductKey / DeviceKey</strong> 仅在 Sagoo 北向配置中设置。</p>
         </div>
       </Card>
 

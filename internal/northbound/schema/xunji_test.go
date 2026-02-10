@@ -6,22 +6,24 @@ import (
 )
 
 func TestXunJiConfigSchemaSupported(t *testing.T) {
-	_, ok := FieldsByType("xunji")
-	if !ok {
-		t.Fatalf("expected xunji schema supported")
+	for _, tp := range []string{"sagoo", "xunji"} {
+		_, ok := FieldsByType(tp)
+		if !ok {
+			t.Fatalf("expected %s schema supported", tp)
+		}
 	}
 }
 
 func TestXunJiConfigSchemaNonEmpty(t *testing.T) {
-	fields, _ := FieldsByType("xunji")
+	fields, _ := FieldsByType("sagoo")
 	if len(fields) == 0 {
-		t.Fatalf("expected non-empty xunji schema fields")
+		t.Fatalf("expected non-empty sagoo schema fields")
 	}
 }
 
 func TestCloneFieldsImmutability(t *testing.T) {
 	originKey := XunJiConfigSchema[0].Key
-	clone, _ := FieldsByType("xunji")
+	clone, _ := FieldsByType("sagoo")
 	clone[0].Key = "modified"
 
 	if XunJiConfigSchema[0].Key != originKey {
@@ -33,7 +35,7 @@ func TestSupportedTypes(t *testing.T) {
 	types := append([]string(nil), SupportedNorthboundSchemaTypes...)
 	sort.Strings(types)
 
-	expected := map[string]bool{"ithings": true, "mqtt": true, "pandax": true, "xunji": true}
+	expected := map[string]bool{"ithings": true, "mqtt": true, "pandax": true, "sagoo": true}
 	if len(types) != len(expected) {
 		t.Fatalf("unexpected supported types len, got: %v", types)
 	}

@@ -121,7 +121,7 @@ func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if cfg != nil {
 			item["id"] = cfg.ID
-			item["type"] = cfg.Type
+			item["type"] = normalizeNorthboundType(cfg.Type)
 			item["db_enabled"] = cfg.Enabled == 1
 			item["db_upload_interval"] = cfg.UploadInterval
 		}

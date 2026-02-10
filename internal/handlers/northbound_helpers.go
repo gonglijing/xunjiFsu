@@ -17,6 +17,7 @@ const (
 	northboundTypeMQTT    = "mqtt"
 	northboundTypePandaX  = "pandax"
 	northboundTypeIThings = "ithings"
+	northboundTypeSagoo   = "sagoo"
 	northboundTypeXunJi   = "xunji"
 )
 
@@ -29,14 +30,15 @@ var supportedNorthboundTypes = []string{
 	northboundTypeMQTT,
 	northboundTypePandaX,
 	northboundTypeIThings,
-	northboundTypeXunJi,
+	northboundTypeSagoo,
 }
 
 var northboundTypeDisplayName = map[string]string{
 	northboundTypeMQTT:    "MQTT",
 	northboundTypePandaX:  "PandaX",
 	northboundTypeIThings: "iThings",
-	northboundTypeXunJi:   "XunJi",
+	northboundTypeSagoo:   "Sagoo",
+	northboundTypeXunJi:   "Sagoo",
 }
 
 var northboundRequiredFieldRules = map[string][]requiredFieldRule{
@@ -44,7 +46,7 @@ var northboundRequiredFieldRules = map[string][]requiredFieldRule{
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "topic", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Topic) != "" }},
 	},
-	northboundTypeXunJi: {
+	northboundTypeSagoo: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "product_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ProductKey) != "" }},
 		{fieldName: "device_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.DeviceKey) != "" }},
@@ -112,7 +114,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		return
 	}
 	config.Name = strings.TrimSpace(config.Name)
-	config.Type = strings.TrimSpace(config.Type)
+	config.Type = normalizeNorthboundType(config.Type)
 	config.ServerURL = strings.TrimSpace(config.ServerURL)
 	config.Path = strings.TrimSpace(config.Path)
 	config.Username = strings.TrimSpace(config.Username)
@@ -133,7 +135,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		switch config.Type {
 		case "http":
 			config.Port = 80
-		case northboundTypeMQTT, northboundTypeXunJi, northboundTypePandaX, northboundTypeIThings:
+		case northboundTypeMQTT, northboundTypeSagoo, northboundTypePandaX, northboundTypeIThings:
 			config.Port = 1883
 		}
 	}
@@ -159,9 +161,9 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 		return fmt.Errorf("type is required")
 	}
 
-	config.Type = strings.ToLower(config.Type)
+	config.Type = normalizeNorthboundType(config.Type)
 	if !isSupportedNorthboundType(config.Type) {
-		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, ithings, xunji", config.Type)
+		return fmt.Errorf("invalid type: %s, must be one of: mqtt, pandax, ithings, sagoo", config.Type)
 	}
 
 	// 如果有 config JSON 字段，验证 schema
@@ -176,6 +178,14 @@ func validateNorthboundConfig(config *models.NorthboundConfig) error {
 	}
 
 	return nil
+}
+
+func normalizeNorthboundType(raw string) string {
+	nbType := strings.ToLower(strings.TrimSpace(raw))
+	if nbType == northboundTypeXunJi {
+		return northboundTypeSagoo
+	}
+	return nbType
 }
 
 func isSupportedNorthboundType(nbType string) bool {
@@ -249,6 +259,8 @@ func (h *Handler) buildNorthboundConfigView(config *models.NorthboundConfig) *no
 	if config == nil {
 		return nil
 	}
+
+	config.Type = normalizeNorthboundType(config.Type)
 
 	runtime := northboundRuntimeView{
 		Registered:     h.northboundMgr.HasAdapter(config.Name),

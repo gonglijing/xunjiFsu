@@ -57,6 +57,8 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 		return NewPandaXAdapter(name)
 	case "ithings":
 		return NewIThingsAdapter(name)
+	case "sagoo":
+		return NewXunJiAdapter(name)
 	case "xunji":
 		return NewXunJiAdapter(name)
 	default:
@@ -66,5 +68,5 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 
 // SupportedTypes 返回支持的北向类型
 func SupportedTypes() []string {
-	return []string{"mqtt", "pandax", "ithings", "xunji"}
+	return []string{"mqtt", "pandax", "ithings", "sagoo"}
 }

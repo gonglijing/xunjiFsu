@@ -113,7 +113,7 @@ func (a *XunJiAdapter) Name() string {
 
 // Type 获取类型
 func (a *XunJiAdapter) Type() string {
-	return "xunji"
+	return "sagoo"
 }
 
 // Initialize 初始化
@@ -907,7 +907,7 @@ func (a *XunJiAdapter) GetStats() map[string]interface{} {
 
 	return map[string]interface{}{
 		"name":          a.name,
-		"type":          "xunji",
+		"type":          "sagoo",
 		"enabled":       a.enabled,
 		"initialized":   a.initialized,
 		"connected":     a.connected && a.client != nil && a.client.IsConnected(),

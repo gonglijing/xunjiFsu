@@ -533,9 +533,6 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 
 	log.Printf("[PandaX-%s] fetchAndPublishLatestData: 获取到 %d 条数据", a.name, len(devices))
 
-	// 获取网关身份
-	gwPK, gwDK := database.GetGatewayIdentity()
-
 	successCount := 0
 	systemStatsCount := 0
 
@@ -551,8 +548,6 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 		data := &models.CollectData{
 			DeviceID:   dev.DeviceID,
 			DeviceName: dev.DeviceName,
-			ProductKey: gwPK,
-			DeviceKey:  gwDK,
 			Timestamp:  dev.CollectedAt,
 			Fields:     dev.Fields,
 		}
@@ -575,7 +570,7 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 
 	// 如果没有系统属性数据，尝试获取当前系统属性
 	if systemStatsCount == 0 {
-		if sysData := a.fetchCurrentSystemStats(gwPK, gwDK); sysData != nil {
+		if sysData := a.fetchCurrentSystemStats(); sysData != nil {
 			a.dataMu.Lock()
 			a.enqueueRealtimeLocked(sysData)
 			queueLen := len(a.realtimeQueue)
@@ -596,7 +591,7 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 }
 
 // fetchCurrentSystemStats 获取当前系统属性
-func (a *PandaXAdapter) fetchCurrentSystemStats(productKey, deviceKey string) *models.CollectData {
+func (a *PandaXAdapter) fetchCurrentSystemStats() *models.CollectData {
 	a.mu.RLock()
 	provider := a.systemStatsProvider
 	a.mu.RUnlock()
@@ -615,8 +610,6 @@ func (a *PandaXAdapter) fetchCurrentSystemStats(productKey, deviceKey string) *m
 	return &models.CollectData{
 		DeviceID:   models.SystemStatsDeviceID,
 		DeviceName: models.SystemStatsDeviceName,
-		ProductKey: productKey,
-		DeviceKey:  deviceKey,
 		Timestamp:  time.Unix(0, stats.Timestamp*int64(time.Millisecond)),
 		Fields: map[string]string{
 			"cpu_usage":     fmt.Sprintf("%.2f", stats.CpuUsage),

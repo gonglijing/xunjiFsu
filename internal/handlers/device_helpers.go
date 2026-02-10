@@ -125,15 +125,6 @@ func enrichExecuteIdentity(config map[string]string, device *models.Device) {
 
 	productKey := strings.TrimSpace(device.ProductKey)
 	deviceKey := strings.TrimSpace(device.DeviceKey)
-	if productKey == "" || deviceKey == "" {
-		gwProductKey, gwDeviceKey := database.GetGatewayIdentity()
-		if productKey == "" {
-			productKey = gwProductKey
-		}
-		if deviceKey == "" {
-			deviceKey = gwDeviceKey
-		}
-	}
 
 	if productKey != "" {
 		config["product_key"] = productKey
