@@ -744,15 +744,7 @@ func (a *PandaXAdapter) buildBatchRealtimePublish(batch []*models.CollectData) (
 	}
 
 	body, _ := json.Marshal(payload)
-
-	// 记录 payload 预览
-	var preview string
-	if len(body) > 200 {
-		preview = string(body[:200]) + "..."
-	} else {
-		preview = string(body)
-	}
-	log.Printf("[PandaX-%s] buildBatchRealtimePublish: deviceCount=%d, payload=%s", a.name, len(payload), preview)
+	log.Printf("[PandaX-%s] buildBatchRealtimePublish: deviceCount=%d, payloadSize=%d", a.name, len(payload), len(body))
 
 	return topic, body
 }
@@ -837,15 +829,7 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 		return fmt.Errorf("mqtt client not connected")
 	}
 
-	// 记录 payload 大小
-	payloadSize := len(payload)
-	var payloadPreview string
-	if payloadSize > 100 {
-		payloadPreview = string(payload[:100]) + "..."
-	} else {
-		payloadPreview = string(payload)
-	}
-	log.Printf("[PandaX-%s] publish: topic=%s, size=%d, payload=%s", a.name, topic, payloadSize, payloadPreview)
+	log.Printf("[PandaX-%s] publish: topic=%s, size=%d", a.name, topic, len(payload))
 
 	token := client.Publish(topic, qos, retain, payload)
 	if !token.WaitTimeout(timeout) {
