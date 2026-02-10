@@ -412,6 +412,32 @@ nav .container {
   border-bottom: 1px solid var(--border-color);
 }
 
+.card-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-extra .btn,
+.card-extra .form-input,
+.card-extra .form-select {
+  height: 30px;
+  min-height: 30px;
+}
+
+.card-extra .btn {
+  padding: 0 10px;
+  border-radius: 7px;
+}
+
+.card-extra .form-input,
+.card-extra .form-select {
+  padding: 0 10px;
+  font-size: 0.75rem;
+  border-radius: 7px;
+}
+
 .card-title {
   font-size: 1.125rem;
   font-weight: 600;
@@ -931,7 +957,7 @@ tbody tr:last-child td {
   font-size: 1.25rem;
 }
 
-.card-header .btn-ghost {
+.card-header .btn-only-icon {
   font-size: 1.25rem;
   border-radius: 8px;
   width: 36px;
@@ -941,7 +967,7 @@ tbody tr:last-child td {
   justify-content: center;
 }
 
-.card-header .btn-ghost:hover {
+.card-header .btn-only-icon:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
