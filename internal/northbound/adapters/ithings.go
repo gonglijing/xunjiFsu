@@ -330,11 +330,10 @@ func (a *IThingsAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, e
 		limit = len(a.commandQueue)
 	}
 
-	items := make([]*models.NorthboundCommand, 0, limit)
-	for i := 0; i < limit; i++ {
-		items = append(items, a.commandQueue[0])
-		a.commandQueue = a.commandQueue[1:]
-	}
+	items := make([]*models.NorthboundCommand, limit)
+	copy(items, a.commandQueue[:limit])
+	clear(a.commandQueue[:limit])
+	a.commandQueue = a.commandQueue[limit:]
 
 	return items, nil
 }
@@ -517,9 +516,8 @@ func (a *IThingsAdapter) flushRealtime() error {
 		return nil
 	}
 	batch := make([]*models.CollectData, len(a.realtimeQueue))
-	for i := 0; i < len(a.realtimeQueue); i++ {
-		batch[i] = cloneCollectData(a.realtimeQueue[i])
-	}
+	copy(batch, a.realtimeQueue)
+	clear(a.realtimeQueue)
 	a.realtimeQueue = a.realtimeQueue[:0]
 	a.dataMu.Unlock()
 
@@ -554,11 +552,10 @@ func (a *IThingsAdapter) flushAlarmBatch() error {
 		count = len(a.alarmQueue)
 	}
 
-	batch := make([]*models.AlarmPayload, 0, count)
-	for i := 0; i < count; i++ {
-		batch = append(batch, cloneAlarmPayload(a.alarmQueue[0]))
-		a.alarmQueue = a.alarmQueue[1:]
-	}
+	batch := make([]*models.AlarmPayload, count)
+	copy(batch, a.alarmQueue[:count])
+	clear(a.alarmQueue[:count])
+	a.alarmQueue = a.alarmQueue[count:]
 	a.alarmMu.Unlock()
 
 	for _, item := range batch {
@@ -794,6 +791,7 @@ func (a *IThingsAdapter) handleDownlink(_ mqtt.Client, message mqtt.Message) {
 			continue
 		}
 		if len(a.commandQueue) >= a.commandCap && len(a.commandQueue) > 0 {
+			a.commandQueue[0] = nil
 			a.commandQueue = a.commandQueue[1:]
 		}
 		a.commandQueue = append(a.commandQueue, cmd)
@@ -935,6 +933,7 @@ func (a *IThingsAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 		a.realtimeCap = defaultRealtimeQueue
 	}
 	if len(a.realtimeQueue) >= a.realtimeCap {
+		a.realtimeQueue[0] = nil
 		a.realtimeQueue = a.realtimeQueue[1:]
 	}
 	a.realtimeQueue = append(a.realtimeQueue, item)
@@ -964,6 +963,7 @@ func (a *IThingsAdapter) enqueueAlarmLocked(item *models.AlarmPayload) {
 		a.alarmCap = defaultAlarmQueue
 	}
 	if len(a.alarmQueue) >= a.alarmCap {
+		a.alarmQueue[0] = nil
 		a.alarmQueue = a.alarmQueue[1:]
 	}
 	a.alarmQueue = append(a.alarmQueue, item)
@@ -1027,70 +1027,80 @@ func parseIThingsConfig(configStr string) (*IThingsConfig, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	cfg := &IThingsConfig{}
-	cfg.ServerURL = strings.TrimSpace(iThingsPickString(raw, "serverUrl", "broker", "server_url"))
-	cfg.Username = strings.TrimSpace(iThingsPickString(raw, "username"))
-	cfg.Password = strings.TrimSpace(iThingsPickString(raw, "password"))
-	cfg.ClientID = strings.TrimSpace(iThingsPickString(raw, "clientId", "client_id"))
-	cfg.QOS = iThingsPickInt(raw, 0, "qos")
-	cfg.Retain = iThingsPickBool(raw, false, "retain")
-	cfg.KeepAlive = iThingsPickInt(raw, 60, "keepAlive", "keep_alive")
-	cfg.Timeout = iThingsPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout")
+	cfg := &IThingsConfig{
+		ServerURL:               strings.TrimSpace(pickConfigString(raw, "serverUrl", "broker", "server_url")),
+		Username:                strings.TrimSpace(pickConfigString(raw, "username")),
+		Password:                strings.TrimSpace(pickConfigString(raw, "password")),
+		ClientID:                strings.TrimSpace(pickConfigString(raw, "clientId", "client_id")),
+		QOS:                     pickConfigInt(raw, 0, "qos"),
+		Retain:                  pickConfigBool(raw, false, "retain"),
+		KeepAlive:               pickConfigInt(raw, 60, "keepAlive", "keep_alive"),
+		Timeout:                 pickConfigInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:        pickConfigInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
+		AlarmFlushIntervalMs:    pickConfigInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs"),
+		AlarmBatchSize:          pickConfigInt(raw, defaultAlarmBatch, "alarmBatchSize"),
+		AlarmQueueSize:          pickConfigInt(raw, defaultAlarmQueue, "alarmQueueSize"),
+		RealtimeQueueSize:       pickConfigInt(raw, defaultRealtimeQueue, "realtimeQueueSize"),
+		GatewayMode:             pickConfigBool(raw, true, "gatewayMode"),
+		ProductKey:              strings.TrimSpace(pickConfigString(raw, "productKey", "productID", "product_id")),
+		DeviceKey:               strings.TrimSpace(pickConfigString(raw, "deviceKey", "deviceName", "device_name")),
+		DeviceNameMode:          strings.TrimSpace(pickConfigString(raw, "deviceNameMode")),
+		SubDeviceNameMode:       strings.TrimSpace(pickConfigString(raw, "subDeviceNameMode")),
+		UpPropertyTopicTemplate: strings.TrimSpace(pickConfigString(raw, "upPropertyTopicTemplate")),
+		UpEventTopicTemplate:    strings.TrimSpace(pickConfigString(raw, "upEventTopicTemplate")),
+		UpActionTopicTemplate:   strings.TrimSpace(pickConfigString(raw, "upActionTopicTemplate")),
+		DownPropertyTopic:       strings.TrimSpace(pickConfigString(raw, "downPropertyTopic")),
+		DownActionTopic:         strings.TrimSpace(pickConfigString(raw, "downActionTopic")),
+		AlarmEventID:            strings.TrimSpace(pickConfigString(raw, "alarmEventID")),
+		AlarmEventType:          strings.TrimSpace(pickConfigString(raw, "alarmEventType")),
+	}
 
-	cfg.UploadIntervalMs = iThingsPickInt(raw, 5000, "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs")
-	cfg.AlarmFlushIntervalMs = iThingsPickInt(raw, 2000, "alarmFlushIntervalMs")
-	cfg.AlarmBatchSize = iThingsPickInt(raw, 20, "alarmBatchSize")
-	cfg.AlarmQueueSize = iThingsPickInt(raw, 1000, "alarmQueueSize")
-	cfg.RealtimeQueueSize = iThingsPickInt(raw, 1000, "realtimeQueueSize")
-	cfg.CommandQueueSize = iThingsPickInt(raw, cfg.RealtimeQueueSize, "commandQueueSize")
+	cfg.CommandQueueSize = pickConfigInt(raw, cfg.RealtimeQueueSize, "commandQueueSize")
 
-	cfg.GatewayMode = iThingsPickBool(raw, true, "gatewayMode")
-	cfg.ProductKey = strings.TrimSpace(iThingsPickString(raw, "productKey", "productID", "product_id"))
-	cfg.DeviceKey = strings.TrimSpace(iThingsPickString(raw, "deviceKey", "deviceName", "device_name"))
-	cfg.DeviceNameMode = strings.TrimSpace(iThingsPickString(raw, "deviceNameMode"))
-	cfg.SubDeviceNameMode = strings.TrimSpace(iThingsPickString(raw, "subDeviceNameMode"))
+	if err := normalizeIThingsConfig(cfg); err != nil {
+		return nil, err
+	}
 
-	cfg.UpPropertyTopicTemplate = strings.TrimSpace(iThingsPickString(raw, "upPropertyTopicTemplate"))
-	cfg.UpEventTopicTemplate = strings.TrimSpace(iThingsPickString(raw, "upEventTopicTemplate"))
-	cfg.UpActionTopicTemplate = strings.TrimSpace(iThingsPickString(raw, "upActionTopicTemplate"))
-	cfg.DownPropertyTopic = strings.TrimSpace(iThingsPickString(raw, "downPropertyTopic"))
-	cfg.DownActionTopic = strings.TrimSpace(iThingsPickString(raw, "downActionTopic"))
+	return cfg, nil
+}
 
-	cfg.AlarmEventID = strings.TrimSpace(iThingsPickString(raw, "alarmEventID"))
-	cfg.AlarmEventType = strings.TrimSpace(iThingsPickString(raw, "alarmEventType"))
+func normalizeIThingsConfig(cfg *IThingsConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
 
 	if cfg.ServerURL == "" {
-		return nil, fmt.Errorf("serverUrl is required")
+		return fmt.Errorf("serverUrl is required")
 	}
 	if cfg.Username == "" {
-		return nil, fmt.Errorf("username is required")
+		return fmt.Errorf("username is required")
 	}
 	if cfg.ProductKey == "" {
-		return nil, fmt.Errorf("productKey is required")
+		return fmt.Errorf("productKey is required")
 	}
 	if cfg.DeviceKey == "" {
-		return nil, fmt.Errorf("deviceKey is required")
+		return fmt.Errorf("deviceKey is required")
 	}
 	if !cfg.GatewayMode {
-		return nil, fmt.Errorf("iThings adapter only supports gatewayMode=true")
+		return fmt.Errorf("iThings adapter only supports gatewayMode=true")
 	}
 	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return nil, fmt.Errorf("qos must be between 0 and 2")
+		return fmt.Errorf("qos must be between 0 and 2")
 	}
 	if cfg.UploadIntervalMs <= 0 {
-		cfg.UploadIntervalMs = 5000
+		cfg.UploadIntervalMs = int(defaultReportInterval.Milliseconds())
 	}
 	if cfg.AlarmFlushIntervalMs <= 0 {
-		cfg.AlarmFlushIntervalMs = 2000
+		cfg.AlarmFlushIntervalMs = int(defaultAlarmInterval.Milliseconds())
 	}
 	if cfg.AlarmBatchSize <= 0 {
-		cfg.AlarmBatchSize = 20
+		cfg.AlarmBatchSize = defaultAlarmBatch
 	}
 	if cfg.AlarmQueueSize <= 0 {
-		cfg.AlarmQueueSize = 1000
+		cfg.AlarmQueueSize = defaultAlarmQueue
 	}
 	if cfg.RealtimeQueueSize <= 0 {
-		cfg.RealtimeQueueSize = 1000
+		cfg.RealtimeQueueSize = defaultRealtimeQueue
 	}
 	if cfg.CommandQueueSize <= 0 {
 		cfg.CommandQueueSize = cfg.RealtimeQueueSize
@@ -1124,19 +1134,7 @@ func parseIThingsConfig(configStr string) (*IThingsConfig, error) {
 		cfg.SubDeviceNameMode = cfg.DeviceNameMode
 	}
 
-	return cfg, nil
-}
-
-func iThingsPickString(data map[string]interface{}, keys ...string) string {
-	return pickConfigString(data, keys...)
-}
-
-func iThingsPickInt(data map[string]interface{}, fallback int, keys ...string) int {
-	return pickConfigInt(data, fallback, keys...)
-}
-
-func iThingsPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
-	return pickConfigBool(data, fallback, keys...)
+	return nil
 }
 
 func parseIThingsDownTopic(topic string) (topicType, productID, deviceName string) {
