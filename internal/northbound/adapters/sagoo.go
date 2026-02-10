@@ -326,12 +326,10 @@ func (a *SagooAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, err
 		limit = len(a.commandQueue)
 	}
 
-	out := make([]*models.NorthboundCommand, 0, limit)
-	for i := 0; i < limit; i++ {
-		cmd := a.commandQueue[0]
-		a.commandQueue = a.commandQueue[1:]
-		out = append(out, cmd)
-	}
+	out := make([]*models.NorthboundCommand, limit)
+	copy(out, a.commandQueue[:limit])
+	clear(a.commandQueue[:limit])
+	a.commandQueue = a.commandQueue[limit:]
 
 	return out, nil
 }
@@ -453,16 +451,15 @@ func (a *SagooAdapter) flushLatestData() error {
 		return nil
 	}
 	batch := make([]*models.CollectData, len(a.latestData))
-	for i := 0; i < len(a.latestData); i++ {
-		batch[i] = cloneCollectData(a.latestData[i])
-	}
+	copy(batch, a.latestData)
+	clear(a.latestData)
 	a.latestData = a.latestData[:0]
 	topic := a.topic
 	a.dataMu.Unlock()
 
 	for _, data := range batch {
 		message := a.buildMessage(data)
-		if err := a.publish(topic, []byte(message)); err != nil {
+		if err := a.publish(topic, message); err != nil {
 			a.dataMu.Lock()
 			a.prependRealtime(batch)
 			a.dataMu.Unlock()
@@ -486,13 +483,14 @@ func (a *SagooAdapter) flushAlarmBatch() error {
 	}
 	batch := make([]*models.AlarmPayload, count)
 	copy(batch, a.alarmQueue[:count])
+	clear(a.alarmQueue[:count])
 	a.alarmQueue = a.alarmQueue[count:]
 	topic := a.alarmTopic
 	a.alarmMu.Unlock()
 
 	for _, alarm := range batch {
 		message := a.buildAlarmMessage(alarm)
-		if err := a.publish(topic, []byte(message)); err != nil {
+		if err := a.publish(topic, message); err != nil {
 			a.alarmMu.Lock()
 			a.prependAlarms(batch)
 			a.alarmMu.Unlock()
@@ -504,12 +502,12 @@ func (a *SagooAdapter) flushAlarmBatch() error {
 }
 
 // buildMessage 构建循迹消息
-func (a *SagooAdapter) buildMessage(data *models.CollectData) string {
+func (a *SagooAdapter) buildMessage(data *models.CollectData) []byte {
 	if data == nil {
-		return "{}"
+		return []byte("{}")
 	}
 
-	properties := make(map[string]interface{})
+	properties := make(map[string]interface{}, len(data.Fields))
 	for key, value := range data.Fields {
 		properties[key] = convertFieldValue(value)
 	}
@@ -548,13 +546,13 @@ func (a *SagooAdapter) buildMessage(data *models.CollectData) string {
 	}
 
 	jsonBytes, _ := json.Marshal(msg)
-	return string(jsonBytes)
+	return jsonBytes
 }
 
 // buildAlarmMessage 构建报警消息
-func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
+func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) []byte {
 	if alarm == nil {
-		return "{}"
+		return []byte("{}")
 	}
 
 	defaultPK, defaultDK := a.defaultIdentity()
@@ -600,7 +598,7 @@ func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) string {
 	}
 
 	jsonBytes, _ := json.Marshal(msg)
-	return string(jsonBytes)
+	return jsonBytes
 }
 
 // publish 发布MQTT消息
@@ -797,6 +795,7 @@ func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 			Source:     "sagoo.property.set",
 		}
 		if len(a.commandQueue) >= a.commandCap && len(a.commandQueue) > 0 {
+			a.commandQueue[0] = nil
 			a.commandQueue = a.commandQueue[1:]
 		}
 		a.commandQueue = append(a.commandQueue, command)
@@ -832,6 +831,7 @@ func (a *SagooAdapter) enqueueRealtimeLocked(item *models.CollectData) {
 		a.realtimeCap = defaultRealtimeQueue
 	}
 	if len(a.latestData) >= a.realtimeCap {
+		a.latestData[0] = nil
 		a.latestData = a.latestData[1:]
 	}
 	a.latestData = append(a.latestData, item)
@@ -861,6 +861,7 @@ func (a *SagooAdapter) enqueueAlarmLocked(alarm *models.AlarmPayload) {
 		a.alarmCap = defaultAlarmQueue
 	}
 	if len(a.alarmQueue) >= a.alarmCap {
+		a.alarmQueue[0] = nil
 		a.alarmQueue = a.alarmQueue[1:]
 	}
 	a.alarmQueue = append(a.alarmQueue, alarm)
@@ -939,46 +940,57 @@ func parseSagooConfig(configStr string) (*SagooConfig, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	cfg := &SagooConfig{}
-	cfg.ProductKey = strings.TrimSpace(sagooPickString(raw, "productKey", "product_key", "productID", "product_id"))
-	cfg.DeviceKey = strings.TrimSpace(sagooPickString(raw, "deviceKey", "device_key", "deviceName", "device_name"))
+	cfg := &SagooConfig{
+		ProductKey:           strings.TrimSpace(pickConfigString(raw, "productKey", "product_key", "productID", "product_id")),
+		DeviceKey:            strings.TrimSpace(pickConfigString(raw, "deviceKey", "device_key", "deviceName", "device_name")),
+		Username:             strings.TrimSpace(pickConfigString(raw, "username")),
+		Password:             strings.TrimSpace(pickConfigString(raw, "password")),
+		Topic:                strings.TrimSpace(pickConfigString(raw, "topic")),
+		AlarmTopic:           strings.TrimSpace(pickConfigString(raw, "alarmTopic", "alarm_topic")),
+		ClientID:             strings.TrimSpace(pickConfigString(raw, "clientId", "client_id")),
+		QOS:                  pickConfigInt(raw, 0, "qos"),
+		Retain:               pickConfigBool(raw, false, "retain"),
+		KeepAlive:            pickConfigInt(raw, 60, "keepAlive", "keep_alive"),
+		Timeout:              pickConfigInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:     pickConfigInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms"),
+		ReportIntervalMs:     pickConfigInt(raw, 0, "reportIntervalMs", "report_interval_ms"),
+		AlarmFlushIntervalMs: pickConfigInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs", "alarm_flush_interval_ms"),
+		AlarmBatchSize:       pickConfigInt(raw, defaultAlarmBatch, "alarmBatchSize", "alarm_batch_size"),
+		AlarmQueueSize:       pickConfigInt(raw, defaultAlarmQueue, "alarmQueueSize", "alarm_queue_size"),
+		RealtimeQueueSize:    pickConfigInt(raw, defaultRealtimeQueue, "realtimeQueueSize", "realtime_queue_size"),
+	}
+
 	cfg.ServerURL = normalizeServerURLWithPort(
-		sagooPickString(raw, "serverUrl", "server_url", "broker"),
-		sagooPickString(raw, "protocol"),
-		sagooPickInt(raw, 0, "port"),
+		pickConfigString(raw, "serverUrl", "server_url", "broker"),
+		pickConfigString(raw, "protocol"),
+		pickConfigInt(raw, 0, "port"),
 	)
-	cfg.Username = strings.TrimSpace(sagooPickString(raw, "username"))
-	cfg.Password = strings.TrimSpace(sagooPickString(raw, "password"))
-	cfg.Topic = strings.TrimSpace(sagooPickString(raw, "topic"))
-	cfg.AlarmTopic = strings.TrimSpace(sagooPickString(raw, "alarmTopic", "alarm_topic"))
-	cfg.ClientID = strings.TrimSpace(sagooPickString(raw, "clientId", "client_id"))
-	cfg.QOS = sagooPickInt(raw, 0, "qos")
-	cfg.Retain = sagooPickBool(raw, false, "retain")
-	cfg.KeepAlive = sagooPickInt(raw, 60, "keepAlive", "keep_alive")
-	cfg.Timeout = sagooPickInt(raw, 10, "connectTimeout", "connect_timeout", "timeout")
-	cfg.UploadIntervalMs = sagooPickInt(raw, 5000, "uploadIntervalMs", "upload_interval_ms")
-	cfg.ReportIntervalMs = sagooPickInt(raw, 0, "reportIntervalMs", "report_interval_ms")
-	cfg.AlarmFlushIntervalMs = sagooPickInt(raw, 2000, "alarmFlushIntervalMs", "alarm_flush_interval_ms")
-	cfg.AlarmBatchSize = sagooPickInt(raw, 20, "alarmBatchSize", "alarm_batch_size")
-	cfg.AlarmQueueSize = sagooPickInt(raw, 1000, "alarmQueueSize", "alarm_queue_size")
-	cfg.RealtimeQueueSize = sagooPickInt(raw, 1000, "realtimeQueueSize", "realtime_queue_size")
+
+	if err := normalizeSagooConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func normalizeSagooConfig(cfg *SagooConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
 
 	if cfg.ProductKey == "" {
-		return nil, fmt.Errorf("productKey is required")
+		return fmt.Errorf("productKey is required")
 	}
 	if cfg.DeviceKey == "" {
-		return nil, fmt.Errorf("deviceKey is required")
+		return fmt.Errorf("deviceKey is required")
 	}
 	if cfg.ServerURL == "" {
-		return nil, fmt.Errorf("serverUrl is required")
+		return fmt.Errorf("serverUrl is required")
 	}
 	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return nil, fmt.Errorf("qos must be between 0 and 2")
+		return fmt.Errorf("qos must be between 0 and 2")
 	}
-	// 设置默认值
-	if cfg.QOS <= 0 {
-		cfg.QOS = 0
-	}
+
 	if cfg.KeepAlive <= 0 {
 		cfg.KeepAlive = 60
 	}
@@ -986,34 +998,22 @@ func parseSagooConfig(configStr string) (*SagooConfig, error) {
 		cfg.Timeout = 10
 	}
 	if cfg.UploadIntervalMs <= 0 && cfg.ReportIntervalMs <= 0 {
-		cfg.UploadIntervalMs = 5000
+		cfg.UploadIntervalMs = int(defaultReportInterval.Milliseconds())
 	}
 	if cfg.AlarmFlushIntervalMs <= 0 {
-		cfg.AlarmFlushIntervalMs = 2000
+		cfg.AlarmFlushIntervalMs = int(defaultAlarmInterval.Milliseconds())
 	}
 	if cfg.AlarmBatchSize <= 0 {
-		cfg.AlarmBatchSize = 20
+		cfg.AlarmBatchSize = defaultAlarmBatch
 	}
 	if cfg.AlarmQueueSize <= 0 {
-		cfg.AlarmQueueSize = 1000
+		cfg.AlarmQueueSize = defaultAlarmQueue
 	}
 	if cfg.RealtimeQueueSize <= 0 {
-		cfg.RealtimeQueueSize = 1000
+		cfg.RealtimeQueueSize = defaultRealtimeQueue
 	}
 
-	return cfg, nil
-}
-
-func sagooPickString(data map[string]interface{}, keys ...string) string {
-	return pickConfigString(data, keys...)
-}
-
-func sagooPickInt(data map[string]interface{}, fallback int, keys ...string) int {
-	return pickConfigInt(data, fallback, keys...)
-}
-
-func sagooPickBool(data map[string]interface{}, fallback bool, keys ...string) bool {
-	return pickConfigBool(data, fallback, keys...)
+	return nil
 }
 
 func cloneCollectData(data *models.CollectData) *models.CollectData {
@@ -1027,7 +1027,7 @@ func cloneCollectData(data *models.CollectData) *models.CollectData {
 			out.Fields[key] = value
 		}
 	} else {
-		out.Fields = map[string]string{}
+		out.Fields = nil
 	}
 	return &out
 }

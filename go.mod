@@ -7,7 +7,6 @@ require (
 	github.com/extism/go-sdk v1.7.1
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	go.bug.st/serial v1.6.2
 	golang.org/x/crypto v0.42.0
@@ -18,7 +17,6 @@ require (
 	github.com/creack/goselect v0.1.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect
-	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect

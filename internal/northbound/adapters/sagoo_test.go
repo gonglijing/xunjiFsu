@@ -3,6 +3,8 @@ package adapters
 import (
 	"testing"
 	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func TestExtractCommandProperties_DirectParams(t *testing.T) {
@@ -171,5 +173,37 @@ func TestParseSagooConfig_Defaults(t *testing.T) {
 	}
 	if cfg.AlarmFlushIntervalMs != int((2 * time.Second).Milliseconds()) {
 		t.Fatalf("default alarm flush mismatch: %d", cfg.AlarmFlushIntervalMs)
+	}
+}
+
+func TestPullCommands_ClearPoppedReferences(t *testing.T) {
+	adapter := NewSagooAdapter("sagoo-test")
+	adapter.initialized = true
+	adapter.commandQueue = []*models.NorthboundCommand{
+		{RequestID: "1"},
+		{RequestID: "2"},
+		{RequestID: "3"},
+	}
+
+	commands, err := adapter.PullCommands(2)
+	if err != nil {
+		t.Fatalf("PullCommands() error = %v", err)
+	}
+	if len(commands) != 2 {
+		t.Fatalf("len(commands)=%d, want=2", len(commands))
+	}
+	if len(adapter.commandQueue) != 1 {
+		t.Fatalf("remaining queue=%d, want=1", len(adapter.commandQueue))
+	}
+}
+
+func TestCloneCollectData_EmptyFieldsNil(t *testing.T) {
+	in := &models.CollectData{DeviceID: 1, Fields: map[string]string{}}
+	out := cloneCollectData(in)
+	if out == nil {
+		t.Fatal("cloneCollectData() returned nil")
+	}
+	if out.Fields != nil {
+		t.Fatalf("out.Fields expected nil, got %#v", out.Fields)
 	}
 }
