@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config 应用配置
@@ -134,7 +132,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// loadFromFile 从 YAML 文件加载配置
+// loadFromFile 从 YAML 文件加载配置（仅解析本项目使用的简单层级键值）
 func loadFromFile(cfg *Config) error {
 	// 查找配置文件路径
 	configPaths := []string{
@@ -155,76 +153,139 @@ func loadFromFile(cfg *Config) error {
 		return fmt.Errorf("config file not found")
 	}
 
-	// 读取并解析 YAML 文件
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// 临时结构体用于解析 YAML
-	type yamlConfig struct {
-		Server struct {
-			Addr         string `yaml:"addr"`
-			ReadTimeout  string `yaml:"read_timeout"`
-			WriteTimeout string `yaml:"write_timeout"`
-		} `yaml:"server"`
-		Drivers struct {
-			Dir               string `yaml:"dir"`
-			CallTimeout       string `yaml:"call_timeout"`
-			SerialReadTimeout string `yaml:"serial_read_timeout"`
-			SerialOpenRetries int    `yaml:"serial_open_retries"`
-			SerialOpenBackoff string `yaml:"serial_open_backoff"`
-			TCPDialTimeout    string `yaml:"tcp_dial_timeout"`
-			TCPDialRetries    int    `yaml:"tcp_dial_retries"`
-			TCPDialBackoff    string `yaml:"tcp_dial_backoff"`
-			TCPReadTimeout    string `yaml:"tcp_read_timeout"`
-		} `yaml:"drivers"`
-		Northbound struct {
-			PluginsDir            string `yaml:"plugins_dir"`
-			MQTTReconnectInterval string `yaml:"mqtt_reconnect_interval"`
-		} `yaml:"northbound"`
-		Auth struct {
-			SessionMaxAge int `yaml:"session_max_age"`
-		} `yaml:"auth"`
-		Collector struct {
-			DefaultInterval       int    `yaml:"default_interval"`
-			DefaultUploadInterval int    `yaml:"default_upload_interval"`
-			DeviceSyncInterval    string `yaml:"device_sync_interval"`
-			CommandPollInterval   string `yaml:"command_poll_interval"`
-		} `yaml:"collector"`
-		Logging struct {
-			Level  string `yaml:"level"`
-			Format string `yaml:"format"`
-		} `yaml:"logging"`
-	}
-
-	var yamlCfg yamlConfig
-	if err := yaml.Unmarshal(data, &yamlCfg); err != nil {
+	flatCfg, err := parseFlatYAML(data)
+	if err != nil {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
 	// 应用服务器配置
-	setStringIfNotEmpty(&cfg.ListenAddr, yamlCfg.Server.Addr)
-	setDurationFromText(&cfg.HTTPReadTimeout, yamlCfg.Server.ReadTimeout)
-	setDurationFromText(&cfg.HTTPWriteTimeout, yamlCfg.Server.WriteTimeout)
+	setStringIfNotEmpty(&cfg.ListenAddr, flatCfg["server.addr"])
+	setDurationFromText(&cfg.HTTPReadTimeout, flatCfg["server.read_timeout"])
+	setDurationFromText(&cfg.HTTPWriteTimeout, flatCfg["server.write_timeout"])
 
-	setStringIfNotEmpty(&cfg.DriversDir, yamlCfg.Drivers.Dir)
-	setStringIfNotEmpty(&cfg.NorthboundPluginsDir, yamlCfg.Northbound.PluginsDir)
-	setDurationFromText(&cfg.NorthboundMQTTReconnectInterval, yamlCfg.Northbound.MQTTReconnectInterval)
+	setStringIfNotEmpty(&cfg.DriversDir, flatCfg["drivers.dir"])
+	setStringIfNotEmpty(&cfg.NorthboundPluginsDir, flatCfg["northbound.plugins_dir"])
+	setDurationFromText(&cfg.NorthboundMQTTReconnectInterval, flatCfg["northbound.mqtt_reconnect_interval"])
 
-	setDurationFromText(&cfg.DriverCallTimeout, yamlCfg.Drivers.CallTimeout)
-	setDurationFromText(&cfg.DriverSerialReadTimeout, yamlCfg.Drivers.SerialReadTimeout)
-	setPositiveInt(&cfg.DriverSerialOpenRetries, yamlCfg.Drivers.SerialOpenRetries)
-	setDurationFromText(&cfg.DriverSerialOpenBackoff, yamlCfg.Drivers.SerialOpenBackoff)
-	setDurationFromText(&cfg.DriverTCPDialTimeout, yamlCfg.Drivers.TCPDialTimeout)
-	setPositiveInt(&cfg.DriverTCPDialRetries, yamlCfg.Drivers.TCPDialRetries)
-	setDurationFromText(&cfg.DriverTCPDialBackoff, yamlCfg.Drivers.TCPDialBackoff)
-	setDurationFromText(&cfg.DriverTCPReadTimeout, yamlCfg.Drivers.TCPReadTimeout)
+	setDurationFromText(&cfg.DriverCallTimeout, flatCfg["drivers.call_timeout"])
+	setDurationFromText(&cfg.DriverSerialReadTimeout, flatCfg["drivers.serial_read_timeout"])
+	setPositiveIntFromText(&cfg.DriverSerialOpenRetries, flatCfg["drivers.serial_open_retries"])
+	setDurationFromText(&cfg.DriverSerialOpenBackoff, flatCfg["drivers.serial_open_backoff"])
+	setDurationFromText(&cfg.DriverTCPDialTimeout, flatCfg["drivers.tcp_dial_timeout"])
+	setPositiveIntFromText(&cfg.DriverTCPDialRetries, flatCfg["drivers.tcp_dial_retries"])
+	setDurationFromText(&cfg.DriverTCPDialBackoff, flatCfg["drivers.tcp_dial_backoff"])
+	setDurationFromText(&cfg.DriverTCPReadTimeout, flatCfg["drivers.tcp_read_timeout"])
 
-	setDurationFromText(&cfg.CollectorDeviceSyncInterval, yamlCfg.Collector.DeviceSyncInterval)
-	setDurationFromText(&cfg.CollectorCommandPollInterval, yamlCfg.Collector.CommandPollInterval)
+	setDurationFromText(&cfg.CollectorDeviceSyncInterval, flatCfg["collector.device_sync_interval"])
+	setDurationFromText(&cfg.CollectorCommandPollInterval, flatCfg["collector.command_poll_interval"])
 
 	return nil
+}
+
+func parseFlatYAML(data []byte) (map[string]string, error) {
+	lines := strings.Split(string(data), "\n")
+	result := make(map[string]string)
+	pathStack := make([]string, 0, 8)
+
+	for index, raw := range lines {
+		line := strings.TrimRight(raw, " \t\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		leadingSpaces := countLeadingSpaces(line)
+		if leadingSpaces%2 != 0 {
+			return nil, fmt.Errorf("invalid indentation at line %d", index+1)
+		}
+
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		trimmed = strings.TrimSpace(stripYAMLComment(trimmed))
+		if trimmed == "" {
+			continue
+		}
+
+		colon := strings.IndexByte(trimmed, ':')
+		if colon <= 0 {
+			return nil, fmt.Errorf("invalid line %d", index+1)
+		}
+
+		key := strings.TrimSpace(trimmed[:colon])
+		value := strings.TrimSpace(trimmed[colon+1:])
+		if key == "" {
+			return nil, fmt.Errorf("empty key at line %d", index+1)
+		}
+
+		depth := leadingSpaces / 2
+		if depth > len(pathStack) {
+			return nil, fmt.Errorf("invalid nesting at line %d", index+1)
+		}
+		if depth < len(pathStack) {
+			pathStack = pathStack[:depth]
+		}
+
+		if value == "" {
+			pathStack = append(pathStack, key)
+			continue
+		}
+
+		path := strings.Join(append(pathStack, key), ".")
+		result[path] = unquoteYAMLScalar(value)
+	}
+
+	return result, nil
+}
+
+func countLeadingSpaces(text string) int {
+	count := 0
+	for count < len(text) && text[count] == ' ' {
+		count++
+	}
+	return count
+}
+
+func stripYAMLComment(text string) string {
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '#':
+			if !inSingle && !inDouble {
+				return strings.TrimSpace(text[:i])
+			}
+		}
+	}
+	return text
+}
+
+func unquoteYAMLScalar(value string) string {
+	if len(value) >= 2 {
+		if value[0] == '"' && value[len(value)-1] == '"' {
+			if unquoted, err := strconv.Unquote(value); err == nil {
+				return unquoted
+			}
+			return value[1 : len(value)-1]
+		}
+		if value[0] == '\'' && value[len(value)-1] == '\'' {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
 }
 
 func setStringIfNotEmpty(dst *string, value string) {
@@ -248,6 +309,17 @@ func setPositiveInt(dst *int, value int) {
 		return
 	}
 	*dst = value
+}
+
+func setPositiveIntFromText(dst *int, value string) {
+	if dst == nil || value == "" {
+		return
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return
+	}
+	*dst = parsed
 }
 
 // loadFromEnv 从环境变量加载配置（会覆盖文件配置）

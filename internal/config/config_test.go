@@ -5,6 +5,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -564,5 +565,135 @@ func TestLoadFromEnv_TLSFiles(t *testing.T) {
 	}
 	if cfg.TLSKeyFile != "/certs/key.pem" {
 		t.Errorf("TLSKeyFile = %s, want /certs/key.pem", cfg.TLSKeyFile)
+	}
+}
+
+func TestParseFlatYAML(t *testing.T) {
+	data := []byte(`
+server:
+  addr: ":9090"
+  read_timeout: 40s
+
+drivers:
+  serial_open_retries: 3 # inline comment
+  tcp_dial_timeout: '9s'
+`)
+
+	flat, err := parseFlatYAML(data)
+	if err != nil {
+		t.Fatalf("parseFlatYAML error: %v", err)
+	}
+
+	if flat["server.addr"] != ":9090" {
+		t.Fatalf("server.addr=%q, want :9090", flat["server.addr"])
+	}
+	if flat["server.read_timeout"] != "40s" {
+		t.Fatalf("server.read_timeout=%q, want 40s", flat["server.read_timeout"])
+	}
+	if flat["drivers.serial_open_retries"] != "3" {
+		t.Fatalf("drivers.serial_open_retries=%q, want 3", flat["drivers.serial_open_retries"])
+	}
+	if flat["drivers.tcp_dial_timeout"] != "9s" {
+		t.Fatalf("drivers.tcp_dial_timeout=%q, want 9s", flat["drivers.tcp_dial_timeout"])
+	}
+}
+
+func TestLoadFromFile_ParsesConfigYAML(t *testing.T) {
+	tempDir := t.TempDir()
+	configDir := filepath.Join(tempDir, "config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+
+	content := `
+server:
+  addr: ":7777"
+  read_timeout: 35s
+  write_timeout: 45s
+
+drivers:
+  dir: "drivers-custom"
+  call_timeout: 2s
+  serial_read_timeout: 1s
+  serial_open_retries: 4
+  serial_open_backoff: 500ms
+  tcp_dial_timeout: 3s
+  tcp_dial_retries: 5
+  tcp_dial_backoff: 700ms
+  tcp_read_timeout: 8s
+
+northbound:
+  plugins_dir: "plugin_custom"
+  mqtt_reconnect_interval: 9s
+
+collector:
+  device_sync_interval: 12s
+  command_poll_interval: 600ms
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("chdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	cfg := DefaultConfig()
+	if err := loadFromFile(cfg); err != nil {
+		t.Fatalf("loadFromFile: %v", err)
+	}
+
+	if cfg.ListenAddr != ":7777" {
+		t.Fatalf("ListenAddr=%s, want :7777", cfg.ListenAddr)
+	}
+	if cfg.HTTPReadTimeout != 35*time.Second {
+		t.Fatalf("HTTPReadTimeout=%v, want 35s", cfg.HTTPReadTimeout)
+	}
+	if cfg.HTTPWriteTimeout != 45*time.Second {
+		t.Fatalf("HTTPWriteTimeout=%v, want 45s", cfg.HTTPWriteTimeout)
+	}
+	if cfg.DriversDir != "drivers-custom" {
+		t.Fatalf("DriversDir=%s, want drivers-custom", cfg.DriversDir)
+	}
+	if cfg.DriverCallTimeout != 2*time.Second {
+		t.Fatalf("DriverCallTimeout=%v, want 2s", cfg.DriverCallTimeout)
+	}
+	if cfg.DriverSerialReadTimeout != time.Second {
+		t.Fatalf("DriverSerialReadTimeout=%v, want 1s", cfg.DriverSerialReadTimeout)
+	}
+	if cfg.DriverSerialOpenRetries != 4 {
+		t.Fatalf("DriverSerialOpenRetries=%d, want 4", cfg.DriverSerialOpenRetries)
+	}
+	if cfg.DriverSerialOpenBackoff != 500*time.Millisecond {
+		t.Fatalf("DriverSerialOpenBackoff=%v, want 500ms", cfg.DriverSerialOpenBackoff)
+	}
+	if cfg.DriverTCPDialTimeout != 3*time.Second {
+		t.Fatalf("DriverTCPDialTimeout=%v, want 3s", cfg.DriverTCPDialTimeout)
+	}
+	if cfg.DriverTCPDialRetries != 5 {
+		t.Fatalf("DriverTCPDialRetries=%d, want 5", cfg.DriverTCPDialRetries)
+	}
+	if cfg.DriverTCPDialBackoff != 700*time.Millisecond {
+		t.Fatalf("DriverTCPDialBackoff=%v, want 700ms", cfg.DriverTCPDialBackoff)
+	}
+	if cfg.DriverTCPReadTimeout != 8*time.Second {
+		t.Fatalf("DriverTCPReadTimeout=%v, want 8s", cfg.DriverTCPReadTimeout)
+	}
+	if cfg.NorthboundPluginsDir != "plugin_custom" {
+		t.Fatalf("NorthboundPluginsDir=%s, want plugin_custom", cfg.NorthboundPluginsDir)
+	}
+	if cfg.NorthboundMQTTReconnectInterval != 9*time.Second {
+		t.Fatalf("NorthboundMQTTReconnectInterval=%v, want 9s", cfg.NorthboundMQTTReconnectInterval)
+	}
+	if cfg.CollectorDeviceSyncInterval != 12*time.Second {
+		t.Fatalf("CollectorDeviceSyncInterval=%v, want 12s", cfg.CollectorDeviceSyncInterval)
+	}
+	if cfg.CollectorCommandPollInterval != 600*time.Millisecond {
+		t.Fatalf("CollectorCommandPollInterval=%v, want 600ms", cfg.CollectorCommandPollInterval)
 	}
 }
