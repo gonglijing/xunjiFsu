@@ -1,3 +1,5 @@
+//go:build !no_paho_mqtt
+
 package adapters
 
 import (
