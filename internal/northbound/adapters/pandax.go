@@ -1225,13 +1225,8 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 
 		if len(out) == 0 {
 			generic := make(map[string]interface{})
-			reserved := map[string]struct{}{
-				"productKey": {}, "product_key": {}, "deviceKey": {}, "device_key": {},
-				"properties": {}, "sub_device": {}, "subDevice": {}, "sub_devices": {}, "subDevices": {},
-				"fieldName": {}, "field_name": {}, "value": {},
-			}
 			for key, value := range obj {
-				if _, exists := reserved[key]; exists {
+				if isPandaXReservedRPCKey(key) {
 					continue
 				}
 				generic[key] = value
@@ -1253,6 +1248,17 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 	}
 
 	return out
+}
+
+func isPandaXReservedRPCKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "productKey", "product_key", "deviceKey", "device_key",
+		"properties", "sub_device", "subDevice", "sub_devices", "subDevices",
+		"fieldName", "field_name", "value":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *PandaXAdapter) enqueueRealtimeLocked(item *models.CollectData) {

@@ -178,3 +178,19 @@ func TestPandaXPullCommands_PopsInBatch(t *testing.T) {
 		t.Fatalf("remaining queue=%d, want=1", len(adapter.commandQueue))
 	}
 }
+
+func TestIsPandaXReservedRPCKey(t *testing.T) {
+	reserved := []string{"productKey", "device_key", "subDevices", "field_name", "value"}
+	for _, key := range reserved {
+		if !isPandaXReservedRPCKey(key) {
+			t.Fatalf("expected reserved key: %q", key)
+		}
+	}
+
+	notReserved := []string{"temperature", "method", "id", "custom_field"}
+	for _, key := range notReserved {
+		if isPandaXReservedRPCKey(key) {
+			t.Fatalf("unexpected reserved key: %q", key)
+		}
+	}
+}
