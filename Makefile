@@ -5,7 +5,7 @@
         deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows arm32 arm64
 
 # 默认目标: 编译前端 + 本地运行
-all: ui run
+all: ui-install run
 	@echo ""
 	@echo "========================================"
 	@echo "  ✅ 前端构建完成，后端已启动!"
