@@ -5,9 +5,11 @@ import { getErrorMessage } from '../api/errorMessages';
 import { useToast } from '../components/Toast';
 
 const defaultForm = {
+  mode: 'structured',
   resource_id: '',
   endpoint: '',
   timeout_ms: '2000',
+  raw_request: '',
   slave_id: '1',
   function_code: '3',
   address: '0',
@@ -56,12 +58,8 @@ export function ModbusTCPDebugPage() {
     setError('');
 
     const current = form();
-    const functionCode = toInt(current.function_code, 3);
     const payload = {
       timeout_ms: toInt(current.timeout_ms, 2000),
-      slave_id: toInt(current.slave_id, 1),
-      function_code: functionCode,
-      address: toInt(current.address, 0),
     };
 
     const resourceIDText = String(current.resource_id || '').trim();
@@ -79,10 +77,20 @@ export function ModbusTCPDebugPage() {
       payload.transaction_id = toInt(transactionID, 0);
     }
 
-    if (functionCode === 3) {
-      payload.quantity = toInt(current.quantity, 1);
+    const rawMode = String(current.mode || 'structured') === 'raw';
+    if (rawMode) {
+      payload.raw_request = String(current.raw_request || '').trim();
     } else {
-      payload.value = toInt(current.value, 0);
+      const functionCode = toInt(current.function_code, 3);
+      payload.slave_id = toInt(current.slave_id, 1);
+      payload.function_code = functionCode;
+      payload.address = toInt(current.address, 0);
+
+      if (functionCode === 3) {
+        payload.quantity = toInt(current.quantity, 1);
+      } else {
+        payload.value = toInt(current.value, 0);
+      }
     }
 
     try {
@@ -146,6 +154,13 @@ export function ModbusTCPDebugPage() {
 
           <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;">
             <div class="form-group">
+              <label class="form-label">请求模式</label>
+              <select class="form-select" value={form().mode} onChange={(e) => updateField('mode', e.target.value)}>
+                <option value="structured">结构化（地址/功能码）</option>
+                <option value="raw">完整报文（RAW）</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label class="form-label">超时 (ms)</label>
               <input class="form-input" value={form().timeout_ms} onInput={(e) => updateField('timeout_ms', e.target.value)} />
             </div>
@@ -159,33 +174,55 @@ export function ModbusTCPDebugPage() {
             </div>
           </div>
 
-          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;">
-            <div class="form-group">
-              <label class="form-label">功能码</label>
-              <select class="form-select" value={form().function_code} onChange={(e) => updateField('function_code', e.target.value)}>
-                <option value="3">03 读保持寄存器</option>
-                <option value="6">06 写单个寄存器</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">寄存器地址</label>
-              <input class="form-input" value={form().address} onInput={(e) => updateField('address', e.target.value)} />
-            </div>
-            <Show
-              when={String(form().function_code) === '3'}
-              fallback={(
+          <Show
+            when={String(form().mode || 'structured') === 'raw'}
+            fallback={(
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;">
                 <div class="form-group">
-                  <label class="form-label">写入值</label>
-                  <input class="form-input" value={form().value} onInput={(e) => updateField('value', e.target.value)} />
+                  <label class="form-label">功能码</label>
+                  <select class="form-select" value={form().function_code} onChange={(e) => updateField('function_code', e.target.value)}>
+                    <option value="3">03 读保持寄存器</option>
+                    <option value="6">06 写单个寄存器</option>
+                  </select>
                 </div>
-              )}
-            >
-              <div class="form-group">
-                <label class="form-label">寄存器数量</label>
-                <input class="form-input" value={form().quantity} onInput={(e) => updateField('quantity', e.target.value)} />
+                <div class="form-group">
+                  <label class="form-label">寄存器地址</label>
+                  <input class="form-input" value={form().address} onInput={(e) => updateField('address', e.target.value)} />
+                </div>
+                <Show
+                  when={String(form().function_code) === '3'}
+                  fallback={(
+                    <div class="form-group">
+                      <label class="form-label">写入值</label>
+                      <input class="form-input" value={form().value} onInput={(e) => updateField('value', e.target.value)} />
+                    </div>
+                  )}
+                >
+                  <div class="form-group">
+                    <label class="form-label">寄存器数量</label>
+                    <input class="form-input" value={form().quantity} onInput={(e) => updateField('quantity', e.target.value)} />
+                  </div>
+                </Show>
               </div>
-            </Show>
-          </div>
+            )}
+          >
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div class="form-group">
+                <label class="form-label">完整请求报文（HEX/10进制，空格分隔）</label>
+                <textarea
+                  class="form-input"
+                  rows="3"
+                  value={form().raw_request}
+                  onInput={(e) => updateField('raw_request', e.target.value)}
+                  placeholder="例如: 00 01 00 00 00 06 01 03 00 00 00 03"
+                  style="font-family: ui-monospace, Menlo, Monaco, monospace;"
+                />
+                <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                  RAW 模式需输入完整 Modbus TCP 帧（含 MBAP + PDU）。
+                </div>
+              </div>
+            </div>
+          </Show>
 
           <Show when={error()}>
             <div style="color:var(--accent-red); margin-top:4px;">{error()}</div>
