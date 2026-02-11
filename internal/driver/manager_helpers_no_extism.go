@@ -3,12 +3,15 @@
 package driver
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -230,13 +233,69 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 	}
 
 	drv, err := database.GetDriverByID(driverID)
-	if err != nil || drv == nil || drv.FilePath == "" {
-		return ErrDriverNotFound
+	if err != nil {
+		if err == sql.ErrNoRows {
+			recovered, recoverErr := e.recoverMissingDriverBinding(device)
+			if recoverErr == nil && recovered != nil {
+				driverID = recovered.ID
+				drv = recovered
+				goto LOAD_DRIVER
+			}
+			return fmt.Errorf("%w: driver id=%d not found in database", ErrDriverNotFound, driverID)
+		}
+		return fmt.Errorf("%w: query driver id=%d failed: %v", ErrDriverNotFound, driverID, err)
+	}
+	if drv == nil {
+		return fmt.Errorf("%w: driver id=%d is nil", ErrDriverNotFound, driverID)
+	}
+
+LOAD_DRIVER:
+
+	drv.FilePath = strings.TrimSpace(drv.FilePath)
+	if drv.FilePath == "" {
+		drv.FilePath = filepath.Join("drivers", strings.TrimSpace(drv.Name)+".wasm")
+	}
+	if strings.TrimSpace(drv.FilePath) == "" {
+		return fmt.Errorf("%w: driver id=%d has empty file_path", ErrDriverNotFound, driverID)
 	}
 	if err := e.manager.LoadDriverFromModel(drv, resourceID); err != nil {
 		return fmt.Errorf("load driver %d failed: %w", drv.ID, err)
 	}
 	return nil
+}
+
+func (e *DriverExecutor) recoverMissingDriverBinding(device *models.Device) (*models.Driver, error) {
+	if device == nil {
+		return nil, fmt.Errorf("device is nil")
+	}
+
+	candidateNames := make([]string, 0, 3)
+	driverType := strings.ToLower(strings.TrimSpace(device.DriverType))
+	if driverType != "" {
+		candidateNames = append(candidateNames, driverType)
+		switch driverType {
+		case "modbus_rtu":
+			candidateNames = append(candidateNames, "th_modbusrtu")
+		case "modbus_tcp":
+			candidateNames = append(candidateNames, "th_modbustcp")
+		}
+	}
+
+	for _, name := range candidateNames {
+		drv, err := database.GetDriverByName(name)
+		if err != nil || drv == nil {
+			continue
+		}
+		if err := database.UpdateDeviceDriverID(device.ID, drv.ID); err != nil {
+			logger.Warn("Recover device driver binding failed", "device_id", device.ID, "driver_id", drv.ID, "error", err)
+		} else {
+			device.DriverID = &drv.ID
+			logger.Warn("Recovered missing driver binding", "device_id", device.ID, "driver_id", drv.ID, "driver_name", drv.Name, "driver_type", device.DriverType)
+		}
+		return drv, nil
+	}
+
+	return nil, fmt.Errorf("no recoverable driver by type=%s", device.DriverType)
 }
 
 // ReloadDeviceDriver 强制重载设备对应驱动

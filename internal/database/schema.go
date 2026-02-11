@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -42,14 +43,14 @@ func InitDataSchema() error {
 		return err
 	}
 
+	// 先确保 alarm_logs 表存在，再创建索引，避免索引脚本里出现 no such table
+	if err := ensureAlarmLogsTable(); err != nil {
+		return err
+	}
+
 	// 执行索引迁移
 	if err := initDataIndexes(); err != nil {
 		log.Printf("Warning: failed to create data indexes: %v", err)
-	}
-
-	// 确保 alarm_logs 表存在
-	if err := ensureAlarmLogsTable(); err != nil {
-		return err
 	}
 
 	return nil
@@ -82,14 +83,131 @@ func initDataIndexes() error {
 	}
 
 	for _, stmt := range statements {
-		_, err := DataDB.Exec(stmt)
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
+		if err := executeIndexStatement(stmt); err != nil {
 			return fmt.Errorf("failed to create index: %w", err)
 		}
 	}
 
 	log.Println("Data indexes initialized")
 	return nil
+}
+
+func executeIndexStatement(stmt string) error {
+	tableName := extractIndexTableName(stmt)
+	if tableName == "" {
+		if err := execIndexOnDB(DataDB, stmt); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	executed := false
+
+	dataHasTable, err := tableExists(DataDB, tableName)
+	if err != nil {
+		return err
+	}
+	if dataHasTable {
+		if err := execIndexOnDB(DataDB, stmt); err != nil {
+			return err
+		}
+		executed = true
+	}
+
+	paramHasTable, err := tableExists(ParamDB, tableName)
+	if err != nil {
+		return err
+	}
+	if paramHasTable && ParamDB != DataDB {
+		if err := execIndexOnDB(ParamDB, stmt); err != nil {
+			return err
+		}
+		executed = true
+	}
+
+	if !executed {
+		// 兜底：当 sqlite_master 查询不到时，按历史行为尝试 DataDB -> ParamDB
+		if err := execIndexOnDB(DataDB, stmt); err == nil {
+			return nil
+		} else if !isNoSuchTableError(err) {
+			return err
+		}
+		if err := execIndexOnDB(ParamDB, stmt); err == nil {
+			return nil
+		} else if !isNoSuchTableError(err) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func execIndexOnDB(db *sql.DB, stmt string) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	_, err := db.Exec(stmt)
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		return err
+	}
+	return nil
+}
+
+func tableExists(db *sql.DB, tableName string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	if strings.TrimSpace(tableName) == "" {
+		return false, nil
+	}
+
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?`, tableName).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to query table %s: %w", tableName, err)
+	}
+	return count > 0, nil
+}
+
+func isNoSuchTableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no such table")
+}
+
+func extractIndexTableName(stmt string) string {
+	upper := strings.ToUpper(stmt)
+	onPos := strings.Index(upper, " ON ")
+	if onPos < 0 {
+		return ""
+	}
+
+	rest := strings.TrimSpace(stmt[onPos+4:])
+	if rest == "" {
+		return ""
+	}
+
+	if idx := strings.Index(rest, "("); idx >= 0 {
+		rest = rest[:idx]
+	}
+
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		return ""
+	}
+
+	parts := strings.Fields(rest)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	tableName := strings.Trim(parts[0], "`\"[]")
+	if dot := strings.LastIndex(tableName, "."); dot >= 0 && dot < len(tableName)-1 {
+		tableName = tableName[dot+1:]
+	}
+
+	return tableName
 }
 
 // ensureAlarmLogsTable 创建 alarm_logs 表（若缺失）

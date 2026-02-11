@@ -198,6 +198,9 @@ deploy-arm32: prepare-deploy ui
 	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm32/migrations/
 	mkdir -p $(DEPLOY_DIR)/arm32/ui
 	cp -r ui/static $(DEPLOY_DIR)/arm32/ui/
+	mkdir -p $(DEPLOY_DIR)/arm32/drivers
+	@if [ -d "drivers" ]; then find drivers -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm32/drivers/ \; ; fi
+	@if [ -d "drvs" ]; then find drvs -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm32/drivers/ \; ; fi
 	@echo "✅ ARM32 部署包已生成: $(DEPLOY_DIR)/arm32/"
 	@echo ""
 	@ls -la $(DEPLOY_DIR)/arm32/
@@ -213,6 +216,9 @@ arm32: prepare-deploy ui
 	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm32/migrations/
 	mkdir -p $(DEPLOY_DIR)/arm32/ui
 	cp -r ui/static $(DEPLOY_DIR)/arm32/ui/
+	mkdir -p $(DEPLOY_DIR)/arm32/drivers
+	@if [ -d "drivers" ]; then find drivers -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm32/drivers/ \; ; fi
+	@if [ -d "drvs" ]; then find drvs -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm32/drivers/ \; ; fi
 	@echo "✅ ARM32 部署包已生成: $(DEPLOY_DIR)/arm32/"
 	@echo ""
 	@ls -la $(DEPLOY_DIR)/arm32/
@@ -228,6 +234,9 @@ deploy-arm64: prepare-deploy ui
 	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm64/migrations/
 	mkdir -p $(DEPLOY_DIR)/arm64/ui
 	cp -r ui/static $(DEPLOY_DIR)/arm64/ui/
+	mkdir -p $(DEPLOY_DIR)/arm64/drivers
+	@if [ -d "drivers" ]; then find drivers -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm64/drivers/ \; ; fi
+	@if [ -d "drvs" ]; then find drvs -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm64/drivers/ \; ; fi
 	@echo "✅ ARM64 部署包已生成: $(DEPLOY_DIR)/arm64/"
 	@echo ""
 	@ls -la $(DEPLOY_DIR)/arm64/
@@ -243,6 +252,9 @@ arm64: prepare-deploy ui
 	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm64/migrations/
 	mkdir -p $(DEPLOY_DIR)/arm64/ui
 	cp -r ui/static $(DEPLOY_DIR)/arm64/ui/
+	mkdir -p $(DEPLOY_DIR)/arm64/drivers
+	@if [ -d "drivers" ]; then find drivers -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm64/drivers/ \; ; fi
+	@if [ -d "drvs" ]; then find drvs -name "*.wasm" -type f -exec cp -f {} $(DEPLOY_DIR)/arm64/drivers/ \; ; fi
 	@echo "✅ ARM64 部署包已生成: $(DEPLOY_DIR)/arm64/"
 	@echo ""
 	@ls -la $(DEPLOY_DIR)/arm64/

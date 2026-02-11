@@ -251,3 +251,12 @@ func UpdateDeviceWithID(id int64, device *models.Device) error {
 	)
 	return err
 }
+
+// UpdateDeviceDriverID 更新设备驱动ID
+func UpdateDeviceDriverID(deviceID int64, driverID int64) error {
+	_, err := ParamDB.Exec(
+		"UPDATE devices SET driver_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		driverID, deviceID,
+	)
+	return err
+}

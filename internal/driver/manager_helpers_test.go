@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,5 +295,128 @@ func TestEnsureResourcePathLoadsFromResourcePath(t *testing.T) {
 	got := executor.GetResourcePath(resourceID)
 	if got != "192.168.10.20:502" {
 		t.Fatalf("resource path = %q, want %q", got, "192.168.10.20:502")
+	}
+}
+
+func TestRecoverMissingDriverBindingByDriverType(t *testing.T) {
+	tmpDir := t.TempDir()
+	paramPath := filepath.Join(tmpDir, "param.db")
+	originalParamDB := database.ParamDB
+	t.Cleanup(func() {
+		if database.ParamDB != nil {
+			_ = database.ParamDB.Close()
+		}
+		database.ParamDB = originalParamDB
+	})
+
+	if err := database.InitParamDBWithPath(paramPath); err != nil {
+		t.Fatalf("InitParamDBWithPath failed: %v", err)
+	}
+	if _, err := database.ParamDB.Exec(`CREATE TABLE drivers (
+		id INTEGER PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		file_path TEXT NOT NULL,
+		description TEXT,
+		version TEXT,
+		config_schema TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create drivers table failed: %v", err)
+	}
+	if _, err := database.ParamDB.Exec(`CREATE TABLE devices (
+		id INTEGER PRIMARY KEY,
+		name TEXT,
+		driver_id INTEGER,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create devices table failed: %v", err)
+	}
+
+	driverID, err := database.CreateDriver(&models.Driver{
+		Name:     "modbus_rtu",
+		FilePath: "drivers/modbus_rtu.wasm",
+		Enabled:  1,
+	})
+	if err != nil {
+		t.Fatalf("CreateDriver failed: %v", err)
+	}
+
+	if _, err := database.ParamDB.Exec(`INSERT INTO devices(id, name, driver_id) VALUES(?,?,?)`, 101, "dev-101", 9999); err != nil {
+		t.Fatalf("insert device failed: %v", err)
+	}
+
+	executor := NewDriverExecutor(NewDriverManager())
+	dev := &models.Device{ID: 101, Name: "dev-101", DriverType: "modbus_rtu"}
+
+	recovered, err := executor.recoverMissingDriverBinding(dev)
+	if err != nil {
+		t.Fatalf("recoverMissingDriverBinding failed: %v", err)
+	}
+	if recovered == nil {
+		t.Fatalf("expected recovered driver, got nil")
+	}
+	if recovered.ID != driverID {
+		t.Fatalf("recovered driver id=%d, want %d", recovered.ID, driverID)
+	}
+	if dev.DriverID == nil || *dev.DriverID != driverID {
+		t.Fatalf("device driver id not updated in memory")
+	}
+
+	var boundID int64
+	if err := database.ParamDB.QueryRow(`SELECT driver_id FROM devices WHERE id = ?`, dev.ID).Scan(&boundID); err != nil {
+		t.Fatalf("query updated driver_id failed: %v", err)
+	}
+	if boundID != driverID {
+		t.Fatalf("device driver_id in db=%d, want %d", boundID, driverID)
+	}
+}
+
+func TestRecoverMissingDriverBindingNoMatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	paramPath := filepath.Join(tmpDir, "param.db")
+	originalParamDB := database.ParamDB
+	t.Cleanup(func() {
+		if database.ParamDB != nil {
+			_ = database.ParamDB.Close()
+		}
+		database.ParamDB = originalParamDB
+	})
+
+	if err := database.InitParamDBWithPath(paramPath); err != nil {
+		t.Fatalf("InitParamDBWithPath failed: %v", err)
+	}
+	if _, err := database.ParamDB.Exec(`CREATE TABLE drivers (
+		id INTEGER PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		file_path TEXT NOT NULL,
+		description TEXT,
+		version TEXT,
+		config_schema TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create drivers table failed: %v", err)
+	}
+	if _, err := database.ParamDB.Exec(`CREATE TABLE devices (
+		id INTEGER PRIMARY KEY,
+		name TEXT,
+		driver_id INTEGER,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create devices table failed: %v", err)
+	}
+
+	executor := NewDriverExecutor(NewDriverManager())
+	dev := &models.Device{ID: 102, Name: "dev-102", DriverType: "modbus_tcp"}
+
+	_, err := executor.recoverMissingDriverBinding(dev)
+	if err == nil {
+		t.Fatalf("expected recoverMissingDriverBinding to fail without matching driver")
+	}
+	if !strings.Contains(err.Error(), "no recoverable driver") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

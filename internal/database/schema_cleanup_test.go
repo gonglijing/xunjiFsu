@@ -146,3 +146,60 @@ func TestInitDataSchema_DropsUnusedStorageConfigTable(t *testing.T) {
 		t.Fatalf("expected storage_config to be dropped, still exists")
 	}
 }
+
+func TestInitDataSchema_CreatesAlarmLogIndexesOnParamDB(t *testing.T) {
+	switchToRepoRoot(t)
+
+	oldData := DataDB
+	oldParam := ParamDB
+	t.Cleanup(func() {
+		if DataDB != nil {
+			_ = DataDB.Close()
+		}
+		DataDB = oldData
+		if ParamDB != nil {
+			_ = ParamDB.Close()
+		}
+		ParamDB = oldParam
+	})
+
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+	if ParamDB != nil {
+		_ = ParamDB.Close()
+	}
+
+	var err error
+	DataDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open data db: %v", err)
+	}
+
+	ParamDB, err = openSQLite(filepath.Join(t.TempDir(), "param.db"), 1, 1)
+	if err != nil {
+		t.Fatalf("open param db: %v", err)
+	}
+
+	if err := InitParamSchema(); err != nil {
+		t.Fatalf("InitParamSchema: %v", err)
+	}
+	if err := InitDataSchema(); err != nil {
+		t.Fatalf("InitDataSchema: %v", err)
+	}
+
+	var count int
+	if err := ParamDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_alarm_logs_device_time'`).Scan(&count); err != nil {
+		t.Fatalf("check idx_alarm_logs_device_time: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected idx_alarm_logs_device_time on param db, got %d", count)
+	}
+
+	if err := ParamDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_alarm_logs_unacked'`).Scan(&count); err != nil {
+		t.Fatalf("check idx_alarm_logs_unacked: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected idx_alarm_logs_unacked on param db, got %d", count)
+	}
+}
