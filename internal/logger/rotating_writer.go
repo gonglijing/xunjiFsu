@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	defaultMaxLogSizeBytes = 2 * 1024 * 1024
-	defaultMaxBackups      = 3
+	defaultMaxLogSizeBytes = 3 * 1024 * 1024
+	defaultMaxBackups      = 2
 	defaultFlushInterval   = time.Second
 )
 
