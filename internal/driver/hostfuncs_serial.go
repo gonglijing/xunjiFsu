@@ -135,7 +135,7 @@ func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.Hos
 			time.Sleep(3 * time.Millisecond)
 
 			buf := make([]byte, readCap)
-			tout := time.Duration(timeoutMs)
+			tout := time.Duration(timeoutMs) * time.Millisecond
 			if tout <= 0 {
 				tout = executor.serialReadTimeout()
 			}
