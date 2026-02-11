@@ -1,5 +1,5 @@
 import { isActive } from '../router';
-import { mainLinks, settingsLinks } from './TopNav';
+import { mainLinks, settingsLinks, debugLinks } from './TopNav';
 
 function SidebarNav(props) {
   return (
@@ -29,6 +29,20 @@ function SidebarNav(props) {
       <div class="sidebar-section">
         <div class="sidebar-section-label">网关配置</div>
         {settingsLinks.map((l) => (
+          <button
+            type="button"
+            class={`sidebar-link ${isActive(props.path, l.to) ? 'active' : ''}`}
+            onClick={() => props.onNav(l.to)}
+          >
+            <span class="sidebar-link-icon">{l.icon}</span>
+            <span>{l.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">调试工具</div>
+        {debugLinks.map((l) => (
           <button
             type="button"
             class={`sidebar-link ${isActive(props.path, l.to) ? 'active' : ''}`}

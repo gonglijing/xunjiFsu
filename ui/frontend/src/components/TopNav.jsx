@@ -16,9 +16,15 @@ export const settingsLinks = [
   { to: '/thresholds', label: '阈值', icon: '◐' },
 ];
 
+export const debugLinks = [
+  { to: '/debug/modbus-serial', label: '串口 Modbus', icon: '🧪' },
+  { to: '/debug/modbus-tcp', label: 'TCP Modbus', icon: '🌐' },
+];
+
 function TopNav(props) {
   const [dropdownOpen, setDropdownOpen] = createSignal(false);
   let dropdownRef;
+  const dropdownLinks = [...settingsLinks, ...debugLinks];
 
   const handleLogout = (e) => {
     localStorage.removeItem('gogw_jwt');
@@ -88,7 +94,7 @@ function TopNav(props) {
           ))}
           <div class="dropdown" ref={dropdownRef}>
             <button
-              class={`nav-btn dropdown-toggle ${isActive(props.path, '/resources') || isActive(props.path, '/devices') || isActive(props.path, '/drivers') || isActive(props.path, '/northbound') || isActive(props.path, '/thresholds') ? 'active' : ''}`}
+              class={`nav-btn dropdown-toggle ${isActive(props.path, '/resources') || isActive(props.path, '/devices') || isActive(props.path, '/drivers') || isActive(props.path, '/northbound') || isActive(props.path, '/thresholds') || isActive(props.path, '/debug') ? 'active' : ''}`}
               onClick={() => setDropdownOpen(!dropdownOpen())}
             >
               <span class="nav-btn-icon">⚙</span>
@@ -97,7 +103,7 @@ function TopNav(props) {
             </button>
             <Show when={dropdownOpen()}>
               <div class="dropdown-menu">
-                {settingsLinks.map((l) => (
+                {dropdownLinks.map((l) => (
                   <a
                     key={l.to}
                     href={l.to}

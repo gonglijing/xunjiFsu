@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "test:unit": "node --test src/api/errorMessages.test.js",
+    "test:unit": "node --test src/api/errorMessages.test.js src/sections/Northbound.test.js",
     "test": "npm run test:unit"
   },
   "dependencies": {

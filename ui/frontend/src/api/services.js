@@ -2,6 +2,7 @@ import * as alarms from './alarms';
 import * as auth from './auth';
 import * as collector from './collector';
 import * as data from './data';
+import * as debug from './debug';
 import * as devices from './devices';
 import * as drivers from './drivers';
 import * as gateway from './gateway';
@@ -16,6 +17,7 @@ const api = {
   auth,
   collector,
   data,
+  debug,
   devices,
   drivers,
   gateway,

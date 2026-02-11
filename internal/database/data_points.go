@@ -728,32 +728,60 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 	if data == nil {
 		return fmt.Errorf("collect data is nil")
 	}
+	if len(data.Fields) == 0 {
+		return nil
+	}
 
 	deviceName := normalizeDeviceName(data.DeviceID, data.DeviceName)
 
-	cacheEntries := make([]DataPointEntry, 0, len(data.Fields))
-	historyEntries := make([]DataPointEntry, 0, len(data.Fields))
-	for field, value := range data.Fields {
-		entry := DataPointEntry{
-			DeviceID:    data.DeviceID,
-			DeviceName:  deviceName,
-			FieldName:   field,
-			Value:       value,
-			ValueType:   "string",
-			CollectedAt: data.Timestamp,
+	tx, err := DataDB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin collect data transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	cacheStmt, err := tx.Prepare(`INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(device_id, field_name) DO UPDATE SET
+			value = excluded.value,
+			value_type = excluded.value_type,
+			collected_at = CURRENT_TIMESTAMP`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare cache statement: %w", err)
+	}
+	defer cacheStmt.Close()
+
+	var historyStmt *sql.Stmt
+	if storeHistory {
+		historyStmt, err = tx.Prepare(`INSERT OR REPLACE INTO data_points
+			(device_id, device_name, field_name, value, value_type, collected_at)
+			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
+		if err != nil {
+			return fmt.Errorf("failed to prepare history statement: %w", err)
 		}
-		cacheEntries = append(cacheEntries, entry)
-		if storeHistory {
-			historyEntries = append(historyEntries, entry)
+		defer historyStmt.Close()
+	}
+
+	for field, value := range data.Fields {
+		if _, err := cacheStmt.Exec(data.DeviceID, field, value, "string"); err != nil {
+			return fmt.Errorf("failed to upsert data cache: %w", err)
+		}
+		if historyStmt != nil {
+			if _, err := historyStmt.Exec(data.DeviceID, deviceName, field, value, "string"); err != nil {
+				return fmt.Errorf("failed to upsert data point: %w", err)
+			}
 		}
 	}
 
-	if err := BatchSaveDataCacheEntries(cacheEntries); err != nil {
-		return fmt.Errorf("batch save data cache failed: %w", err)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit collect data transaction: %w", err)
 	}
-	if !storeHistory {
-		return nil
+
+	maybeEnforceDataCacheLimit()
+	if storeHistory {
+		maybeEnforceDataPointsLimit()
+		TriggerSyncIfNeeded()
 	}
-	// 使用 upsert 模式写入 data_points（按采集时间形成历史序列）
-	return BatchSaveLatestDataPoints(historyEntries)
+
+	return nil
 }

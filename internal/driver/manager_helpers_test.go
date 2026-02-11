@@ -3,9 +3,11 @@ package driver
 import (
 	"io"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -244,5 +246,53 @@ func TestGetTCPConnReturnsRegisteredConnectionWithoutProbeWrite(t *testing.T) {
 	case <-readDone:
 		t.Fatalf("expected no unsolicited probe write on existing TCP connection")
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestEnsureResourcePathLoadsFromResourcePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	paramPath := filepath.Join(tmpDir, "param.db")
+	originalParamDB := database.ParamDB
+	t.Cleanup(func() {
+		if database.ParamDB != nil {
+			_ = database.ParamDB.Close()
+		}
+		database.ParamDB = originalParamDB
+	})
+
+	if err := database.InitParamDBWithPath(paramPath); err != nil {
+		t.Fatalf("InitParamDBWithPath failed: %v", err)
+	}
+	if _, err := database.ParamDB.Exec(`CREATE TABLE IF NOT EXISTS resources (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		path TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create resources table failed: %v", err)
+	}
+
+	resourceID, err := database.AddResource(&models.Resource{
+		Name:    "net-r1",
+		Type:    "net",
+		Path:    "192.168.10.20:502",
+		Enabled: 1,
+	})
+	if err != nil {
+		t.Fatalf("AddResource failed: %v", err)
+	}
+
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+	device := &models.Device{IPAddress: "", PortNum: 0}
+
+	executor.ensureResourcePath(resourceID, "net", device)
+
+	got := executor.GetResourcePath(resourceID)
+	if got != "192.168.10.20:502" {
+		t.Fatalf("resource path = %q, want %q", got, "192.168.10.20:502")
 	}
 }

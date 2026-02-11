@@ -26,7 +26,7 @@ const (
 type Collector struct {
 	driverExecutor       *driver.DriverExecutor
 	northboundMgr        *northbound.NorthboundManager
-	resourceLock         map[int64]chan struct{} // 每个资源一个串行锁
+	resourceLock         sync.Map // key:int64 -> chan struct{}, 每个资源一个串行锁
 	mu                   sync.RWMutex
 	running              bool
 	stopChan             chan struct{}
@@ -107,7 +107,6 @@ func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northbound
 		commandPollInterval:  commandPollInterval,
 		tasks:                make(map[int64]*collectTask),
 		taskHeap:             h,
-		resourceLock:         make(map[int64]chan struct{}),
 	}
 }
 
@@ -124,6 +123,10 @@ func (c *Collector) Start() error {
 	c.deviceSyncResetChan = make(chan time.Duration, 1)
 	c.commandPollResetChan = make(chan time.Duration, 1)
 	c.tasks = make(map[int64]*collectTask)
+	c.resourceLock.Range(func(key, _ any) bool {
+		c.resourceLock.Delete(key)
+		return true
+	})
 	h := &taskHeap{}
 	heap.Init(h)
 	c.taskHeap = h
@@ -264,14 +267,12 @@ func (c *Collector) collectOnce(task *collectTask) {
 // getResourceLock 返回该资源的串行锁
 func (c *Collector) getResourceLock(resourceID *int64) chan struct{} {
 	key := resourceLockKey(resourceID)
-	c.mu.Lock()
-	ch, ok := c.resourceLock[key]
-	if !ok {
-		ch = make(chan struct{}, 1)
-		c.resourceLock[key] = ch
+	if existing, ok := c.resourceLock.Load(key); ok {
+		return existing.(chan struct{})
 	}
-	c.mu.Unlock()
-	return ch
+	ch := make(chan struct{}, 1)
+	actual, _ := c.resourceLock.LoadOrStore(key, ch)
+	return actual.(chan struct{})
 }
 
 // SyncDeviceStatus 同步设备状态（定时调用）
@@ -564,7 +565,7 @@ func (c *Collector) pruneMissingTasksLocked(seenDeviceIDs map[int64]struct{}) in
 
 func (c *Collector) releaseResourceLockIfUnusedLocked(resourceID *int64) {
 	key := resourceLockKey(resourceID)
-	if _, exists := c.resourceLock[key]; !exists {
+	if _, exists := c.resourceLock.Load(key); !exists {
 		return
 	}
 
@@ -577,7 +578,7 @@ func (c *Collector) releaseResourceLockIfUnusedLocked(resourceID *int64) {
 		}
 	}
 
-	delete(c.resourceLock, key)
+	c.resourceLock.Delete(key)
 }
 
 func (c *Collector) notifyTaskChangedLocked() {

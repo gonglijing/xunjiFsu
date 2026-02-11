@@ -480,15 +480,15 @@ func TestUpsertTaskLocked_ResourceChangedReleasesOldLock(t *testing.T) {
 
 	c.mu.Lock()
 	_ = c.upsertTaskLocked(device)
-	c.resourceLock[resourceOld] = make(chan struct{}, 1)
-	c.resourceLock[resourceNew] = make(chan struct{}, 1)
+	c.resourceLock.Store(resourceOld, make(chan struct{}, 1))
+	c.resourceLock.Store(resourceNew, make(chan struct{}, 1))
 
 	device2 := *device
 	device2.ResourceID = &resourceNew
 	device2.UpdatedAt = now.Add(time.Second)
 	action := c.upsertTaskLocked(&device2)
-	_, hasOld := c.resourceLock[resourceOld]
-	_, hasNew := c.resourceLock[resourceNew]
+	_, hasOld := c.resourceLock.Load(resourceOld)
+	_, hasNew := c.resourceLock.Load(resourceNew)
 	c.mu.Unlock()
 
 	if action != deviceSyncActionUpdated {
@@ -515,13 +515,13 @@ func TestUpsertTaskLocked_ResourceChangedKeepsSharedOldLock(t *testing.T) {
 	c.mu.Lock()
 	_ = c.upsertTaskLocked(deviceA)
 	_ = c.upsertTaskLocked(deviceB)
-	c.resourceLock[resourceOld] = make(chan struct{}, 1)
+	c.resourceLock.Store(resourceOld, make(chan struct{}, 1))
 
 	deviceA2 := *deviceA
 	deviceA2.ResourceID = &resourceNew
 	deviceA2.UpdatedAt = now.Add(time.Second)
 	_ = c.upsertTaskLocked(&deviceA2)
-	_, hasOld := c.resourceLock[resourceOld]
+	_, hasOld := c.resourceLock.Load(resourceOld)
 	c.mu.Unlock()
 
 	if !hasOld {
@@ -574,9 +574,9 @@ func TestRemoveTaskLocked_ReleasesUnusedResourceLock(t *testing.T) {
 
 	c.mu.Lock()
 	c.tasks[device.ID] = newCollectTask(device, nil)
-	c.resourceLock[resourceID] = make(chan struct{}, 1)
+	c.resourceLock.Store(resourceID, make(chan struct{}, 1))
 	c.removeTaskLocked(device.ID)
-	_, exists := c.resourceLock[resourceID]
+	_, exists := c.resourceLock.Load(resourceID)
 	c.mu.Unlock()
 
 	if exists {
@@ -595,9 +595,9 @@ func TestRemoveTaskLocked_KeepSharedResourceLock(t *testing.T) {
 	c.mu.Lock()
 	c.tasks[device1.ID] = newCollectTask(device1, nil)
 	c.tasks[device2.ID] = newCollectTask(device2, nil)
-	c.resourceLock[resourceID] = make(chan struct{}, 1)
+	c.resourceLock.Store(resourceID, make(chan struct{}, 1))
 	c.removeTaskLocked(device1.ID)
-	_, exists := c.resourceLock[resourceID]
+	_, exists := c.resourceLock.Load(resourceID)
 	c.mu.Unlock()
 
 	if !exists {
@@ -617,14 +617,14 @@ func TestPruneMissingTasksLocked(t *testing.T) {
 	c.mu.Lock()
 	c.tasks[device1.ID] = newCollectTask(device1, nil)
 	c.tasks[device2.ID] = newCollectTask(device2, nil)
-	c.resourceLock[resourceA] = make(chan struct{}, 1)
-	c.resourceLock[resourceB] = make(chan struct{}, 1)
+	c.resourceLock.Store(resourceA, make(chan struct{}, 1))
+	c.resourceLock.Store(resourceB, make(chan struct{}, 1))
 
 	removed := c.pruneMissingTasksLocked(map[int64]struct{}{device1.ID: {}})
 	_, hasTask1 := c.tasks[device1.ID]
 	_, hasTask2 := c.tasks[device2.ID]
-	_, hasLockA := c.resourceLock[resourceA]
-	_, hasLockB := c.resourceLock[resourceB]
+	_, hasLockA := c.resourceLock.Load(resourceA)
+	_, hasLockB := c.resourceLock.Load(resourceB)
 	c.mu.Unlock()
 
 	if removed != 1 {

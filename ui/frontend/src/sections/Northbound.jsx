@@ -11,11 +11,17 @@ import { getNorthboundDefaultUploadIntervalMs } from '../utils/runtimeConfig';
 import {
   NORTHBOUND_TYPE,
   getNorthboundTypeLabel,
-  isIThingsType,
-  isPandaXType,
   isSchemaDrivenType,
   normalizeNorthboundType,
 } from '../utils/northboundType';
+import {
+  fillPayloadFromConfig,
+  getNorthboundServerAddress,
+  parseConfigFromItem,
+  safeParseJSON,
+  toUploadIntervalMs,
+  toUploadIntervalSeconds,
+} from './northboundFormHelpers';
 
 const DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS = getNorthboundDefaultUploadIntervalMs();
 const empty = {
@@ -29,15 +35,6 @@ const empty = {
 function toInt(value, fallback = 0) {
   const n = Number.parseInt(`${value ?? ''}`, 10);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function toBool(value) {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    const v = value.trim().toLowerCase();
-    return v === 'true' || v === '1' || v === 'yes';
-  }
-  return !!value;
 }
 
 function buildSchemaDefaults(schemaFields) {
@@ -82,14 +79,6 @@ function normalizeConfig(raw, schemaFields, uploadIntervalFallback = DEFAULT_NOR
   }
 
   return out;
-}
-
-function safeParseJSON(value, fallback = {}) {
-  try {
-    return JSON.parse(value || '{}');
-  } catch {
-    return fallback;
-  }
 }
 
 function validateConfig(config, schemaFields) {
@@ -235,6 +224,7 @@ export function Northbound() {
   const submit = (e) => {
     e.preventDefault();
     const payload = { ...form() };
+    payload.upload_interval = toInt(payload.upload_interval, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
 
     // schema 驱动类型使用动态表单
     if (isSchemaDrivenType(payload.type) && schema().length > 0) {
@@ -246,28 +236,21 @@ export function Northbound() {
         return;
       }
 
-      // 从 schema 配置同步上传周期
-      if (hasSchemaField(schema(), 'uploadIntervalMs')) {
-        payload.upload_interval = toInt(cfg.uploadIntervalMs, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
+      if (hasSchemaField(schema(), 'uploadIntervalMs') || cfg.uploadIntervalMs !== undefined) {
+        cfg.uploadIntervalMs = payload.upload_interval;
       }
       payload.config = JSON.stringify(cfg);
-
-      if (isPandaXType(payload.type) || isIThingsType(payload.type)) {
-        if (payload.server_url === undefined || !`${payload.server_url || ''}`.trim()) {
-          payload.server_url = cfg.serverUrl || cfg.broker || '';
-        }
-        if (payload.username === undefined || !`${payload.username || ''}`.trim()) {
-          payload.username = cfg.username || '';
-        }
-      }
+      fillPayloadFromConfig(payload, cfg);
     } else {
       // 无 schema，使用 JSON 编辑
+      let cfg = {};
       try {
-        JSON.parse(payload.config || '{}');
+        cfg = JSON.parse(payload.config || '{}');
       } catch {
         toast.show('error', '配置 JSON 格式错误');
         return;
       }
+      fillPayloadFromConfig(payload, cfg);
       setConfigErrors({});
     }
 
@@ -330,15 +313,14 @@ export function Northbound() {
   const edit = (item) => {
     const upload = toInt(item.upload_interval, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
     const normalizedType = normalizeNorthboundType(item.type);
+    const parsed = parseConfigFromItem(item, normalizedType, upload, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS);
     const base = {
       name: item.name,
       type: normalizedType,
       upload_interval: upload,
-      config: item.config,
+      config: JSON.stringify(parsed),
       enabled: item.enabled,
     };
-
-    const parsed = safeParseJSON(item.config, {});
 
     if (isSchemaDrivenType(normalizedType)) {
       loadSchema(normalizedType, true).then(() => {
@@ -453,7 +435,16 @@ export function Northbound() {
                   <span class="badge badge-info">{n.type.toUpperCase()}</span>
                 ),
               },
-              { key: 'upload_interval', title: '上传间隔(ms)' },
+              {
+                key: 'server_url',
+                title: 'MQTT 地址',
+                render: (n) => getNorthboundServerAddress(n),
+              },
+              {
+                key: 'upload_interval',
+                title: '上传间隔(s)',
+                render: (n) => toUploadIntervalSeconds(n.upload_interval, 5),
+              },
               {
                 key: 'enabled',
                 title: '状态',
@@ -506,7 +497,7 @@ export function Northbound() {
               <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={resetForm}>✕</button>
             </div>
             <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
-              <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
+              <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap:12px;">
                 <div class="form-group">
                   <label class="form-label">名称</label>
                   <input
@@ -529,6 +520,22 @@ export function Northbound() {
                     <option value={NORTHBOUND_TYPE.ITHINGS}>iThings</option>
                     <option value={NORTHBOUND_TYPE.SAGOO}>Sagoo</option>
                   </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">上传间隔(s)</label>
+                  <input
+                    class="form-input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={toUploadIntervalSeconds(form().upload_interval, 5)}
+                    onInput={(e) => setForm({
+                      ...form(),
+                      upload_interval: toUploadIntervalMs(e.target.value, DEFAULT_NORTHBOUND_UPLOAD_INTERVAL_MS),
+                    })}
+                    placeholder="例如 5"
+                  />
+                  <div class="form-hint">北向实际发送到平台的周期</div>
                 </div>
               </div>
 

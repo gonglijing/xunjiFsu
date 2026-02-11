@@ -600,6 +600,68 @@ nav .container {
   box-shadow: var(--shadow-sm);
 }
 
+/* 实时数据页面设备切换 */
+.realtime-device-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.66) 0%, rgba(15, 23, 42, 0.46) 100%);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96, 165, 250, 0.4) transparent;
+}
+
+.realtime-device-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(30, 41, 59, 0.55);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+}
+
+.realtime-device-tab:hover {
+  color: var(--text-primary);
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(30, 41, 59, 0.82);
+  transform: translateY(-1px);
+}
+
+.realtime-device-tab.active {
+  color: #dbeafe;
+  border-color: rgba(96, 165, 250, 0.75);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.34) 100%);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3), 0 6px 14px rgba(30, 64, 175, 0.24);
+}
+
+.realtime-device-tab-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.realtime-device-tab-id {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.realtime-device-tab.active .realtime-device-tab-id {
+  color: #bfdbfe;
+}
+
+.realtime-device-empty {
+  color: var(--text-muted);
+  padding: 8px 4px;
+}
+
 /* 按钮 */
 .btn {
   padding: 8px 14px;

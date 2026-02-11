@@ -6,23 +6,52 @@ import (
 	"time"
 )
 
+type rateState struct {
+	mu    sync.Mutex
+	times []time.Time
+}
+
 // RateLimiter 请求限流器
 type RateLimiter struct {
-	mu          sync.RWMutex
-	requests    map[string][]time.Time // IP -> 请求时间列表
-	limit       int                    // 限流阈值
-	window      time.Duration          // 时间窗口
-	enabled     bool                   // 是否启用
+	requests sync.Map // key:string(ip) -> *rateState
+	limit    int
+	window   time.Duration
+	enabled  bool
 }
 
 // NewRateLimiter 创建限流器
 func NewRateLimiter(requestsPerMinute int, enabled bool) *RateLimiter {
 	return &RateLimiter{
-		requests: make(map[string][]time.Time),
-		limit:    requestsPerMinute,
-		window:   time.Minute,
-		enabled:  enabled,
+		limit:   requestsPerMinute,
+		window:  time.Minute,
+		enabled: enabled,
 	}
+}
+
+func (rl *RateLimiter) getOrCreateState(ip string) *rateState {
+	if ip == "" {
+		ip = "unknown"
+	}
+	if existing, ok := rl.requests.Load(ip); ok {
+		return existing.(*rateState)
+	}
+	state := &rateState{}
+	actual, _ := rl.requests.LoadOrStore(ip, state)
+	return actual.(*rateState)
+}
+
+func trimRecentTimes(times []time.Time, windowStart time.Time) []time.Time {
+	if len(times) == 0 {
+		return times[:0]
+	}
+	writeIdx := 0
+	for _, t := range times {
+		if t.After(windowStart) {
+			times[writeIdx] = t
+			writeIdx++
+		}
+	}
+	return times[:writeIdx]
 }
 
 // Allow 检查是否允许请求
@@ -31,30 +60,19 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		return true
 	}
 
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
+	state := rl.getOrCreateState(ip)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
 	now := time.Now()
 	windowStart := now.Add(-rl.window)
+	state.times = trimRecentTimes(state.times, windowStart)
 
-	// 清理过期的请求记录
-	times := rl.requests[ip]
-	var validTimes []time.Time
-	for _, t := range times {
-		if t.After(windowStart) {
-			validTimes = append(validTimes, t)
-		}
-	}
-
-	// 检查是否超过限制
-	if len(validTimes) >= rl.limit {
-		rl.requests[ip] = validTimes
+	if len(state.times) >= rl.limit {
 		return false
 	}
 
-	// 记录新请求
-	validTimes = append(validTimes, now)
-	rl.requests[ip] = validTimes
+	state.times = append(state.times, now)
 	return true
 }
 
@@ -71,95 +89,102 @@ func RateLimitMiddleware(rl *RateLimiter) func(http.Handler) http.Handler {
 	}
 }
 
+type bruteForceState struct {
+	mu           sync.Mutex
+	failures     []time.Time
+	blockedUntil time.Time
+}
+
 // BruteForceLimiter 暴力破解防护
 type BruteForceLimiter struct {
-	mu          sync.RWMutex
-	failures    map[string][]time.Time // IP -> 失败时间列表
-	limit       int                    // 失败次数阈值
-	window      time.Duration          // 时间窗口
-	blockTime   time.Duration          // 封禁时间
-	blocked     map[string]time.Time   // 被封禁的IP
+	states    sync.Map // key:string(ip) -> *bruteForceState
+	limit     int
+	window    time.Duration
+	blockTime time.Duration
 }
 
 // NewBruteForceLimiter 创建暴力破解防护器
 func NewBruteForceLimiter(maxFailures int, blockDuration time.Duration) *BruteForceLimiter {
 	return &BruteForceLimiter{
-		failures:  make(map[string][]time.Time),
 		limit:     maxFailures,
 		window:    15 * time.Minute,
 		blockTime: blockDuration,
-		blocked:   make(map[string]time.Time),
 	}
+}
+
+func (b *BruteForceLimiter) getOrCreateState(ip string) *bruteForceState {
+	if ip == "" {
+		ip = "unknown"
+	}
+	if existing, ok := b.states.Load(ip); ok {
+		return existing.(*bruteForceState)
+	}
+	state := &bruteForceState{}
+	actual, _ := b.states.LoadOrStore(ip, state)
+	return actual.(*bruteForceState)
 }
 
 // RecordFailure 记录登录失败
 func (b *BruteForceLimiter) RecordFailure(ip string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	state := b.getOrCreateState(ip)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
 	now := time.Now()
+	if !state.blockedUntil.IsZero() && now.Before(state.blockedUntil) {
+		return
+	}
+	if !state.blockedUntil.IsZero() && !now.Before(state.blockedUntil) {
+		state.blockedUntil = time.Time{}
+	}
+
 	windowStart := now.Add(-b.window)
+	state.failures = trimRecentTimes(state.failures, windowStart)
+	state.failures = append(state.failures, now)
 
-	// 检查是否已被封禁
-	if blockedUntil, exists := b.blocked[ip]; exists {
-		if now.Before(blockedUntil) {
-			return // 仍在封禁期
-		}
-		delete(b.blocked, ip) // 封禁已解除
-	}
-
-	// 清理过期的失败记录
-	times := b.failures[ip]
-	var validTimes []time.Time
-	for _, t := range times {
-		if t.After(windowStart) {
-			validTimes = append(validTimes, t)
-		}
-	}
-
-	// 添加新失败记录
-	validTimes = append(validTimes, now)
-	b.failures[ip] = validTimes
-
-	// 检查是否需要封禁
-	if len(validTimes) >= b.limit {
-		b.blocked[ip] = now.Add(b.blockTime)
-		delete(b.failures, ip)
+	if len(state.failures) >= b.limit {
+		state.blockedUntil = now.Add(b.blockTime)
+		state.failures = state.failures[:0]
 	}
 }
 
 // RecordSuccess 记录登录成功
 func (b *BruteForceLimiter) RecordSuccess(ip string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	delete(b.failures, ip)
+	state := b.getOrCreateState(ip)
+	state.mu.Lock()
+	state.failures = state.failures[:0]
+	state.blockedUntil = time.Time{}
+	state.mu.Unlock()
 }
 
 // IsBlocked 检查IP是否被封禁
 func (b *BruteForceLimiter) IsBlocked(ip string) bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	state := b.getOrCreateState(ip)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
-	if blockedUntil, exists := b.blocked[ip]; exists {
-		if time.Now().Before(blockedUntil) {
-			return true
-		}
-		delete(b.blocked, ip)
+	if state.blockedUntil.IsZero() {
+		return false
 	}
+	if time.Now().Before(state.blockedUntil) {
+		return true
+	}
+	state.blockedUntil = time.Time{}
 	return false
 }
 
 // BlockStatus 返回封禁状态
 func (b *BruteForceLimiter) BlockStatus(ip string) (bool, time.Duration) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	state := b.getOrCreateState(ip)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
-	if blockedUntil, exists := b.blocked[ip]; exists {
-		if remaining := time.Until(blockedUntil); remaining > 0 {
-			return true, remaining
-		}
-		delete(b.blocked, ip)
+	if state.blockedUntil.IsZero() {
+		return false, 0
 	}
+	if remaining := time.Until(state.blockedUntil); remaining > 0 {
+		return true, remaining
+	}
+	state.blockedUntil = time.Time{}
 	return false, 0
 }

@@ -79,6 +79,133 @@ function Resources() {
       .catch((err) => showErrorToast(toast, err, '切换失败'));
   };
 
+  const normalizeModbusTCPEndpoint = (input) => {
+    const text = String(input || '').trim();
+    if (!text) return '';
+    if (text.startsWith('tcp://')) {
+      return text.slice('tcp://'.length).trim();
+    }
+    return text;
+  };
+
+  const parseModbusTCPEndpoint = (endpoint) => {
+    const text = normalizeModbusTCPEndpoint(endpoint);
+    if (!text) return null;
+
+    if (text.startsWith('[')) {
+      const endBracket = text.indexOf(']');
+      if (endBracket <= 0 || endBracket >= text.length - 1 || text[endBracket + 1] !== ':') {
+        return null;
+      }
+      const host = text.slice(1, endBracket).trim();
+      const port = Number.parseInt(text.slice(endBracket + 2).trim(), 10);
+      if (!host || !Number.isFinite(port) || port <= 0 || port > 65535) return null;
+      return { host, port };
+    }
+
+    const sep = text.lastIndexOf(':');
+    if (sep <= 0 || sep === text.length - 1) return null;
+
+    const host = text.slice(0, sep).trim();
+    const port = Number.parseInt(text.slice(sep + 1).trim(), 10);
+    if (!host || !Number.isFinite(port) || port <= 0 || port > 65535) return null;
+
+    return { host, port };
+  };
+
+  const convertDriverTypeToModbusTCP = (driverType) => {
+    const text = String(driverType || '').trim();
+    if (!text) return text;
+    if (text.includes('modbus_rtu_wasm')) return text.replace('modbus_rtu_wasm', 'modbus_tcp_wasm');
+    if (text.includes('modbus_rtu_excel')) return text.replace('modbus_rtu_excel', 'modbus_tcp_excel');
+    if (text.includes('modbus_rtu')) return text.replace('modbus_rtu', 'modbus_tcp');
+    if (text.includes('serial')) return text.replace('serial', 'tcp');
+    return text;
+  };
+
+  const migrateBoundDevicesToModbusTCP = async (resourceID, endpoint) => {
+    const parsed = parseModbusTCPEndpoint(endpoint);
+    if (!parsed) return { migrated: 0, failed: 0, skipped: 0 };
+
+    const devices = await api.devices.listDevices();
+    const related = (Array.isArray(devices) ? devices : [])
+      .filter((item) => Number(item?.resource_id || 0) === Number(resourceID));
+
+    let migrated = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (const device of related) {
+      const nextDriverType = convertDriverTypeToModbusTCP(device.driver_type);
+      const changed =
+        nextDriverType !== String(device.driver_type || '')
+        || String(device.ip_address || '') !== parsed.host
+        || Number(device.port_num || 0) !== parsed.port
+        || String(device.serial_port || '') !== '';
+
+      if (!changed) {
+        skipped += 1;
+        continue;
+      }
+
+      const payload = {
+        ...device,
+        driver_type: nextDriverType,
+        ip_address: parsed.host,
+        port_num: parsed.port,
+        serial_port: '',
+      };
+
+      try {
+        await api.devices.updateDevice(device.id, payload);
+        migrated += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    return { migrated, failed, skipped };
+  };
+
+  const convertSerialToModbusTCP = (item) => {
+    if (!item || String(item.type || '').toLowerCase() !== 'serial') return;
+
+    const candidate = normalizeModbusTCPEndpoint(item.path);
+    const suggested = candidate.includes(':') ? candidate : '127.0.0.1:502';
+    const input = window.prompt('请输入 ModbusTCP 地址（IP:端口）', suggested);
+    if (input == null) return;
+
+    const endpoint = normalizeModbusTCPEndpoint(input);
+    const endpointParsed = parseModbusTCPEndpoint(endpoint);
+    if (!endpointParsed) {
+      toast.show('error', '请输入正确的 ModbusTCP 地址，例如 192.168.1.100:502');
+      return;
+    }
+
+    if (!confirm(`将资源「${item.name}」从串口转换为 ModbusTCP（${endpoint}）？`)) {
+      return;
+    }
+
+    api.resources.updateResource(item.id, {
+      name: item.name,
+      type: 'net',
+      path: endpoint,
+      enabled: item.enabled,
+    })
+      .then(async () => {
+        const stats = await migrateBoundDevicesToModbusTCP(item.id, endpoint);
+        if (stats.failed > 0) {
+          toast.show('error', `资源已转换；设备联动成功 ${stats.migrated} 台，失败 ${stats.failed} 台，请检查设备配置`);
+        } else if (stats.migrated > 0) {
+          toast.show('success', `已转换为 ModbusTCP 资源，并联动更新 ${stats.migrated} 台设备`);
+        } else {
+          toast.show('success', '已转换为 ModbusTCP 资源');
+        }
+        load();
+      })
+      .catch((err) => showErrorToast(toast, err, '转换失败'));
+  };
+
   return (
     <div>
       <Card
@@ -124,6 +251,11 @@ function Resources() {
                       >
                         编辑
                       </button>
+                      <Show when={String(r.type || '').toLowerCase() === 'serial'}>
+                        <button class="btn btn-outline-primary" onClick={() => convertSerialToModbusTCP(r)}>
+                          转ModbusTCP
+                        </button>
+                      </Show>
                       <button class="btn btn-soft-primary" onClick={() => toggle(r)}>{r.enabled === 1 ? '禁用' : '启用'}</button>
                       <button class="btn btn-outline-danger" onClick={() => remove(r.id)}>删除</button>
                       </div>

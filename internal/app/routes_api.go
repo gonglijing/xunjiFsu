@@ -22,6 +22,7 @@ func registerAPIRoutes(r *http.ServeMux, h *handlers.Handler, authManager *auth.
 	registerUserRoutes(api, h)
 	registerResourceRoutes(api, h)
 	registerGatewayRoutes(api, h)
+	registerDebugRoutes(api, h)
 
 	r.Handle("/api/", authManager.RequireAuth(http.StripPrefix("/api", api)))
 }
@@ -111,4 +112,9 @@ func registerGatewayRoutes(api *http.ServeMux, h *handlers.Handler) {
 	api.HandleFunc("GET /gateway/runtime", h.GetGatewayRuntimeConfig)
 	api.HandleFunc("PUT /gateway/runtime", h.UpdateGatewayRuntimeConfig)
 	api.HandleFunc("GET /gateway/runtime/audits", h.GetGatewayRuntimeAudits)
+}
+
+func registerDebugRoutes(api *http.ServeMux, h *handlers.Handler) {
+	api.HandleFunc("POST /debug/modbus/serial", h.DebugModbusSerial)
+	api.HandleFunc("POST /debug/modbus/tcp", h.DebugModbusTCP)
 }

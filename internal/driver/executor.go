@@ -21,9 +21,9 @@ type DriverExecutor struct {
 	serialPorts               map[int64]SerialPort // 资源ID到串口的映射
 	tcpConns                  map[int64]net.Conn   // 资源ID到TCP连接
 	resourcePaths             map[int64]string     // 资源ID到路径的映射 (用于TCP懒连接)
+	resourceMux               sync.Map             // key:int64 -> *sync.Mutex, 同一资源串口的互斥锁
 	mu                        sync.RWMutex
 	executing                 map[int64]bool
-	resourceMux               map[int64]*sync.Mutex // 同一资源串口的互斥锁，避免并发读写
 	serialTimeout             time.Duration
 	serialOpenRetries         int
 	serialOpenBackoffOverride time.Duration
@@ -41,7 +41,6 @@ func NewDriverExecutor(manager *DriverManager) *DriverExecutor {
 		tcpConns:      make(map[int64]net.Conn),
 		resourcePaths: make(map[int64]string),
 		executing:     make(map[int64]bool),
-		resourceMux:   make(map[int64]*sync.Mutex),
 	}
 
 	// 双向绑定
@@ -269,7 +268,7 @@ func (e *DriverExecutor) CloseResource(resourceID int64) {
 		delete(e.tcpConns, resourceID)
 	}
 	delete(e.resourcePaths, resourceID)
-	delete(e.resourceMux, resourceID)
+	e.resourceMux.Delete(resourceID)
 	e.mu.Unlock()
 }
 
@@ -285,7 +284,10 @@ func (e *DriverExecutor) CloseAllResources() {
 		delete(e.tcpConns, id)
 	}
 	e.resourcePaths = make(map[int64]string)
-	e.resourceMux = make(map[int64]*sync.Mutex)
+	e.resourceMux.Range(func(key, _ any) bool {
+		e.resourceMux.Delete(key)
+		return true
+	})
 	e.mu.Unlock()
 }
 
@@ -298,14 +300,12 @@ func (e *DriverExecutor) GetResourcePath(resourceID int64) string {
 
 // getResourceLock 返回资源级互斥锁（懒创建）
 func (e *DriverExecutor) getResourceLock(resourceID int64) *sync.Mutex {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if l, ok := e.resourceMux[resourceID]; ok {
-		return l
+	if lock, ok := e.resourceMux.Load(resourceID); ok {
+		return lock.(*sync.Mutex)
 	}
-	l := &sync.Mutex{}
-	e.resourceMux[resourceID] = l
-	return l
+	lock := &sync.Mutex{}
+	actual, _ := e.resourceMux.LoadOrStore(resourceID, lock)
+	return actual.(*sync.Mutex)
 }
 
 // Execute 执行驱动读取（带资源访问锁）

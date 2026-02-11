@@ -8,6 +8,9 @@ import { DevicesPage } from './pages/DevicesPage';
 import { DriversPage } from './pages/DriversPage';
 import { NorthboundPage } from './pages/NorthboundPage';
 import { ThresholdsPage } from './pages/ThresholdsPage';
+import { DebugToolsPage } from './pages/DebugToolsPage';
+import { ModbusSerialDebugPage } from './pages/ModbusSerialDebugPage';
+import { ModbusTCPDebugPage } from './pages/ModbusTCPDebugPage';
 import AlarmsPage from './pages/AlarmsPage';
 import Realtime from './pages/Realtime';
 import Topology from './pages/Topology';
@@ -38,6 +41,12 @@ function App() {
         return <NorthboundPage />;
       case currentPath.startsWith('/thresholds'):
         return <ThresholdsPage />;
+      case currentPath.startsWith('/debug/modbus-serial'):
+        return <ModbusSerialDebugPage />;
+      case currentPath.startsWith('/debug/modbus-tcp'):
+        return <ModbusTCPDebugPage />;
+      case currentPath.startsWith('/debug'):
+        return <DebugToolsPage />;
       case currentPath.startsWith('/alarms'):
         return <AlarmsPage />;
       case currentPath.startsWith('/realtime'):

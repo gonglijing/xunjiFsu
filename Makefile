@@ -1,8 +1,8 @@
 # HuShu智能网关 - Makefile
 # 支持多平台交叉编译
 
-.PHONY: all clean build build-mini test fmt vet ui ui-install ui-dev run help northbound-plugins \
-        deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows
+.PHONY: all clean build build-mini build-native build-minimal build-tiny test fmt vet ui ui-install ui-dev run help northbound-plugins \
+        deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows arm32 arm64
 
 # 默认目标: 编译前端 + 本地运行
 all: ui run
@@ -22,6 +22,9 @@ help:
 	@echo "  (无参数)      - 编译前端 + 启动后端 (默认)"
 	@echo "  all           - 同默认目标"
 	@echo "  build         - 编译当前平台后端 (CGO=0)"
+	@echo "  build-native  - 编译原生依赖最少版本 (no_paho_mqtt)"
+	@echo "  build-minimal - 编译最小依赖版本 (no_paho_mqtt + no_extism)"
+	@echo "  build-tiny    - build-minimal + 可选 upx 压缩"
 	@echo "  build-mini    - 编译最小体积后端 (trimpath + 精简 ldflags)"
 	@echo "  northbound-plugins - 编译北向插件"
 	@echo "  test          - go test ./..."
@@ -33,7 +36,8 @@ help:
 	@echo "  run           - 仅启动后端服务"
 	@echo "  clean         - 清理构建产物"
 	@echo "  deploy        - 部署到所有平台"
-	@echo "  deploy-arm32  - 部署Linux ARM32版本"
+	@echo "  arm32         - 部署Linux ARM32版本"
+	@echo "  arm64         - 部署Linux ARM64版本"
 	@echo "  deploy-arm64  - 部署Linux ARM64版本"
 	@echo "  deploy-darwin - 部署macOS版本"
 	@echo "  deploy-darwin-arm64 - 部署macOS ARM64版本"
@@ -57,8 +61,11 @@ NORTHBOUND_PLUGINS := $(addprefix $(NORTHBOUND_PLUGIN_DIR)/,$(NORTHBOUND_PLUGIN_
 MAIN_SRC := cmd/main.go
 CONFIG_SRC := config/config.yaml
 MIGRATIONS_DIR := migrations
-WEB_DIR := web
+UI_DIR := ui
 DATA_DIR := data
+
+# ARM32 运行时最小资源（仅当前程序启动必需）
+ARM32_RUNTIME_MIGRATIONS := 002_param_schema.sql 003_data_schema.sql 004_indexes.sql
 
 # 部署目录
 DEPLOY_DIR := deploy
@@ -78,6 +85,28 @@ build-mini:
 	@echo "=== 构建最小体积 $(PROJECT_NAME) $(VERSION) ==="
 	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
+	@if command -v upx >/dev/null 2>&1; then \
+		echo "=== 使用 upx 压缩可执行文件 ==="; \
+		upx --best --lzma $(PROJECT_NAME) >/dev/null 2>&1 || true; \
+	fi
+	@ls -lh $(PROJECT_NAME)
+
+# 编译原生依赖最少版本（去掉 paho mqtt）
+build-native:
+	@echo "=== 构建原生依赖最少版本 $(PROJECT_NAME) $(VERSION) ==="
+	CGO_ENABLED=0 go build -tags "no_paho_mqtt" $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
+	@echo "✅ 构建完成: $(PROJECT_NAME)"
+	@ls -lh $(PROJECT_NAME)
+
+# 编译最小依赖版本（去掉 paho mqtt + extism）
+build-minimal:
+	@echo "=== 构建最小依赖版本 $(PROJECT_NAME) $(VERSION) ==="
+	CGO_ENABLED=0 go build -tags "no_paho_mqtt no_extism" $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
+	@echo "✅ 构建完成: $(PROJECT_NAME)"
+	@ls -lh $(PROJECT_NAME)
+
+# 编译最小体积版本（最小依赖 + upx）
+build-tiny: build-minimal
 	@if command -v upx >/dev/null 2>&1; then \
 		echo "=== 使用 upx 压缩可执行文件 ==="; \
 		upx --best --lzma $(PROJECT_NAME) >/dev/null 2>&1 || true; \
@@ -161,22 +190,62 @@ prepare-deploy:
 # Linux ARM32 编译
 deploy-arm32: prepare-deploy ui
 	@echo "=== 编译 Linux ARM32 版本 ==="
+	rm -rf $(DEPLOY_DIR)/arm32/*
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
-	@echo "复制配置文件..."
+	@echo "复制 ARM32 运行时文件（精简）..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/arm32/
-	cp -r migrations $(DEPLOY_DIR)/arm32/
-	cp -r web $(DEPLOY_DIR)/arm32/
+	mkdir -p $(DEPLOY_DIR)/arm32/migrations
+	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm32/migrations/
+	mkdir -p $(DEPLOY_DIR)/arm32/ui
+	cp -r ui/static $(DEPLOY_DIR)/arm32/ui/
 	@echo "✅ ARM32 部署包已生成: $(DEPLOY_DIR)/arm32/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/arm32/
+
+# Linux ARM32 编译 (快捷方式)
+arm32: prepare-deploy ui
+	@echo "=== 编译 Linux ARM32 版本 ==="
+	rm -rf $(DEPLOY_DIR)/arm32/*
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
+	@echo "复制 ARM32 运行时文件（精简）..."
+	cp -f config/config.yaml $(DEPLOY_DIR)/arm32/
+	mkdir -p $(DEPLOY_DIR)/arm32/migrations
+	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm32/migrations/
+	mkdir -p $(DEPLOY_DIR)/arm32/ui
+	cp -r ui/static $(DEPLOY_DIR)/arm32/ui/
+	@echo "✅ ARM32 部署包已生成: $(DEPLOY_DIR)/arm32/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/arm32/
 
 # Linux ARM64 编译
 deploy-arm64: prepare-deploy ui
 	@echo "=== 编译 Linux ARM64 版本 ==="
+	rm -rf $(DEPLOY_DIR)/arm64/*
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm64/$(PROJECT_NAME) $(MAIN_SRC)
-	@echo "复制配置文件..."
+	@echo "复制 ARM64 运行时文件（精简）..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/arm64/
-	cp -r migrations $(DEPLOY_DIR)/arm64/
-	cp -r web $(DEPLOY_DIR)/arm64/
+	mkdir -p $(DEPLOY_DIR)/arm64/migrations
+	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm64/migrations/
+	mkdir -p $(DEPLOY_DIR)/arm64/ui
+	cp -r ui/static $(DEPLOY_DIR)/arm64/ui/
 	@echo "✅ ARM64 部署包已生成: $(DEPLOY_DIR)/arm64/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/arm64/
+
+# Linux ARM64 编译 (快捷方式)
+arm64: prepare-deploy ui
+	@echo "=== 编译 Linux ARM64 版本 ==="
+	rm -rf $(DEPLOY_DIR)/arm64/*
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm64/$(PROJECT_NAME) $(MAIN_SRC)
+	@echo "复制 ARM64 运行时文件（精简）..."
+	cp -f config/config.yaml $(DEPLOY_DIR)/arm64/
+	mkdir -p $(DEPLOY_DIR)/arm64/migrations
+	cp -f $(addprefix migrations/,$(ARM32_RUNTIME_MIGRATIONS)) $(DEPLOY_DIR)/arm64/migrations/
+	mkdir -p $(DEPLOY_DIR)/arm64/ui
+	cp -r ui/static $(DEPLOY_DIR)/arm64/ui/
+	@echo "✅ ARM64 部署包已生成: $(DEPLOY_DIR)/arm64/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/arm64/
 
 # macOS (Intel/AMD64) 编译
 deploy-darwin: prepare-deploy ui
@@ -185,8 +254,10 @@ deploy-darwin: prepare-deploy ui
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/darwin/
 	cp -r migrations $(DEPLOY_DIR)/darwin/
-	cp -r web $(DEPLOY_DIR)/darwin/
+	cp -r ui $(DEPLOY_DIR)/darwin/
 	@echo "✅ macOS 部署包已生成: $(DEPLOY_DIR)/darwin/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/darwin/
 
 # macOS ARM64 (Apple Silicon) 编译
 deploy-darwin-arm64: prepare-deploy ui
@@ -195,8 +266,10 @@ deploy-darwin-arm64: prepare-deploy ui
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/darwin/
 	cp -r migrations $(DEPLOY_DIR)/darwin/
-	cp -r web $(DEPLOY_DIR)/darwin/
+	cp -r ui $(DEPLOY_DIR)/darwin/
 	@echo "✅ macOS ARM64 部署包已生成: $(DEPLOY_DIR)/darwin/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/darwin/
 
 # Windows AMD64 编译
 deploy-windows: prepare-deploy ui
@@ -205,8 +278,10 @@ deploy-windows: prepare-deploy ui
 	@echo "复制配置文件..."
 	cp -f config/config.yaml $(DEPLOY_DIR)/windows/
 	cp -r migrations $(DEPLOY_DIR)/windows/
-	cp -r web $(DEPLOY_DIR)/windows/
+	cp -r ui $(DEPLOY_DIR)/windows/
 	@echo "✅ Windows 部署包已生成: $(DEPLOY_DIR)/windows/"
+	@echo ""
+	@ls -la $(DEPLOY_DIR)/windows/
 
 # 部署到所有平台
 deploy: prepare-deploy ui

@@ -1,17 +1,14 @@
-//go:build !no_extism
+//go:build no_extism
 
 package driver
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -23,36 +20,6 @@ const (
 	defaultTCPDialBackoff    = 200 * time.Millisecond
 	defaultTCPReadTimeout    = 500 * time.Millisecond
 )
-
-func validI64Ptr(ptr uint64) bool {
-	return ptr != 0 && ptr <= uint64(^uint32(0))
-}
-
-func validI64PtrSize(ptr uint64, size int) bool {
-	return validI64Ptr(ptr) && size > 0
-}
-
-func readWithTimeout(port SerialPort, buf []byte, expect int, timeout time.Duration) (int, error) {
-	deadline := time.Now().Add(timeout)
-	read := 0
-	for read < expect && time.Now().Before(deadline) {
-		n, err := port.Read(buf[read:expect])
-		if n > 0 {
-			read += n
-		}
-		if err != nil {
-			return read, err
-		}
-		if read >= expect {
-			break
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	if read < expect {
-		return read, fmt.Errorf("timeout")
-	}
-	return read, nil
-}
 
 func resolveResource(device *models.Device) (int64, string) {
 	resourceID := int64(0)
@@ -131,34 +98,6 @@ func buildDriverContext(device *models.Device, resourceID int64, resourceType st
 		Config:       deviceConfig,
 		DeviceConfig: "",
 	}
-}
-
-var ErrPluginEmptyOutput = errors.New("plugin returned empty output")
-
-func callPlugin(ctx context.Context, driver *WasmDriver, function string, input []byte) (uint32, []byte, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	rc, output, err := driver.plugin.CallWithContext(ctx, function, input)
-	if err != nil {
-		return rc, nil, err
-	}
-
-	if len(output) == 0 {
-		if alt, err2 := driver.plugin.GetOutput(); err2 == nil && len(alt) > 0 {
-			output = alt
-		}
-	}
-
-	if len(output) == 0 {
-		errMsg := driver.plugin.GetError()
-		if errMsg != "" {
-			return rc, nil, fmt.Errorf("%w: %s", ErrPluginEmptyOutput, errMsg)
-		}
-		return rc, nil, ErrPluginEmptyOutput
-	}
-
-	return rc, output, nil
 }
 
 func (e *DriverExecutor) startExecution(device *models.Device) (func(), error) {
@@ -287,7 +226,6 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 			if resourceID <= 0 || loaded.resourceID == resourceID {
 				return nil
 			}
-			logger.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
 		}
 	}
 
@@ -297,11 +235,6 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 	}
 	if err := e.manager.LoadDriverFromModel(drv, resourceID); err != nil {
 		return fmt.Errorf("load driver %d failed: %w", drv.ID, err)
-	}
-	if version, err := e.manager.GetDriverVersion(driverID); err == nil && version != "" {
-		if err := database.UpdateDriverVersion(driverID, version); err != nil {
-			logger.Warn("Update driver version failed", "driver_id", driverID, "error", err)
-		}
 	}
 	return nil
 }
