@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,20 @@ type DriverResult struct {
 	Points    []DriverPoint     `json:"points"` // 新格式: [{"field_name":"temperature","value":25.3,"rw":"R"}]
 	Error     string            `json:"error"`
 	Timestamp time.Time         `json:"timestamp"`
+}
+
+func isReadFunction(function string, driverCtx *DriverContext) bool {
+	f := strings.ToLower(strings.TrimSpace(function))
+	if f == "read" || f == "collect" {
+		return true
+	}
+
+	if driverCtx == nil || driverCtx.Config == nil {
+		return false
+	}
+
+	funcName := strings.ToLower(strings.TrimSpace(driverCtx.Config["func_name"]))
+	return funcName == "read" || funcName == "collect"
 }
 
 // DriverPoint 驱动测点数据
@@ -281,6 +296,18 @@ func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, 
 
 	if rc != 0 {
 		logger.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "rc", rc)
+	}
+
+	if isReadFunction(function, driverCtx) {
+		logger.Info(
+			"Driver read full output",
+			"driver_id", id,
+			"device_id", driverCtx.DeviceID,
+			"device_name", driverCtx.DeviceName,
+			"resource_id", driverCtx.ResourceID,
+			"function", function,
+			"output", string(output),
+		)
 	}
 
 	// 解析输出
