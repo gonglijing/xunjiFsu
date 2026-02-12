@@ -62,7 +62,14 @@ func resolveResource(device *models.Device) (int64, string) {
 		resourceID = *device.ResourceID
 	}
 
-	resourceType := device.ResourceType
+	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
+	if resourceID > 0 && database.ParamDB != nil {
+		if res, err := database.GetResourceByID(resourceID); err == nil && res != nil {
+			if rt := strings.ToLower(strings.TrimSpace(res.Type)); rt != "" {
+				resourceType = rt
+			}
+		}
+	}
 	if resourceType == "" {
 		resourceType = inferResourceType(device)
 	}
@@ -93,7 +100,7 @@ func inferResourceType(device *models.Device) string {
 
 func buildDeviceConfig(device *models.Device) map[string]string {
 	deviceConfig := make(map[string]string)
-	resourceType := inferResourceType(device)
+	_, resourceType := resolveResource(device)
 	if resourceType == "serial" {
 		deviceConfig["serial_port"] = device.SerialPort
 		deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
