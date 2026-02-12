@@ -4,9 +4,12 @@ package driver
 
 import (
 	"context"
+	"encoding/binary"
+	"io"
 	"time"
 
 	extism "github.com/extism/go-sdk"
+	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
 func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFunction {
@@ -27,29 +30,39 @@ func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFu
 
 			conn := executor.GetTCPConn(resourceID)
 			if conn == nil || wSize <= 0 || rCap <= 0 {
+				if conn == nil {
+					logger.Warn("TCP connection unavailable", "resource_id", resourceID)
+				}
 				stack[0] = 0
 				return
 			}
 			if !validI64Ptr(wPtr) || !validI64Ptr(rPtr) {
+				logger.Warn("TCP transceive invalid memory pointer", "resource_id", resourceID, "w_ptr", wPtr, "r_ptr", rPtr)
 				stack[0] = 0
 				return
 			}
 
 			req, _ := p.Memory().Read(uint32(wPtr), uint32(wSize))
 			if _, err := conn.Write(req); err != nil {
+				logger.Warn("TCP write failed", "resource_id", resourceID, "error", err, "req", hexPreview(req, 32))
 				executor.UnregisterTCP(resourceID)
 				stack[0] = 0
 				return
 			}
 
-			tout := time.Duration(timeoutMs)
+			tout := time.Duration(timeoutMs) * time.Millisecond
 			if tout <= 0 {
 				tout = executor.tcpReadTimeout()
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(tout))
 			buf := make([]byte, rCap)
-			n, err := conn.Read(buf)
+			n, err := readModbusTCPResponse(conn, buf)
 			if err != nil || n <= 0 {
+				if err != nil {
+					logger.Warn("TCP read failed", "resource_id", resourceID, "error", err, "req", hexPreview(req, 32))
+				} else {
+					logger.Warn("TCP read timeout", "resource_id", resourceID, "req", hexPreview(req, 32))
+				}
 				executor.UnregisterTCP(resourceID)
 				stack[0] = 0
 				return
@@ -68,4 +81,30 @@ func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFu
 	)
 
 	return []extism.HostFunction{tcpTransceive}
+}
+
+func readModbusTCPResponse(conn io.Reader, buf []byte) (int, error) {
+	if len(buf) < 9 {
+		return 0, io.ErrShortBuffer
+	}
+
+	if _, err := io.ReadFull(conn, buf[:7]); err != nil {
+		return 0, err
+	}
+
+	length := int(binary.BigEndian.Uint16(buf[4:6]))
+	if length < 2 {
+		return 0, io.ErrUnexpectedEOF
+	}
+
+	total := 6 + length
+	if total > len(buf) {
+		return 0, io.ErrShortBuffer
+	}
+
+	if _, err := io.ReadFull(conn, buf[7:total]); err != nil {
+		return 0, err
+	}
+
+	return total, nil
 }
