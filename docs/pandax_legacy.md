@@ -1,5 +1,7 @@
 # PandaX 北向接口说明（FSU）
 
+> 说明：该文档为历史版本归档，当前以 `docs/pandax.md` 为主。
+
 ## 1. 目标与范围
 
 本文档用于说明 `fsu` 中新增的北向类型 **PandaX**（`type: pandax`）的对接方式。
