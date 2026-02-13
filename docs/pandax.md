@@ -261,3 +261,94 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
   - 排查：驱动 `version()` 是否返回固定 `productKey`；设备是否绑定了正确 `driver_id`；FSU 日志是否有 productKey 回写失败。
 - 现象：PandaX 跳过创建
   - 排查：该 `productKey` 下是否“全部子设备无字段”，会触发 FSU 预检查拒绝。
+
+---
+
+## 9. 现场联调记录模板
+
+> 用法：每次联调复制本节内容，填写一次记录，便于问题追踪和回归比对。
+
+### 9.1 基本信息
+
+- 联调日期：`YYYY-MM-DD`
+- 联调时间段：`HH:mm - HH:mm`
+- 环境：`测试 / 预发 / 生产`
+- FSU 版本：`<git commit / tag>`
+- PandaX 版本：`<git commit / tag>`
+- 操作人：`<姓名>`
+- 记录人：`<姓名>`
+
+### 9.2 联调对象
+
+- 网关标识：`<gateway token / device key>`
+- 同步 Topic：`v1/gateway/register/telemetry`
+- 遥测 Topic：`v1/gateway/telemetry`
+- 子设备清单（productKey + deviceKey）：
+  - `pk_1 / dk_1`
+  - `pk_2 / dk_2`
+
+### 9.3 执行步骤检查
+
+- [ ] FSU PandaX 北向已启用且 MQTT 已连接
+- [ ] 子设备存在最新遥测（至少 1 条）
+- [ ] 在 FSU 页面点击 **同步设备**
+- [ ] FSU 日志出现 `SyncDevices: 已发布同步消息`
+- [ ] Broker 抓到 `v1/gateway/register/telemetry` 报文
+- [ ] PandaX 侧无注册解析报错
+- [ ] PandaX 侧子设备创建/认证成功
+- [ ] PandaX 侧遥测物模型创建/补齐成功
+
+### 9.4 MQTT 报文校验记录
+
+- 抓包命令：
+
+```bash
+mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
+  -t 'v1/gateway/register/telemetry' -v
+```
+
+- 最近一次报文摘要：
+  - `ts`：`<value>`
+  - `gateway.token`：`<value>`
+  - `subDevices.count`：`<value>`
+  - `subDevices[0].token`：`<value>`
+  - `subDevices[0].productKey`：`<value>`
+  - `subDevices[0].values.keys`：`<k1,k2,...>`
+
+- 关键校验结果：
+  - [ ] Topic 正确
+  - [ ] 报文结构完整（ts/source/gateway/subDevices）
+  - [ ] 子设备 `productKey` 与驱动固定值一致
+  - [ ] `values` 非空且字段符合预期
+
+### 9.5 PandaX 结果核验
+
+- 子设备查询：`GET /device/list?deviceType=gatewayS&pageNum=1&pageSize=200`
+  - 结果：`通过 / 不通过`
+- 模型查询：`GET /device/template/list?pid=<productId>&classify=telemetry&pageNum=1&pageSize=200`
+  - 结果：`通过 / 不通过`
+- 字段匹配（模型字段 vs FSU 上报字段）：
+  - 结果：`通过 / 不通过`
+  - 缺失字段：`<无 / 字段列表>`
+
+### 9.6 问题与处理记录
+
+| 序号 | 现象 | 初步定位 | 处理动作 | 结论 |
+|---|---|---|---|---|
+| 1 |  |  |  |  |
+| 2 |  |  |  |  |
+
+### 9.7 验收结论
+
+- 本次联调结论：`通过 / 有条件通过 / 不通过`
+- 遗留问题：
+  - `问题1`：`责任方`，`计划完成日期`
+  - `问题2`：`责任方`，`计划完成日期`
+- 下次联调计划时间：`YYYY-MM-DD HH:mm`
+
+### 9.8 附件
+
+- 日志文件：`<路径>`
+- 抓包截图：`<路径>`
+- 关键请求/响应截图：`<路径>`
+
