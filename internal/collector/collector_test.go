@@ -262,6 +262,61 @@ func TestDriverResultToCollectData_TrimAndOverrideFields(t *testing.T) {
 	}
 }
 
+func TestDriverResultToCollectData_ProductKeyFromDriver(t *testing.T) {
+	device := &models.Device{
+		ID:         2,
+		Name:       "dev2",
+		ProductKey: "oldPk",
+		DeviceKey:  "dk2",
+	}
+	res := &driver.DriverResult{
+		ProductKey: "  newPk  ",
+		Data:       map[string]string{"temp": "20"},
+	}
+
+	collect := driverResultToCollectData(device, res)
+	if collect.ProductKey != "newPk" {
+		t.Fatalf("expected driver product key override, got %q", collect.ProductKey)
+	}
+}
+
+func TestSyncDeviceProductKey_UpdateInMemory(t *testing.T) {
+	c := NewCollector(nil, nil)
+	device := &models.Device{ID: 3, ProductKey: "pk-old"}
+	collect := &models.CollectData{ProductKey: "pk-new"}
+
+	if err := c.syncDeviceProductKey(device, collect); err != nil {
+		t.Fatalf("syncDeviceProductKey() error = %v", err)
+	}
+	if device.ProductKey != "pk-new" {
+		t.Fatalf("device product key not updated: %q", device.ProductKey)
+	}
+}
+
+func TestSyncDeviceProductKey_FixedByDriverID(t *testing.T) {
+	c := NewCollector(nil, nil)
+	driverID := int64(9)
+
+	deviceA := &models.Device{ID: 31, DriverID: &driverID, ProductKey: ""}
+	collectA := &models.CollectData{ProductKey: "prod-fixed"}
+	if err := c.syncDeviceProductKey(deviceA, collectA); err != nil {
+		t.Fatalf("syncDeviceProductKey() error = %v", err)
+	}
+
+	deviceB := &models.Device{ID: 32, DriverID: &driverID, ProductKey: ""}
+	collectB := &models.CollectData{ProductKey: "prod-other"}
+	if err := c.syncDeviceProductKey(deviceB, collectB); err != nil {
+		t.Fatalf("syncDeviceProductKey() error = %v", err)
+	}
+
+	if collectB.ProductKey != "prod-fixed" {
+		t.Fatalf("expected cached product key, got %q", collectB.ProductKey)
+	}
+	if deviceB.ProductKey != "prod-fixed" {
+		t.Fatalf("expected deviceB product key updated to cached value, got %q", deviceB.ProductKey)
+	}
+}
+
 func TestDriverPointValueToString(t *testing.T) {
 	cases := []struct {
 		name  string

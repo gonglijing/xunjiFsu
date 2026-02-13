@@ -56,11 +56,19 @@ func loadAndSyncDriverVersion(h *Handler, driver *models.Driver) {
 	if err != nil {
 		return
 	}
-	if version, err := driverpkg.ExtractDriverVersion(wasmData); err == nil && version != "" {
+
+	version, productKey, err := driverpkg.ExtractDriverMetadata(wasmData)
+	if err != nil {
+		return
+	}
+	if version != "" {
 		driver.Version = version
 		if driver.ID > 0 {
 			_ = database.UpdateDriverVersion(driver.ID, version)
 		}
+	}
+	if productKey != "" {
+		driver.ProductKey = productKey
 	}
 }
 

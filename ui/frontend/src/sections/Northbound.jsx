@@ -290,6 +290,15 @@ export function Northbound() {
       .catch((err) => showErrorToast(toast, err, '重载失败'));
   };
 
+  const syncDevices = (id) => {
+    api.northbound.syncNorthboundDevices(id)
+      .then(() => {
+        toast.show('success', '同步设备成功');
+        load();
+      })
+      .catch((err) => showErrorToast(toast, err, '同步设备失败'));
+  };
+
   const remove = (id) => {
     if (!confirm('删除该配置？')) return;
     api.northbound.deleteNorthboundConfig(id)
@@ -481,7 +490,12 @@ export function Northbound() {
               <div class="table-actions">
                 <button class="btn btn-outline-primary" onClick={() => edit(n)}>编辑</button>
                 <button class="btn btn-soft-primary" onClick={() => toggle(n.id)}>{n.enabled === 1 ? '禁用' : '启用'}</button>
-                <button class="btn btn-outline-primary" onClick={() => reload(n.id)}>重载</button>
+                <Show
+                  when={normalizeNorthboundType(n.type) === NORTHBOUND_TYPE.PANDAX}
+                  fallback={<button class="btn btn-outline-primary" onClick={() => reload(n.id)}>重载</button>}
+                >
+                  <button class="btn btn-outline-primary" onClick={() => syncDevices(n.id)}>同步设备</button>
+                </Show>
                 <button class="btn btn-outline-danger" onClick={() => remove(n.id)}>删除</button>
               </div>
             )}

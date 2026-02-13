@@ -237,6 +237,12 @@ func UpdateDeviceEnabled(id int64, enabled int) error {
 	return err
 }
 
+// UpdateDeviceProductKey 更新设备 product_key
+func UpdateDeviceProductKey(id int64, productKey string) error {
+	_, err := ParamDB.Exec("UPDATE devices SET product_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", productKey, id)
+	return err
+}
+
 // UpdateDeviceWithID 根据ID更新设备信息（用于API）
 func UpdateDeviceWithID(id int64, device *models.Device) error {
 	_, err := ParamDB.Exec(

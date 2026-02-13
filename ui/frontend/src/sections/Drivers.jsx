@@ -113,6 +113,11 @@ export function Drivers() {
               render: (d) => d.version || '-',
             },
             {
+              key: 'product_key',
+              title: 'ProductKey',
+              render: (d) => d.product_key || '-',
+            },
+            {
               key: 'size',
               title: '大小',
               render: (d) => fmtSize(d.size),

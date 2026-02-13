@@ -17,6 +17,7 @@ import (
 
 const (
 	defaultPandaXGatewayTelemetryTopic  = "v1/gateway/telemetry"
+	defaultPandaXGatewayRegisterTopic   = "v1/gateway/register/telemetry"
 	defaultPandaXGatewayAttributesTopic = "v1/gateway/attributes"
 	defaultPandaXTelemetryTopic         = "v1/devices/me/telemetry"
 	defaultPandaXAttributesTopic        = "v1/devices/me/attributes"
@@ -53,6 +54,7 @@ type PandaXConfig struct {
 	AttributesTopic        string `json:"attributesTopic"`
 	RowTopic               string `json:"rowTopic"`
 	GatewayTelemetryTopic  string `json:"gatewayTelemetryTopic"`
+	GatewayRegisterTopic   string `json:"gatewayRegisterTopic"`
 	GatewayAttributesTopic string `json:"gatewayAttributesTopic"`
 	EventTopicPrefix       string `json:"eventTopicPrefix"`
 	AlarmTopic             string `json:"alarmTopic"`
@@ -90,6 +92,7 @@ type PandaXAdapter struct {
 	attributesTopic        string
 	rowTopic               string
 	gatewayTelemetryTopic  string
+	gatewayRegisterTopic   string
 	gatewayAttributesTopic string
 	eventTopicPrefix       string
 	alarmTopic             string
@@ -188,6 +191,7 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 	topicAttributes := pickFirstNonEmpty(cfg.AttributesTopic, defaultPandaXAttributesTopic)
 	topicRow := pickFirstNonEmpty(cfg.RowTopic, defaultPandaXRowTopic)
 	topicGatewayTelemetry := pickFirstNonEmpty(cfg.GatewayTelemetryTopic, defaultPandaXGatewayTelemetryTopic)
+	topicGatewayRegister := pickFirstNonEmpty(cfg.GatewayRegisterTopic, defaultPandaXGatewayRegisterTopic)
 	topicGatewayAttributes := pickFirstNonEmpty(cfg.GatewayAttributesTopic, defaultPandaXGatewayAttributesTopic)
 	eventTopicPrefix := pickFirstNonEmpty(cfg.EventTopicPrefix, defaultPandaXEventPrefix)
 	alarmIdentifier := pickFirstNonEmpty(cfg.AlarmIdentifier, defaultPandaXAlarmIdentifier)
@@ -212,6 +216,7 @@ func (a *PandaXAdapter) Initialize(configStr string) error {
 	a.attributesTopic = topicAttributes
 	a.rowTopic = topicRow
 	a.gatewayTelemetryTopic = topicGatewayTelemetry
+	a.gatewayRegisterTopic = topicGatewayRegister
 	a.gatewayAttributesTopic = topicGatewayAttributes
 	a.eventTopicPrefix = eventTopicPrefix
 	a.alarmTopic = alarmTopic
@@ -505,6 +510,7 @@ func (a *PandaXAdapter) GetStats() map[string]interface{} {
 		"pending_cmd":             pendingCmd,
 		"telemetry_topic":         a.telemetryTopic,
 		"gateway_telemetry_topic": a.gatewayTelemetryTopic,
+		"gateway_register_topic":  a.gatewayRegisterTopic,
 		"rpc_request_topic":       a.rpcRequestTopic,
 		"rpc_response_topic":      a.rpcResponseTopic,
 	}
@@ -757,6 +763,206 @@ func (a *PandaXAdapter) fetchCurrentSystemStats() *models.CollectData {
 			"load_15":       formatMetricFloat2(stats.Load15),
 		},
 	}
+}
+
+// SyncDevices 触发子设备及遥测模型同步（仅手动触发，不在启动时自动执行）
+func (a *PandaXAdapter) SyncDevices() error {
+	if !a.isInitialized() {
+		return fmt.Errorf("adapter not initialized")
+	}
+
+	devices, err := database.GetAllDevices()
+	if err != nil {
+		return fmt.Errorf("获取设备列表失败: %w", err)
+	}
+
+	latestData, err := database.GetAllDevicesLatestData()
+	if err != nil {
+		return fmt.Errorf("获取设备最新遥测失败: %w", err)
+	}
+
+	topic, body, count, err := a.buildSyncDevicesPayload(devices, latestData)
+	if err != nil {
+		return err
+	}
+	if err := a.publish(topic, body); err != nil {
+		return fmt.Errorf("发布设备同步消息失败: %w", err)
+	}
+
+	log.Printf("[PandaX-%s] SyncDevices: 已发布同步消息, topic=%s, devices=%d", a.name, topic, count)
+	return nil
+}
+
+func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latestData []*database.LatestDeviceData) (string, []byte, int, error) {
+	a.mu.RLock()
+	topic := a.gatewayRegisterTopic
+	gatewayToken := ""
+	if a.config != nil {
+		gatewayToken = strings.TrimSpace(a.config.Username)
+	}
+	a.mu.RUnlock()
+
+	nowMS := time.Now().UnixMilli()
+	latestByDeviceID := make(map[int64]*database.LatestDeviceData, len(latestData))
+	for _, item := range latestData {
+		if item == nil || item.DeviceID <= 0 || item.DeviceID == models.SystemStatsDeviceID {
+			continue
+		}
+		latestByDeviceID[item.DeviceID] = item
+	}
+
+	subDevices := make([]map[string]interface{}, 0, len(devices))
+	for _, dev := range devices {
+		if dev == nil || dev.ID <= 0 {
+			continue
+		}
+
+		collectData := &models.CollectData{
+			DeviceID:   dev.ID,
+			DeviceName: strings.TrimSpace(dev.Name),
+			ProductKey: strings.TrimSpace(dev.ProductKey),
+			DeviceKey:  strings.TrimSpace(dev.DeviceKey),
+			Timestamp:  time.Now(),
+			Fields:     map[string]string{},
+		}
+
+		if latest, ok := latestByDeviceID[dev.ID]; ok && latest != nil {
+			if strings.TrimSpace(latest.DeviceName) != "" {
+				collectData.DeviceName = strings.TrimSpace(latest.DeviceName)
+			}
+			if !latest.CollectedAt.IsZero() {
+				collectData.Timestamp = latest.CollectedAt
+			}
+			if len(latest.Fields) > 0 {
+				collectData.Fields = latest.Fields
+			}
+		}
+
+		subToken := a.resolveSubDeviceToken(collectData)
+		if subToken == "" {
+			subToken = pickFirstNonEmpty3(collectData.DeviceName, collectData.DeviceKey, defaultDeviceToken(collectData.DeviceID))
+		}
+
+		fieldKeys := make([]string, 0, len(collectData.Fields))
+		for key := range collectData.Fields {
+			key = strings.TrimSpace(key)
+			if key != "" {
+				fieldKeys = append(fieldKeys, key)
+			}
+		}
+		sort.Strings(fieldKeys)
+
+		values := make(map[string]interface{}, len(fieldKeys))
+		for _, key := range fieldKeys {
+			values[key] = convertFieldValue(collectData.Fields[key])
+		}
+
+		ts := collectData.Timestamp.UnixMilli()
+		if ts <= 0 {
+			ts = nowMS
+		}
+
+		subDevices = append(subDevices, map[string]interface{}{
+			"token":      subToken,
+			"productKey": strings.TrimSpace(dev.ProductKey),
+			"deviceName": pickFirstNonEmpty2(collectData.DeviceName, strings.TrimSpace(dev.Name)),
+			"deviceKey":  strings.TrimSpace(dev.DeviceKey),
+			"ts":         ts,
+			"values":     values,
+			"fields":     values,
+		})
+	}
+
+	sort.Slice(subDevices, func(i, j int) bool {
+		left, _ := subDevices[i]["token"].(string)
+		right, _ := subDevices[j]["token"].(string)
+		return left < right
+	})
+
+	if err := validateSyncSubDevices(subDevices); err != nil {
+		return topic, nil, len(subDevices), err
+	}
+
+	payload := map[string]interface{}{
+		"ts":     nowMS,
+		"source": "fsu",
+		"gateway": map[string]interface{}{
+			"name":  a.name,
+			"token": gatewayToken,
+		},
+		"subDevices": subDevices,
+	}
+
+	body, _ := json.Marshal(payload)
+	return topic, body, len(subDevices), nil
+}
+
+func validateSyncSubDevices(subDevices []map[string]interface{}) error {
+	if len(subDevices) == 0 {
+		return fmt.Errorf("同步预检查失败: 无可同步子设备")
+	}
+
+	type syncProductStats struct {
+		total      int
+		withFields int
+	}
+
+	statsByProduct := make(map[string]*syncProductStats, len(subDevices))
+	for _, item := range subDevices {
+		if item == nil {
+			continue
+		}
+
+		productKey, _ := item["productKey"].(string)
+		productKey = strings.TrimSpace(productKey)
+		if productKey == "" {
+			token, _ := item["token"].(string)
+			productKey = productKeyFromSubToken(token)
+		}
+		if productKey == "" {
+			productKey = "unknown"
+		}
+
+		stats := statsByProduct[productKey]
+		if stats == nil {
+			stats = &syncProductStats{}
+			statsByProduct[productKey] = stats
+		}
+		stats.total++
+
+		values, _ := item["values"].(map[string]interface{})
+		if len(values) > 0 {
+			stats.withFields++
+		}
+	}
+
+	emptyProducts := make([]string, 0)
+	for productKey, stats := range statsByProduct {
+		if stats == nil || stats.total == 0 {
+			continue
+		}
+		if stats.withFields == 0 {
+			emptyProducts = append(emptyProducts, productKey)
+		}
+	}
+	if len(emptyProducts) > 0 {
+		sort.Strings(emptyProducts)
+		return fmt.Errorf("同步预检查失败: 产品[%s]无可用遥测字段，请先采集数据后再同步", strings.Join(emptyProducts, ","))
+	}
+
+	return nil
+}
+
+func productKeyFromSubToken(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	parts := strings.SplitN(token, "_", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
 }
 
 func (a *PandaXAdapter) flushRealtime() error {
@@ -1427,6 +1633,7 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 		AttributesTopic:        strings.TrimSpace(pickConfigString(raw, "attributesTopic")),
 		RowTopic:               strings.TrimSpace(pickConfigString(raw, "rowTopic")),
 		GatewayTelemetryTopic:  strings.TrimSpace(pickConfigString(raw, "gatewayTelemetryTopic")),
+		GatewayRegisterTopic:   strings.TrimSpace(pickConfigString(raw, "gatewayRegisterTopic", "registerTopic")),
 		GatewayAttributesTopic: strings.TrimSpace(pickConfigString(raw, "gatewayAttributesTopic")),
 		EventTopicPrefix:       strings.TrimSpace(pickConfigString(raw, "eventTopicPrefix")),
 		AlarmTopic:             strings.TrimSpace(pickConfigString(raw, "alarmTopic")),
@@ -1480,6 +1687,9 @@ func normalizePandaXConfig(cfg *PandaXConfig) error {
 	}
 	if cfg.CommandQueueSize <= 0 {
 		cfg.CommandQueueSize = cfg.RealtimeQueueSize
+	}
+	if cfg.GatewayRegisterTopic == "" {
+		cfg.GatewayRegisterTopic = defaultPandaXGatewayRegisterTopic
 	}
 
 	return nil

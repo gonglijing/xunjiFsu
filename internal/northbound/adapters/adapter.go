@@ -49,6 +49,13 @@ type NorthboundAdapterWithCommands interface {
 	ReportCommandResult(result *models.NorthboundCommandResult) error
 }
 
+// NorthboundAdapterWithDeviceSync 支持设备同步能力的适配器接口
+type NorthboundAdapterWithDeviceSync interface {
+	NorthboundAdapter
+	// SyncDevices 触发设备/物模型同步
+	SyncDevices() error
+}
+
 // NewAdapter 创建指定类型的适配器
 func NewAdapter(northboundType, name string) NorthboundAdapter {
 	switch nbtype.Normalize(northboundType) {

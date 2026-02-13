@@ -64,6 +64,7 @@ func registerNorthboundRoutes(api *http.ServeMux, h *handlers.Handler) {
 	api.HandleFunc("DELETE /northbound/{id}", h.DeleteNorthboundConfig)
 	api.HandleFunc("POST /northbound/{id}/toggle", h.ToggleNorthboundEnable)
 	api.HandleFunc("POST /northbound/{id}/reload", h.ReloadNorthboundConfig)
+	api.HandleFunc("POST /northbound/{id}/sync-devices", h.SyncNorthboundDevices)
 }
 
 func registerThresholdRoutes(api *http.ServeMux, h *handlers.Handler) {

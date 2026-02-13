@@ -1,10 +1,12 @@
 package adapters
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -155,6 +157,102 @@ func TestParsePandaXConfig_Defaults(t *testing.T) {
 	}
 	if cfg.CommandQueueSize != cfg.RealtimeQueueSize {
 		t.Fatalf("CommandQueueSize=%d, want same as RealtimeQueueSize=%d", cfg.CommandQueueSize, cfg.RealtimeQueueSize)
+	}
+	if cfg.GatewayRegisterTopic != defaultPandaXGatewayRegisterTopic {
+		t.Fatalf("GatewayRegisterTopic=%q, want=%q", cfg.GatewayRegisterTopic, defaultPandaXGatewayRegisterTopic)
+	}
+}
+
+func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
+	adapter := NewPandaXAdapter("pandax-test")
+	adapter.config = &PandaXConfig{
+		Username:           "gw-token",
+		SubDeviceTokenMode: "product_device_name",
+	}
+	adapter.gatewayRegisterTopic = "v1/gateway/register/telemetry"
+
+	devices := []*models.Device{
+		{ID: 1, Name: "pump-1", ProductKey: "prodA", DeviceKey: "devA"},
+		{ID: 2, Name: "meter-2", ProductKey: "prodB", DeviceKey: "devB"},
+	}
+	latest := []*database.LatestDeviceData{
+		{
+			DeviceID:    1,
+			DeviceName:  "pump-1",
+			Fields:      map[string]string{"temp": "23.5", "running": "true"},
+			CollectedAt: time.Unix(1700000000, 0),
+		},
+		{
+			DeviceID:    2,
+			DeviceName:  "meter-2",
+			Fields:      map[string]string{"pressure": "1.8"},
+			CollectedAt: time.Unix(1700000100, 0),
+		},
+	}
+
+	topic, body, count, err := adapter.buildSyncDevicesPayload(devices, latest)
+	if err != nil {
+		t.Fatalf("buildSyncDevicesPayload() error = %v", err)
+	}
+	if topic != "v1/gateway/register/telemetry" {
+		t.Fatalf("topic=%q", topic)
+	}
+	if count != 2 {
+		t.Fatalf("count=%d, want=2", count)
+	}
+
+	decoded := make(map[string]interface{})
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+
+	gateway, ok := decoded["gateway"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("gateway missing")
+	}
+	if gateway["token"] != "gw-token" {
+		t.Fatalf("gateway.token=%v, want gw-token", gateway["token"])
+	}
+
+	subDevices, ok := decoded["subDevices"].([]interface{})
+	if !ok {
+		t.Fatalf("subDevices missing")
+	}
+	if len(subDevices) != 2 {
+		t.Fatalf("len(subDevices)=%d, want=2", len(subDevices))
+	}
+
+	first, _ := subDevices[0].(map[string]interface{})
+	if first["token"] != "prodA_pump-1" {
+		t.Fatalf("first token=%v, want=prodA_pump-1", first["token"])
+	}
+	values, ok := first["values"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("first values missing")
+	}
+	if values["running"] != true {
+		t.Fatalf("running=%v, want=true", values["running"])
+	}
+	if values["temp"] != 23.5 {
+		t.Fatalf("temp=%v, want=23.5", values["temp"])
+	}
+}
+
+func TestPandaXBuildSyncDevicesPayload_PrecheckFailsWhenProductHasNoFields(t *testing.T) {
+	adapter := NewPandaXAdapter("pandax-test")
+	adapter.config = &PandaXConfig{SubDeviceTokenMode: "product_device_name"}
+	adapter.gatewayRegisterTopic = "v1/gateway/register/telemetry"
+
+	devices := []*models.Device{
+		{ID: 1, Name: "pump-1", ProductKey: "prodA", DeviceKey: "devA"},
+	}
+
+	_, _, _, err := adapter.buildSyncDevicesPayload(devices, nil)
+	if err == nil {
+		t.Fatal("expected precheck error")
+	}
+	if !strings.Contains(err.Error(), "prodA") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

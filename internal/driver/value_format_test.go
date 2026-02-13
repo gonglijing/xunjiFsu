@@ -48,3 +48,42 @@ func TestMapResultFields(t *testing.T) {
 		t.Fatalf("point fields mismatch: %#v", fields)
 	}
 }
+
+func TestMapResultFields_SkipIdentityFields(t *testing.T) {
+	result := &DriverResult{
+		Data: map[string]string{
+			"temperature": "26.1",
+			"product_key": "prodA",
+		},
+	}
+	fields := mapResultFields(result)
+	if _, ok := fields["product_key"]; ok {
+		t.Fatalf("identity field should be skipped: %#v", fields)
+	}
+	if fields["temperature"] != "26.1" {
+		t.Fatalf("temperature mismatch: %#v", fields)
+	}
+}
+
+func TestNormalizeDriverResultIdentity(t *testing.T) {
+	result := &DriverResult{Data: map[string]string{"product_key": "prodA", "temp": "1"}}
+	raw := []byte(`{"success":true,"product_key":"prodB"}`)
+	normalizeDriverResultIdentity(result, raw)
+
+	if result.ProductKey != "prodA" {
+		t.Fatalf("product key mismatch: %s", result.ProductKey)
+	}
+	if _, ok := result.Data["product_key"]; ok {
+		t.Fatalf("product_key should be removed from data: %#v", result.Data)
+	}
+}
+
+func TestNormalizeDriverResultIdentity_FromRawOutput(t *testing.T) {
+	result := &DriverResult{Data: map[string]string{"temp": "1"}}
+	raw := []byte(`{"success":true,"data":{"productKey":"prodX"}}`)
+	normalizeDriverResultIdentity(result, raw)
+
+	if result.ProductKey != "prodX" {
+		t.Fatalf("product key mismatch: %s", result.ProductKey)
+	}
+}

@@ -436,6 +436,9 @@ func mapResultFields(result *DriverResult) map[string]string {
 			if point.FieldName == "" {
 				continue
 			}
+			if isDriverIdentityField(point.FieldName) {
+				continue
+			}
 			fields[point.FieldName] = formatDriverValue(point.Value)
 		}
 		return fields
@@ -447,6 +450,9 @@ func mapResultFields(result *DriverResult) map[string]string {
 
 	fields := make(map[string]string, len(result.Data))
 	for key, value := range result.Data {
+		if isDriverIdentityField(key) {
+			continue
+		}
 		fields[key] = value
 	}
 	return fields

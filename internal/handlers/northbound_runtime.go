@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 )
 
 // ToggleNorthboundEnable 切换北向使能状态
@@ -67,6 +69,62 @@ func (h *Handler) ReloadNorthboundConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	WriteSuccess(w, h.buildNorthboundConfigView(config))
+}
+
+// SyncNorthboundDevices 触发北向设备同步（PandaX）
+func (h *Handler) SyncNorthboundDevices(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
+		return
+	}
+
+	config, err := database.GetNorthboundConfigByID(id)
+	if err != nil {
+		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
+		return
+	}
+
+	if err := h.syncNorthboundDevices(config); err != nil {
+		WriteBadRequestCode(w, apiErrNorthboundSyncDevicesFailed.Code, apiErrNorthboundSyncDevicesFailed.Message+": "+err.Error())
+		return
+	}
+
+	WriteSuccess(w, map[string]interface{}{
+		"id":      config.ID,
+		"name":    config.Name,
+		"type":    config.Type,
+		"message": "同步设备已触发",
+	})
+}
+
+func (h *Handler) syncNorthboundDevices(config *models.NorthboundConfig) error {
+	if config == nil {
+		return fmt.Errorf("northbound config is nil")
+	}
+	if config.Enabled == 0 {
+		return fmt.Errorf("northbound is disabled")
+	}
+
+	adapter, err := h.northboundMgr.GetAdapter(config.Name)
+	if err != nil {
+		if err := h.rebuildNorthboundRuntime(config); err != nil {
+			return fmt.Errorf("rebuild runtime failed: %w", err)
+		}
+		adapter, err = h.northboundMgr.GetAdapter(config.Name)
+		if err != nil {
+			return fmt.Errorf("get adapter failed: %w", err)
+		}
+	}
+
+	deviceSyncAdapter, ok := adapter.(adapters.NorthboundAdapterWithDeviceSync)
+	if !ok {
+		return fmt.Errorf("adapter type %s does not support device sync", normalizeNorthboundType(config.Type))
+	}
+
+	if err := deviceSyncAdapter.SyncDevices(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetNorthboundStatus 获取北向运行态

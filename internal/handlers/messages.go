@@ -48,6 +48,7 @@ var (
 	apiErrNorthboundConfigInvalid         = newAPIError("E_NORTHBOUND_CONFIG_INVALID", "config 参数无效")
 	apiErrNorthboundInitializeFailed      = newAPIError("E_NORTHBOUND_INITIALIZE_FAILED", "北向初始化失败")
 	apiErrNorthboundReloadFailed          = newAPIError("E_NORTHBOUND_RELOAD_FAILED", "北向重载失败")
+	apiErrNorthboundSyncDevicesFailed     = newAPIError("E_NORTHBOUND_SYNC_DEVICES_FAILED", "同步设备失败")
 	apiErrListNorthboundConfigsFailed     = newAPIError("E_LIST_NORTHBOUND_CONFIGS_FAILED", "获取北向配置失败")
 	apiErrCreateNorthboundConfigFailed    = newAPIError("E_CREATE_NORTHBOUND_CONFIG_FAILED", "创建北向配置失败")
 	apiErrUpdateNorthboundConfigFailed    = newAPIError("E_UPDATE_NORTHBOUND_CONFIG_FAILED", "更新北向配置失败")

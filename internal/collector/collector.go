@@ -27,6 +27,8 @@ type Collector struct {
 	driverExecutor       *driver.DriverExecutor
 	northboundMgr        *northbound.NorthboundManager
 	resourceLock         sync.Map // key:int64 -> chan struct{}, 每个资源一个串行锁
+	driverIdentityMu     sync.RWMutex
+	driverProductKeys    map[int64]string // 驱动级固定 productKey 缓存
 	mu                   sync.RWMutex
 	running              bool
 	stopChan             chan struct{}
@@ -98,6 +100,7 @@ func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northbound
 	return &Collector{
 		driverExecutor:       driverExecutor,
 		northboundMgr:        northboundMgr,
+		driverProductKeys:    make(map[int64]string),
 		running:              false,
 		stopChan:             make(chan struct{}),
 		wakeChan:             make(chan struct{}, 1),
@@ -130,6 +133,9 @@ func (c *Collector) Start() error {
 	h := &taskHeap{}
 	heap.Init(h)
 	c.taskHeap = h
+	c.driverIdentityMu.Lock()
+	c.driverProductKeys = make(map[int64]string)
+	c.driverIdentityMu.Unlock()
 	c.mu.Unlock()
 
 	// 开机时加载所有 enable 的设备
@@ -251,6 +257,9 @@ func (c *Collector) collectOnce(task *collectTask) {
 	}
 
 	collect := driverResultToCollectData(device, result)
+	if err := c.syncDeviceProductKey(device, collect); err != nil {
+		log.Printf("Failed to sync device product_key from driver output: %v", err)
+	}
 
 	storeHistory := shouldStoreHistory(task, collect.Timestamp)
 
@@ -956,14 +965,65 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	if ts.IsZero() {
 		ts = time.Now()
 	}
+	resultProductKey := strings.TrimSpace(res.ProductKey)
+	deviceProductKey := strings.TrimSpace(device.ProductKey)
+	if resultProductKey == "" {
+		resultProductKey = deviceProductKey
+	}
 	return &models.CollectData{
 		DeviceID:   device.ID,
 		DeviceName: device.Name,
-		ProductKey: strings.TrimSpace(device.ProductKey),
+		ProductKey: resultProductKey,
 		DeviceKey:  strings.TrimSpace(device.DeviceKey),
 		Timestamp:  ts,
 		Fields:     fields,
 	}
+}
+
+func (c *Collector) syncDeviceProductKey(device *models.Device, collect *models.CollectData) error {
+	if device == nil || collect == nil {
+		return nil
+	}
+	nextProductKey := c.resolveFixedDriverProductKey(device.DriverID, collect.ProductKey)
+	if nextProductKey == "" {
+		return nil
+	}
+	collect.ProductKey = nextProductKey
+	currentProductKey := strings.TrimSpace(device.ProductKey)
+	if currentProductKey == nextProductKey {
+		return nil
+	}
+	if database.ParamDB != nil {
+		if err := database.UpdateDeviceProductKey(device.ID, nextProductKey); err != nil {
+			return err
+		}
+	}
+	device.ProductKey = nextProductKey
+	return nil
+}
+
+func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate string) string {
+	candidate = strings.TrimSpace(candidate)
+	if driverID == nil || *driverID <= 0 {
+		return candidate
+	}
+
+	id := *driverID
+	c.driverIdentityMu.Lock()
+	defer c.driverIdentityMu.Unlock()
+
+	cached := strings.TrimSpace(c.driverProductKeys[id])
+	if cached == "" {
+		if candidate != "" {
+			c.driverProductKeys[id] = candidate
+		}
+		return candidate
+	}
+
+	if candidate != "" && candidate != cached {
+		log.Printf("Collector: driver %d productKey mismatch (cached=%s incoming=%s), use cached", id, cached, candidate)
+	}
+	return cached
 }
 
 func driverPointValueToString(value interface{}) string {

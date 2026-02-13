@@ -37,6 +37,7 @@ type Driver struct {
 	FilePath     string    `json:"file_path" db:"file_path"`
 	Description  string    `json:"description" db:"description"`
 	Version      string    `json:"version" db:"version"`
+	ProductKey   string    `json:"product_key,omitempty" db:"-"`
 	ConfigSchema string    `json:"config_schema" db:"config_schema"`
 	Filename     string    `json:"filename,omitempty"` // 文件名（不存数据库）
 	Size         int64     `json:"size,omitempty"`     // 文件大小（不存数据库）

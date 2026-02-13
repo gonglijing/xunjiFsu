@@ -48,18 +48,25 @@ func (h *Handler) UploadDriverFile(w http.ResponseWriter, r *http.Request) {
 	_ = database.UpsertDriverFile(strings.TrimSuffix(header.Filename, ".wasm"), destPath)
 	driverName := strings.TrimSuffix(header.Filename, ".wasm")
 	version := ""
+	productKey := ""
 	if wasmData, err := os.ReadFile(destPath); err == nil {
-		if v, err := driverpkg.ExtractDriverVersion(wasmData); err == nil && v != "" {
-			_ = database.UpdateDriverVersionByName(driverName, v)
-			version = v
+		if v, pk, err := driverpkg.ExtractDriverMetadata(wasmData); err == nil {
+			if v != "" {
+				_ = database.UpdateDriverVersionByName(driverName, v)
+				version = v
+			}
+			if pk != "" {
+				productKey = pk
+			}
 		}
 	}
 
 	WriteSuccess(w, map[string]interface{}{
-		"filename": header.Filename,
-		"path":     destPath,
-		"size":     header.Size,
-		"version":  version,
+		"filename":    header.Filename,
+		"path":        destPath,
+		"size":        header.Size,
+		"version":     version,
+		"product_key": productKey,
 	})
 }
 

@@ -34,3 +34,7 @@ export async function toggleNorthboundConfig(id) {
 export async function reloadNorthboundConfig(id) {
   return post(`/api/northbound/${id}/reload`);
 }
+
+export async function syncNorthboundDevices(id) {
+  return post(`/api/northbound/${id}/sync-devices`);
+}

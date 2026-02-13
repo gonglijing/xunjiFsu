@@ -31,11 +31,12 @@ var ErrDriverBadOutput = errors.New("driver output invalid")
 
 // DriverResult 驱动执行结果
 type DriverResult struct {
-	Success   bool              `json:"success"`
-	Data      map[string]string `json:"data"`
-	Points    []DriverPoint     `json:"points"`
-	Error     string            `json:"error"`
-	Timestamp time.Time         `json:"timestamp"`
+	Success    bool              `json:"success"`
+	Data       map[string]string `json:"data"`
+	Points     []DriverPoint     `json:"points"`
+	ProductKey string            `json:"productKey,omitempty"`
+	Error      string            `json:"error"`
+	Timestamp  time.Time         `json:"timestamp"`
 }
 
 // DriverPoint 驱动测点数据
@@ -222,9 +223,14 @@ func (m *DriverManager) GetDriverVersion(id int64) (string, error) {
 	return "", nil
 }
 
-func ExtractDriverVersion(wasmData []byte) (string, error) {
+func ExtractDriverMetadata(wasmData []byte) (string, string, error) {
 	if len(wasmData) == 0 {
-		return "", fmt.Errorf("empty wasm data")
+		return "", "", fmt.Errorf("empty wasm data")
 	}
-	return "", nil
+	return "", "", nil
+}
+
+func ExtractDriverVersion(wasmData []byte) (string, error) {
+	version, _, err := ExtractDriverMetadata(wasmData)
+	return version, err
 }

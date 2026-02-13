@@ -47,11 +47,12 @@ func hexPreview(b []byte, max int) string {
 
 // DriverResult 驱动执行结果
 type DriverResult struct {
-	Success   bool              `json:"success"`
-	Data      map[string]string `json:"data"`   // 旧格式: {"temperature": "25.3"}
-	Points    []DriverPoint     `json:"points"` // 新格式: [{"field_name":"temperature","value":25.3,"rw":"R"}]
-	Error     string            `json:"error"`
-	Timestamp time.Time         `json:"timestamp"`
+	Success    bool              `json:"success"`
+	Data       map[string]string `json:"data"`   // 旧格式: {"temperature": "25.3"}
+	Points     []DriverPoint     `json:"points"` // 新格式: [{"field_name":"temperature","value":25.3,"rw":"R"}]
+	ProductKey string            `json:"productKey,omitempty"`
+	Error      string            `json:"error"`
+	Timestamp  time.Time         `json:"timestamp"`
 }
 
 func isReadFunction(function string, driverCtx *DriverContext) bool {
@@ -320,6 +321,7 @@ func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, 
 		logger.Warn("Failed to parse plugin output", "driver_id", id, "function", function, "output_preview", string(output[:max]))
 		return nil, fmt.Errorf("%w: %v", ErrDriverBadOutput, err)
 	}
+	normalizeDriverResultIdentity(&result, output)
 
 	result.Timestamp = time.Now()
 	return &result, nil

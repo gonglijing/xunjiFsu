@@ -16,6 +16,7 @@ func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, d := range drivers {
+		loadAndSyncDriverVersion(h, d)
 		enrichDriverModel(h, d)
 	}
 	WriteSuccess(w, drivers)
