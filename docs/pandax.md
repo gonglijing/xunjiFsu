@@ -27,7 +27,7 @@
 ### 2.3 角色分工
 
 - FSU：负责组织子设备清单 + 最新遥测字段并发布到注册 Topic；
-- PandaX：消费注册 Topic，调用子设备认证/自动创建逻辑，并自动创建 telemetry 物模型字段。
+- PandaX：消费注册 Topic，在网关已认证前提下执行子设备归属校验/自动创建，并自动创建 telemetry 物模型字段。
 
 ---
 
@@ -108,7 +108,7 @@ PandaX 北向配置新增：
 
 说明：
 
-- `token` 用于 PandaX 子设备认证，建议 `productId_deviceName`；
+- `token` 用于 PandaX 子设备识别与网关归属绑定，建议 `productId_deviceName`；
 - `values/fields` 都带上，便于兼容不同解析器；
 - 若设备暂无遥测，`values` 可为空对象，但会影响物模型自动补齐效果。
 
@@ -127,9 +127,9 @@ PandaX 收到注册消息后：
 1. 解析 `subDevices`（也兼容旧 map 格式）；
 2. 读取子设备 `productKey/productId`，先检查该产品是否已存在 telemetry 物模型；
 3. 若不存在：先按上报字段创建 telemetry 物模型；
-4. 再调用 `SubAuth(...)`：
-   - 子设备不存在则自动创建设备；
-5. 若该产品模型已存在，则跳过模型创建，仅执行子设备创建/认证。
+4. 在网关认证上下文内校验子设备归属（`parent_id=当前网关` 且 `deviceType=gatewayS`）；
+   - 子设备不存在则自动创建并绑定到当前网关；
+5. 若该产品模型已存在，则跳过模型创建，仅执行子设备创建/绑定。
 
 补充：
 
@@ -140,6 +140,13 @@ PandaX 收到注册消息后：
 - 支持 `subDevices` 数组模式；
 - 支持旧式 `{ "token": {"values": {...}} }` map 模式；
 - 自动忽略 `__system__` 等系统项。
+
+### 4.4 安全边界（当前实现）
+
+- 网关 MQTT 连接必须先通过 `username=gatewayToken` 认证；
+- 子设备不再做独立认证（不再依赖 `SubAuth`）；
+- 子设备上行仅在“归属于当前网关”时被接收（`parent_id` 绑定校验）；
+- 不满足归属关系的子设备数据将被拒绝并记录日志。
 
 ---
 
@@ -171,13 +178,13 @@ PandaX 收到注册消息后：
 
 原因通常是该设备最近遥测字段不足或为空。同步逻辑按最新遥测字段补齐模型。
 
-### Q2：为什么认证失败？
+### Q2：为什么子设备会被拒绝？
 
 优先检查：
 
-- `token` 是否符合 `productId_deviceName`；
-- `productId` 是否存在于 PandaX；
-- 网关 MQTT 用户名对应设备是否有效。
+- 当前 MQTT 连接对应网关是否认证通过；
+- 子设备是否绑定到当前网关（`parent_id` 一致）；
+- 子设备类型是否为 `gatewayS`，且 `productId` 与上报一致。
 
 ### Q3：可以自动定时同步吗？
 
@@ -189,7 +196,7 @@ PandaX 收到注册消息后：
 
 - FSU：新增 `sync-devices` 接口与 PandaX `SyncDevices()`，仅手动触发；
 - FSU：PandaX 行按钮文案由“重载”改为“同步设备”；
-- PandaX：新增 `v1/gateway/register/telemetry` 消费分支，自动建子设备 + 自动建 telemetry 物模型。
+- PandaX：新增 `v1/gateway/register/telemetry` 消费分支，按“网关认证 + 子设备归属校验”自动建子设备/绑定关系 + 自动建 telemetry 物模型。
 
 
 ---
@@ -295,7 +302,7 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 - [ ] FSU 日志出现 `SyncDevices: 已发布同步消息`
 - [ ] Broker 抓到 `v1/gateway/register/telemetry` 报文
 - [ ] PandaX 侧无注册解析报错
-- [ ] PandaX 侧子设备创建/认证成功
+- [ ] PandaX 侧子设备创建/绑定成功（无需子设备独立认证）
 - [ ] PandaX 侧遥测物模型创建/补齐成功
 
 ### 9.4 MQTT 报文校验记录
