@@ -148,6 +148,12 @@ PandaX 收到注册消息后：
 - 子设备上行仅在“归属于当前网关”时被接收（`parent_id` 绑定校验）；
 - 不满足归属关系的子设备数据将被拒绝并记录日志。
 
+### 4.5 实时上行处理约束
+
+- `v1/gateway/telemetry` 上行时，PandaX 仅接收“已绑定当前网关”的子设备数据；
+- 对于未绑定、类型错误（非 `gatewayS`）或产品不一致的子设备，实时数据会被拒绝；
+- 子设备首次创建建议通过 FSU **同步设备**（`v1/gateway/register/telemetry`）完成，避免实时上报被丢弃。
+
 ---
 
 ## 5. 联调步骤（建议）
@@ -209,9 +215,10 @@ PandaX 收到注册消息后：
 
 1. FSU 点击 **同步设备** 后才触发注册同步（启动时不触发）；
 2. FSU 发送的 `subDevices[*].productKey` 使用驱动固定 `productKey`（必要时自动回写设备表）；
-3. PandaX 对每个子设备执行“先模型后设备”的处理：
-   - 有同 `productKey` 遥测模型：仅创建设备；
-   - 无同 `productKey` 遥测模型：先创建模型，再创建设备。
+3. PandaX 对每个子设备执行“先模型后设备 + 归属校验”的处理：
+   - 有同 `productKey` 遥测模型：仅创建设备/绑定；
+   - 无同 `productKey` 遥测模型：先创建模型，再创建设备/绑定；
+   - 不属于当前网关的子设备：拒绝处理并记录日志。
 
 ### 8.2 前置准备
 
@@ -268,6 +275,8 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
   - 排查：驱动 `version()` 是否返回固定 `productKey`；设备是否绑定了正确 `driver_id`；FSU 日志是否有 productKey 回写失败。
 - 现象：PandaX 跳过创建
   - 排查：该 `productKey` 下是否“全部子设备无字段”，会触发 FSU 预检查拒绝。
+- 现象：部分子设备实时数据被丢弃
+  - 排查：子设备是否已绑定当前网关（`parent_id`），设备类型是否为 `gatewayS`。
 
 ---
 
