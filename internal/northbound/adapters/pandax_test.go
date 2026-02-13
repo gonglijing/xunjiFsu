@@ -205,7 +205,6 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-
 	subDevices, ok := decoded["subDevices"].([]interface{})
 	if !ok {
 		t.Fatalf("subDevices missing")
@@ -215,8 +214,11 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 	}
 
 	first, _ := subDevices[0].(map[string]interface{})
-	if first["token"] != "prodA_pump-1" {
-		t.Fatalf("first token=%v, want=prodA_pump-1", first["token"])
+	if _, exists := first["token"]; exists {
+		t.Fatalf("token should be omitted in sync payload")
+	}
+	if first["productKey"] != "prodA" {
+		t.Fatalf("first productKey=%v, want=prodA", first["productKey"])
 	}
 	values, ok := first["values"].(map[string]interface{})
 	if !ok {

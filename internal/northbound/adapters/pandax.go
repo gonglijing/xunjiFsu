@@ -848,11 +848,6 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 			}
 		}
 
-		subToken := a.resolveSubDeviceToken(collectData)
-		if subToken == "" {
-			subToken = pickFirstNonEmpty3(collectData.DeviceName, collectData.DeviceKey, defaultDeviceToken(collectData.DeviceID))
-		}
-
 		fieldKeys := make([]string, 0, len(collectData.Fields))
 		for key := range collectData.Fields {
 			key = strings.TrimSpace(key)
@@ -873,7 +868,6 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 		}
 
 		subDevices = append(subDevices, map[string]interface{}{
-			"token":      subToken,
 			"productKey": strings.TrimSpace(collectData.ProductKey),
 			"deviceName": pickFirstNonEmpty2(collectData.DeviceName, strings.TrimSpace(dev.Name)),
 			"deviceKey":  strings.TrimSpace(dev.DeviceKey),
@@ -883,9 +877,27 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 	}
 
 	sort.Slice(subDevices, func(i, j int) bool {
-		left, _ := subDevices[i]["token"].(string)
-		right, _ := subDevices[j]["token"].(string)
-		return left < right
+		leftProductKey, _ := subDevices[i]["productKey"].(string)
+		rightProductKey, _ := subDevices[j]["productKey"].(string)
+		leftProductKey = strings.TrimSpace(leftProductKey)
+		rightProductKey = strings.TrimSpace(rightProductKey)
+		if leftProductKey != rightProductKey {
+			return leftProductKey < rightProductKey
+		}
+
+		leftDeviceName, _ := subDevices[i]["deviceName"].(string)
+		rightDeviceName, _ := subDevices[j]["deviceName"].(string)
+		leftDeviceName = strings.TrimSpace(leftDeviceName)
+		rightDeviceName = strings.TrimSpace(rightDeviceName)
+		if leftDeviceName != rightDeviceName {
+			return leftDeviceName < rightDeviceName
+		}
+
+		leftDeviceKey, _ := subDevices[i]["deviceKey"].(string)
+		rightDeviceKey, _ := subDevices[j]["deviceKey"].(string)
+		leftDeviceKey = strings.TrimSpace(leftDeviceKey)
+		rightDeviceKey = strings.TrimSpace(rightDeviceKey)
+		return leftDeviceKey < rightDeviceKey
 	})
 
 	if err := validateSyncSubDevices(subDevices); err != nil {
@@ -1010,10 +1022,6 @@ func validateSyncSubDevices(subDevices []map[string]interface{}) error {
 		productKey, _ := item["productKey"].(string)
 		productKey = strings.TrimSpace(productKey)
 		if productKey == "" {
-			token, _ := item["token"].(string)
-			productKey = productKeyFromSubToken(token)
-		}
-		if productKey == "" {
 			productKey = "unknown"
 		}
 
@@ -1045,18 +1053,6 @@ func validateSyncSubDevices(subDevices []map[string]interface{}) error {
 	}
 
 	return nil
-}
-
-func productKeyFromSubToken(token string) string {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return ""
-	}
-	parts := strings.SplitN(token, "_", 2)
-	if len(parts) != 2 {
-		return ""
-	}
-	return strings.TrimSpace(parts[0])
 }
 
 func (a *PandaXAdapter) flushRealtime() error {
