@@ -799,10 +799,6 @@ func (a *PandaXAdapter) SyncDevices() error {
 func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latestData []*database.LatestDeviceData) (string, []byte, int, error) {
 	a.mu.RLock()
 	topic := a.gatewayRegisterTopic
-	gatewayToken := ""
-	if a.config != nil {
-		gatewayToken = strings.TrimSpace(a.config.Username)
-	}
 	a.mu.RUnlock()
 
 	nowMS := time.Now().UnixMilli()
@@ -883,7 +879,6 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 			"deviceKey":  strings.TrimSpace(dev.DeviceKey),
 			"ts":         ts,
 			"values":     values,
-			"fields":     values,
 		})
 	}
 
@@ -898,12 +893,7 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 	}
 
 	payload := map[string]interface{}{
-		"ts":     nowMS,
-		"source": "fsu",
-		"gateway": map[string]interface{}{
-			"name":  a.name,
-			"token": gatewayToken,
-		},
+		"ts":         nowMS,
 		"subDevices": subDevices,
 	}
 

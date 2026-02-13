@@ -166,7 +166,6 @@ func TestParsePandaXConfig_Defaults(t *testing.T) {
 func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 	adapter := NewPandaXAdapter("pandax-test")
 	adapter.config = &PandaXConfig{
-		Username:           "gw-token",
 		SubDeviceTokenMode: "product_device_name",
 	}
 	adapter.gatewayRegisterTopic = "v1/gateway/register/telemetry"
@@ -206,13 +205,6 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-	gateway, ok := decoded["gateway"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("gateway missing")
-	}
-	if gateway["token"] != "gw-token" {
-		t.Fatalf("gateway.token=%v, want gw-token", gateway["token"])
-	}
 
 	subDevices, ok := decoded["subDevices"].([]interface{})
 	if !ok {
@@ -235,6 +227,9 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 	}
 	if values["temp"] != 23.5 {
 		t.Fatalf("temp=%v, want=23.5", values["temp"])
+	}
+	if _, exists := first["fields"]; exists {
+		t.Fatalf("fields should be omitted in sync payload")
 	}
 }
 

@@ -67,12 +67,17 @@ PandaX 适配器新增 `SyncDevices()`：
 
 ### 3.3 配置项
 
-PandaX 北向配置新增：
+FSU 对 PandaX 配置分两层：
 
-- `gatewayRegisterTopic`（可选，默认 `v1/gateway/register/telemetry`）
-- 兼容别名：`registerTopic`
+- **新增表单 schema（`GET /api/northbound/schema?type=pandax`）**：仅暴露 4 个创建必填项：`serverUrl`、`username`、`password`、`qos`；
+- **运行时完整配置（`config` JSON）**：支持高级参数，如 `gatewayTelemetryTopic`、`gatewayRegisterTopic`、`subDeviceTokenMode`、`rpcRequestTopic`、`rpcResponseTopic`、队列/批量参数等。
 
-其余配置保持原有方式。
+当前关键规则：
+
+- `gatewayMode` 必须为 `true`（适配器会拒绝 `false`）；
+- `gatewayRegisterTopic` 默认 `v1/gateway/register/telemetry`，兼容别名 `registerTopic`；
+- `rpcRequestTopic` 默认 `v1/devices/me/rpc/request`，自动订阅基路径与 `.../+`；
+- `uploadIntervalMs` 默认 5000ms，`alarmFlushIntervalMs` 默认 2000ms，`alarmBatchSize` 默认 20，队列默认 1000。
 
 ### 3.4 注册报文格式（FSU -> PandaX）
 
@@ -81,11 +86,6 @@ PandaX 北向配置新增：
 ```json
 {
   "ts": 1739433600000,
-  "source": "fsu",
-  "gateway": {
-    "name": "pandax-nb",
-    "token": "gateway-username-token"
-  },
   "subDevices": [
     {
       "token": "productA_pump01",
@@ -94,10 +94,6 @@ PandaX 北向配置新增：
       "deviceKey": "pump01-key",
       "ts": 1739433600000,
       "values": {
-        "temperature": 23.5,
-        "running": true
-      },
-      "fields": {
         "temperature": 23.5,
         "running": true
       }
@@ -109,7 +105,7 @@ PandaX 北向配置新增：
 说明：
 
 - `token` 用于 PandaX 子设备识别与网关归属绑定，建议 `productId_deviceName`；
-- `values/fields` 都带上，便于兼容不同解析器；
+- 统一使用 `values` 承载遥测字段；
 - 若设备暂无遥测，`values` 可为空对象，但会影响物模型自动补齐效果。
 
 ---
@@ -249,8 +245,7 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 收到报文后重点校验：
 
 - Topic 必须是 `v1/gateway/register/telemetry`；
-- 根字段必须包含：`ts`、`source`、`gateway`、`subDevices`；
-- `gateway.token` 应等于 FSU PandaX 配置的 `username`；
+- 根字段必须包含：`ts`、`subDevices`；
 - `subDevices` 必须是数组，且每项包含：`token`、`productKey`、`deviceName`、`deviceKey`、`ts`、`values`；
 - `subDevices[*].productKey` 应与该设备驱动固定 `productKey` 一致；
 - `values` 不能为空对象（至少一个可用字段），否则 PandaX 可能跳过模型创建。
@@ -325,7 +320,6 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 
 - 最近一次报文摘要：
   - `ts`：`<value>`
-  - `gateway.token`：`<value>`
   - `subDevices.count`：`<value>`
   - `subDevices[0].token`：`<value>`
   - `subDevices[0].productKey`：`<value>`
@@ -333,7 +327,7 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 
 - 关键校验结果：
   - [ ] Topic 正确
-  - [ ] 报文结构完整（ts/source/gateway/subDevices）
+  - [ ] 报文结构完整（ts/subDevices）
   - [ ] 子设备 `productKey` 与驱动固定值一致
   - [ ] `values` 非空且字段符合预期
 
@@ -367,4 +361,80 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 - 日志文件：`<路径>`
 - 抓包截图：`<路径>`
 - 关键请求/响应截图：`<路径>`
+
+---
+
+## 10. FSU 代码解析（PandaX 北向）
+
+### 10.1 生命周期与入口
+
+- 适配器实现位于 `internal/northbound/adapters/pandax.go`，类型名固定为 `pandax`；
+- 创建/更新北向配置后，运行时通过 `registerNorthboundAdapter -> adapter.Initialize(config)` 装载；
+- `Start()` 仅启动循环，不会自动触发设备同步；
+- 手动同步入口：`POST /api/northbound/{id}/sync-devices`（仅 PandaX 适配器支持）。
+
+### 10.2 配置解析与默认值
+
+`parsePandaXConfig` 支持多种别名输入：
+
+- `serverUrl` 兼容 `broker` / `server_url`；
+- `username` 兼容 `token` / `deviceToken`；
+- `gatewayRegisterTopic` 兼容 `registerTopic`。
+
+归一化后关键约束：
+
+- `serverUrl`、`username` 必填；
+- `gatewayMode=true` 强制要求；
+- `qos` 仅允许 0~2；
+- 默认 topic：
+  - 实时：`v1/gateway/telemetry`
+  - 同步：`v1/gateway/register/telemetry`
+  - 报警：`v1/devices/event/alarm`
+  - RPC 请求/响应：`v1/devices/me/rpc/request` / `v1/devices/me/rpc/response`。
+
+### 10.3 上行数据链路（实时+系统属性）
+
+- 采集器会把设备实时数据调用 `Send()` 入 PandaX 适配器队列；
+- `runLoop()` 按 `uploadIntervalMs` 周期从数据库读取最新遥测并触发 `flushRealtime()`；
+- `buildBatchRealtimePublish` 输出格式：
+  - `{subToken: {"ts": <ms>, "values": {...}}}`；
+- `subToken` 由 `subDeviceTokenMode` 决定（`deviceName` / `deviceKey` / `product_deviceKey` / `product_deviceName`）；
+- 字段值会自动尝试转换为 `bool/int/float`，转换失败保持字符串。
+
+补充：若数据库没有系统属性最新值，适配器会通过 `SystemStatsProvider` 追加 `__system__` 数据上报。
+
+### 10.4 报警上报链路
+
+- `SendAlarm()` 入报警队列；
+- `runLoop()` 按 `alarmFlushIntervalMs` 周期批量发送；
+- 报警 payload 包含 `product_key/device_key/field_name/actual_value/threshold/severity/message/ts`；
+- 发送失败会把本批次数据回插队列头部（保序重试）。
+
+### 10.5 设备同步链路（手动触发）
+
+- `SyncDevices()` 读取设备列表 + 最新遥测，构造 `subDevices[]` 并发布到 `gatewayRegisterTopic`；
+- `subDevices[i]` 包含 `token/productKey/deviceName/deviceKey/ts/values`；
+- 同步前会执行按产品维度预检查：若某产品下全部子设备均无字段，则整次同步失败并返回错误；
+- `productKey` 优先取驱动固定值：
+  - `driver_id -> 驱动 wasm version() -> productKey`；
+  - 若设备表 `product_key` 为空或不一致，会在同步前回写修正。
+
+### 10.6 下行命令闭环
+
+- 适配器订阅 `rpcRequestTopic` 及其 `.../+` 变体；
+- 支持从 payload 和 topic 两处提取 `requestId`；
+- `buildPandaXCommands` 支持多种参数结构：
+  - `params.properties`
+  - `sub_device/subDevice`
+  - `sub_devices/subDevices`
+  - `fieldName + value`
+  - 兜底泛化字段；
+- 命令进入 `commandQueue` 后，采集器每 500ms 轮询执行；
+- 执行结果通过 `ReportCommandResult()` 回传到 `rpcResponseTopic`。
+
+### 10.7 队列与失败策略
+
+- 实时/报警/命令队列均有容量上限（默认 1000）；
+- 队列满时丢弃最旧数据，优先保证新数据进入；
+- MQTT 断连后会触发指数退避重连（上限 5 分钟）。
 
