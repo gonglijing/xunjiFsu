@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,6 +14,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gonglijing/xunjiFsu/internal/database"
+	driverpkg "github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -811,16 +814,27 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 		latestByDeviceID[item.DeviceID] = item
 	}
 
+	productKeyByDeviceID := resolveSyncProductKeyByDeviceID(devices)
 	subDevices := make([]map[string]interface{}, 0, len(devices))
 	for _, dev := range devices {
 		if dev == nil || dev.ID <= 0 {
 			continue
 		}
 
+		resolvedProductKey := strings.TrimSpace(productKeyByDeviceID[dev.ID])
+		productKey := resolveSyncSubDeviceProductKey(dev, productKeyByDeviceID)
+		if resolvedProductKey != "" && strings.TrimSpace(dev.ProductKey) != resolvedProductKey {
+			if err := database.UpdateDeviceProductKey(dev.ID, resolvedProductKey); err != nil {
+				log.Printf("[PandaX-%s] SyncDevices: 回写设备 product_key 失败: device_id=%d product_key=%s err=%v", a.name, dev.ID, resolvedProductKey, err)
+			} else {
+				dev.ProductKey = resolvedProductKey
+			}
+		}
+
 		collectData := &models.CollectData{
 			DeviceID:   dev.ID,
 			DeviceName: strings.TrimSpace(dev.Name),
-			ProductKey: strings.TrimSpace(dev.ProductKey),
+			ProductKey: productKey,
 			DeviceKey:  strings.TrimSpace(dev.DeviceKey),
 			Timestamp:  time.Now(),
 			Fields:     map[string]string{},
@@ -864,7 +878,7 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 
 		subDevices = append(subDevices, map[string]interface{}{
 			"token":      subToken,
-			"productKey": strings.TrimSpace(dev.ProductKey),
+			"productKey": strings.TrimSpace(collectData.ProductKey),
 			"deviceName": pickFirstNonEmpty2(collectData.DeviceName, strings.TrimSpace(dev.Name)),
 			"deviceKey":  strings.TrimSpace(dev.DeviceKey),
 			"ts":         ts,
@@ -895,6 +909,96 @@ func (a *PandaXAdapter) buildSyncDevicesPayload(devices []*models.Device, latest
 
 	body, _ := json.Marshal(payload)
 	return topic, body, len(subDevices), nil
+}
+
+func resolveSyncSubDeviceProductKey(device *models.Device, productKeyByDeviceID map[int64]string) string {
+	if device == nil {
+		return ""
+	}
+	if resolved := strings.TrimSpace(productKeyByDeviceID[device.ID]); resolved != "" {
+		return resolved
+	}
+	return strings.TrimSpace(device.ProductKey)
+}
+
+func resolveSyncProductKeyByDeviceID(devices []*models.Device) map[int64]string {
+	result := make(map[int64]string, len(devices))
+	if len(devices) == 0 || database.ParamDB == nil {
+		return result
+	}
+
+	deviceIDsByDriver := make(map[int64][]int64)
+	for _, dev := range devices {
+		if dev == nil || dev.ID <= 0 || dev.DriverID == nil || *dev.DriverID <= 0 {
+			continue
+		}
+		driverID := *dev.DriverID
+		deviceIDsByDriver[driverID] = append(deviceIDsByDriver[driverID], dev.ID)
+	}
+	if len(deviceIDsByDriver) == 0 {
+		return result
+	}
+
+	drivers, err := database.GetAllDrivers()
+	if err != nil {
+		log.Printf("resolveSyncProductKeyByDeviceID: 加载驱动列表失败: %v", err)
+		return result
+	}
+
+	driverByID := make(map[int64]*models.Driver, len(drivers))
+	for _, drv := range drivers {
+		if drv == nil || drv.ID <= 0 {
+			continue
+		}
+		driverByID[drv.ID] = drv
+	}
+
+	for driverID, deviceIDs := range deviceIDsByDriver {
+		drv := driverByID[driverID]
+		if drv == nil {
+			continue
+		}
+		productKey := resolveDriverProductKey(drv)
+		if productKey == "" {
+			continue
+		}
+		for _, deviceID := range deviceIDs {
+			if deviceID > 0 {
+				result[deviceID] = productKey
+			}
+		}
+	}
+
+	return result
+}
+
+func resolveDriverProductKey(driver *models.Driver) string {
+	if driver == nil {
+		return ""
+	}
+
+	if productKey := strings.TrimSpace(driver.ProductKey); productKey != "" {
+		return productKey
+	}
+
+	wasmPath := strings.TrimSpace(driver.FilePath)
+	if wasmPath == "" {
+		name := strings.TrimSpace(driver.Name)
+		if name == "" {
+			return ""
+		}
+		wasmPath = filepath.Join("drivers", name+".wasm")
+	}
+
+	wasmData, err := os.ReadFile(wasmPath)
+	if err != nil {
+		return ""
+	}
+	_, productKey, err := driverpkg.ExtractDriverMetadata(wasmData)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(productKey)
 }
 
 func validateSyncSubDevices(subDevices []map[string]interface{}) error {

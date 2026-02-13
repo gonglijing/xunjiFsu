@@ -238,6 +238,30 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 	}
 }
 
+func TestResolveSyncSubDeviceProductKey_PrioritizesResolved(t *testing.T) {
+	device := &models.Device{ID: 7, ProductKey: "device-pk"}
+	resolved := map[int64]string{7: "driver-pk"}
+
+	if got := resolveSyncSubDeviceProductKey(device, resolved); got != "driver-pk" {
+		t.Fatalf("resolveSyncSubDeviceProductKey()=%q, want=%q", got, "driver-pk")
+	}
+
+	if got := resolveSyncSubDeviceProductKey(device, nil); got != "device-pk" {
+		t.Fatalf("resolveSyncSubDeviceProductKey()=%q, want=%q", got, "device-pk")
+	}
+
+	if got := resolveSyncSubDeviceProductKey(nil, resolved); got != "" {
+		t.Fatalf("resolveSyncSubDeviceProductKey()=%q, want empty", got)
+	}
+}
+
+func TestResolveDriverProductKey_UsesDriverField(t *testing.T) {
+	driver := &models.Driver{ProductKey: "  fixed-driver-pk  "}
+	if got := resolveDriverProductKey(driver); got != "fixed-driver-pk" {
+		t.Fatalf("resolveDriverProductKey()=%q, want=%q", got, "fixed-driver-pk")
+	}
+}
+
 func TestPandaXBuildSyncDevicesPayload_PrecheckFailsWhenProductHasNoFields(t *testing.T) {
 	adapter := NewPandaXAdapter("pandax-test")
 	adapter.config = &PandaXConfig{SubDeviceTokenMode: "product_device_name"}

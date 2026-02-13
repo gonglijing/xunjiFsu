@@ -63,6 +63,7 @@ PandaX 适配器新增 `SyncDevices()`：
 - 采集链路会优先使用驱动返回的 `productKey`，并回写到设备 `product_key` 字段；
 - 按“一个驱动固定一个 productKey”处理：同一驱动首次识别后会缓存，后续若回包不一致则以缓存值为准；
 - 后续“同步设备”将直接使用回写后的产品标识参与同步。
+- 若设备 `product_key` 为空或与驱动固定值不一致，`SyncDevices` 会按 `driver_id -> 驱动 wasm version()` 提取 `productKey`，并在同步前回写修正。
 
 ### 3.3 配置项
 
