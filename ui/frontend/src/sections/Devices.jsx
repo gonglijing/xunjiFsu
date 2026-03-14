@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
@@ -6,6 +6,7 @@ import CrudTable from '../components/CrudTable';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
+import { formatDateTime } from '../utils/time';
 
 const defaultForm = {
   name: '',
@@ -60,6 +61,54 @@ export function Devices() {
     return [];
   };
 
+  const formatCollectRuntime = (runtime) => {
+    if (!runtime || typeof runtime !== 'object') {
+      return {
+        registered: false,
+        failures: 0,
+        nextRunAt: '',
+        lastError: '',
+      };
+    }
+    const failures = Number(runtime.consecutive_failures || 0);
+    const lastErrorKind = runtime.last_error_kind ? `[${runtime.last_error_kind}] ` : '';
+    return {
+      registered: !!runtime.registered,
+      failures,
+      nextRunAt: formatDateTime(runtime.next_run_at),
+      lastError: runtime.last_error ? `${lastErrorKind}${runtime.last_error}` : '',
+    };
+  };
+
+  const mergeRuntimeStatuses = (list) => {
+    const statuses = normalizeList(list);
+    if (!statuses.length) return;
+
+    const statusMap = new Map();
+    statuses.forEach((status) => {
+      if (!status || typeof status !== 'object') return;
+      const id = Number(status.device_id);
+      if (!id) return;
+      statusMap.set(id, status);
+    });
+    if (!statusMap.size) return;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!item) return item;
+        const status = statusMap.get(Number(item.id));
+        if (!status) return item;
+        return { ...item, collect_runtime: status };
+      })
+    );
+  };
+
+  const refreshRuntimeStatuses = () => {
+    api.devices.listDeviceRuntimeStatuses()
+      .then(mergeRuntimeStatuses)
+      .catch(() => {});
+  };
+
   const load = () => {
     setLoading(true);
     Promise.allSettled([
@@ -85,7 +134,11 @@ export function Devices() {
       .finally(() => setLoading(false));
   };
 
-  onMount(load);
+  onMount(() => {
+    load();
+    const timer = setInterval(refreshRuntimeStatuses, 5000);
+    onCleanup(() => clearInterval(timer));
+  });
 
   // ESC 关闭弹窗
   createEffect(() => {
@@ -107,7 +160,7 @@ export function Devices() {
     const q = search().trim().toLowerCase();
     if (!q) return items();
     return items().filter((d) =>
-      [d.name, d.device_address, d.driver_type, d.driver_name]
+      [d.name, d.device_address, d.driver_type, d.driver_name, d.collect_runtime?.last_error]
         .filter(Boolean)
         .some((v) => v.toLowerCase().includes(q))
     );
@@ -293,6 +346,35 @@ export function Devices() {
                   ),
               },
               { key: 'collect_interval', title: '周期(ms)' },
+              {
+                key: 'collect_runtime',
+                title: '采集运行时',
+                render: (d) => {
+                  const runtime = formatCollectRuntime(d.collect_runtime);
+                  return (
+                    <div>
+                      <div>
+                        <span class={`badge ${runtime.registered ? 'badge-running' : 'badge-stopped'}`}>
+                          {runtime.registered ? '已注册' : '未注册'}
+                        </span>
+                        <Show when={runtime.failures > 0}>
+                          <span style="margin-left:8px; color:var(--accent-red);">
+                            连续失败 {runtime.failures}
+                          </span>
+                        </Show>
+                      </div>
+                      <Show when={runtime.nextRunAt}>
+                        <div class="text-muted text-xs">下次采集: {runtime.nextRunAt}</div>
+                      </Show>
+                      <Show when={runtime.lastError}>
+                        <div class="text-muted text-xs" style="max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                          最后错误: {runtime.lastError}
+                        </div>
+                      </Show>
+                    </div>
+                  );
+                },
+              },
               {
                 key: 'enabled',
                 title: '状态',

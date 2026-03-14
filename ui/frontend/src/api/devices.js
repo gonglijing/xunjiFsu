@@ -5,6 +5,16 @@ export async function listDevices() {
   return unwrapData(res, []);
 }
 
+export async function listDeviceRuntimeStatuses() {
+  const res = await getJSON('/api/devices/runtime');
+  return unwrapData(res, []);
+}
+
+export async function getDeviceRuntimeStatus(deviceId) {
+  const res = await getJSON(`/api/devices/${deviceId}/runtime`);
+  return unwrapData(res, {});
+}
+
 export async function listResources() {
   const res = await getJSON('/api/resources');
   return unwrapData(res, []);
@@ -38,4 +48,3 @@ export async function listWritables(deviceId) {
 export async function executeDeviceFunction(deviceId, payload) {
   return postJSON(`/api/devices/${deviceId}/execute`, payload);
 }
-

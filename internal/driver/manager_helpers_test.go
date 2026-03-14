@@ -88,6 +88,52 @@ func TestBuildDeviceConfigTCP(t *testing.T) {
 	}
 }
 
+func TestMergeDeviceConfig(t *testing.T) {
+	base := map[string]string{
+		"func_name": "read",
+	}
+	overrides := map[string]string{
+		" field_a ": "1",
+		"field_b":   "2",
+		"   ":       "ignored",
+		"":          "ignored",
+	}
+
+	mergeDeviceConfig(base, overrides)
+
+	assertMapEqual(t, base, map[string]string{
+		"func_name": "read",
+		"field_a":   "1",
+		"field_b":   "2",
+	})
+}
+
+func TestMergeDeviceConfig_BaseNilOrNoOverrides(t *testing.T) {
+	mergeDeviceConfig(nil, map[string]string{"a": "1"})
+
+	base := map[string]string{"x": "1"}
+	mergeDeviceConfig(base, nil)
+	if base["x"] != "1" {
+		t.Fatalf("base map should keep original values when overrides nil")
+	}
+	mergeDeviceConfig(base, map[string]string{})
+	if base["x"] != "1" {
+		t.Fatalf("base map should keep original values when overrides empty")
+	}
+}
+
+func TestResolveExecutionFunction(t *testing.T) {
+	if got := resolveExecutionFunction(""); got != defaultDriverFunction {
+		t.Fatalf("expected default function, got %q", got)
+	}
+	if got := resolveExecutionFunction("   "); got != defaultDriverFunction {
+		t.Fatalf("expected default function for blank input, got %q", got)
+	}
+	if got := resolveExecutionFunction(" write "); got != "write" {
+		t.Fatalf("expected trimmed function name, got %q", got)
+	}
+}
+
 func assertMapEqual(t *testing.T, got, want map[string]string) {
 	t.Helper()
 	if len(got) != len(want) {

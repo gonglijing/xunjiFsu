@@ -47,11 +47,13 @@ func registerDriverRoutes(api *http.ServeMux, h *handlers.Handler) {
 
 func registerDeviceRoutes(api *http.ServeMux, h *handlers.Handler) {
 	api.HandleFunc("GET /devices", h.GetDevices)
+	api.HandleFunc("GET /devices/runtime", h.GetDeviceRuntimeStatuses)
 	api.HandleFunc("POST /devices", h.CreateDevice)
 	api.HandleFunc("PUT /devices/{id}", h.UpdateDevice)
 	api.HandleFunc("DELETE /devices/{id}", h.DeleteDevice)
 	api.HandleFunc("POST /devices/{id}/toggle", h.ToggleDeviceEnable)
 	api.HandleFunc("POST /devices/{id}/execute", h.ExecuteDriverFunction)
+	api.HandleFunc("GET /devices/{id}/runtime", h.GetDeviceRuntimeStatus)
 	api.HandleFunc("GET /devices/{id}/writables", h.GetDeviceWritables)
 }
 

@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -177,6 +178,78 @@ func TestMarkTaskCollected_OnlyUpdatesCurrentTask(t *testing.T) {
 	}
 	if newTask.lastStored.IsZero() {
 		t.Fatalf("current task lastStored should be updated when stored=true")
+	}
+	if newTask.consecutiveFailures != 0 || newTask.lastError != "" || newTask.lastErrorKind != collectErrorKindNone || !newTask.lastErrorAt.IsZero() {
+		t.Fatalf("current task failure state should be reset on success")
+	}
+}
+
+func TestMarkTaskFailed_OnlyUpdatesCurrentTask(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	device := &models.Device{ID: 91, Name: "d-91", CollectInterval: 1000, StorageInterval: 60}
+	oldTask := newCollectTask(device, nil)
+	newTask := newCollectTask(device, oldTask)
+
+	c.mu.Lock()
+	c.tasks[device.ID] = newTask
+	c.mu.Unlock()
+
+	countOld := c.markTaskFailed(oldTask, assertErr("old-error"), collectErrorKindDriver)
+	if countOld != 0 {
+		t.Fatalf("stale task should not be marked failed")
+	}
+	if oldTask.consecutiveFailures != 0 || oldTask.lastError != "" || oldTask.lastErrorKind != collectErrorKindNone || !oldTask.lastErrorAt.IsZero() {
+		t.Fatalf("stale task failure state should remain unchanged")
+	}
+
+	count1 := c.markTaskFailed(newTask, assertErr("new-error"), collectErrorKindNetwork)
+	if count1 != 1 {
+		t.Fatalf("expected first failure count=1, got %d", count1)
+	}
+	count2 := c.markTaskFailed(newTask, assertErr("new-error-2"), collectErrorKindTimeout)
+	if count2 != 2 {
+		t.Fatalf("expected second failure count=2, got %d", count2)
+	}
+	if newTask.consecutiveFailures != 2 {
+		t.Fatalf("expected consecutive failures=2, got %d", newTask.consecutiveFailures)
+	}
+	if newTask.lastError != "new-error-2" {
+		t.Fatalf("expected last error updated, got %q", newTask.lastError)
+	}
+	if newTask.lastErrorKind != collectErrorKindTimeout {
+		t.Fatalf("expected last error kind timeout, got %s", newTask.lastErrorKind)
+	}
+	if newTask.lastErrorAt.IsZero() {
+		t.Fatalf("expected last error time to be set")
+	}
+}
+
+func TestClassifyCollectError(t *testing.T) {
+	if got := classifyCollectError(nil); got != collectErrorKindNone {
+		t.Fatalf("nil error kind = %s, want %s", got, collectErrorKindNone)
+	}
+	if got := classifyCollectError(context.Canceled); got != collectErrorKindCanceled {
+		t.Fatalf("canceled error kind = %s, want %s", got, collectErrorKindCanceled)
+	}
+	if got := classifyCollectError(context.DeadlineExceeded); got != collectErrorKindTimeout {
+		t.Fatalf("deadline error kind = %s, want %s", got, collectErrorKindTimeout)
+	}
+	if got := classifyCollectError(assertErr("i/o timeout")); got != collectErrorKindTimeout {
+		t.Fatalf("timeout string kind = %s, want %s", got, collectErrorKindTimeout)
+	}
+	if got := classifyCollectError(assertErr("connection refused by peer")); got != collectErrorKindNetwork {
+		t.Fatalf("network string kind = %s, want %s", got, collectErrorKindNetwork)
+	}
+	if got := classifyCollectError(assertErr("serial port open failed")); got != collectErrorKindResource {
+		t.Fatalf("resource string kind = %s, want %s", got, collectErrorKindResource)
+	}
+	if got := classifyCollectError(assertErr("driver plugin error")); got != collectErrorKindDriver {
+		t.Fatalf("driver string kind = %s, want %s", got, collectErrorKindDriver)
+	}
+	if got := classifyCollectError(assertErr("unexpected bad state")); got != collectErrorKindUnknown {
+		t.Fatalf("unknown string kind = %s, want %s", got, collectErrorKindUnknown)
 	}
 }
 
@@ -524,7 +597,7 @@ func TestUpsertTaskLocked_ConfigChangedCreatesNewTask(t *testing.T) {
 	}
 }
 
-func TestUpsertTaskLocked_ResourceChangedReleasesOldLock(t *testing.T) {
+func TestUpsertTaskLocked_ResourceChangedUpdatesCurrentTask(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
@@ -535,29 +608,26 @@ func TestUpsertTaskLocked_ResourceChangedReleasesOldLock(t *testing.T) {
 
 	c.mu.Lock()
 	_ = c.upsertTaskLocked(device)
-	c.resourceLock.Store(resourceOld, make(chan struct{}, 1))
-	c.resourceLock.Store(resourceNew, make(chan struct{}, 1))
 
 	device2 := *device
 	device2.ResourceID = &resourceNew
 	device2.UpdatedAt = now.Add(time.Second)
 	action := c.upsertTaskLocked(&device2)
-	_, hasOld := c.resourceLock.Load(resourceOld)
-	_, hasNew := c.resourceLock.Load(resourceNew)
+	current := c.tasks[device.ID]
 	c.mu.Unlock()
 
 	if action != deviceSyncActionUpdated {
 		t.Fatalf("expected updated action, got %v", action)
 	}
-	if hasOld {
-		t.Fatalf("old resource lock should be released after resource change")
+	if current == nil || current.device == nil || current.device.ResourceID == nil {
+		t.Fatalf("updated task/resource should not be nil")
 	}
-	if !hasNew {
-		t.Fatalf("new resource lock should still exist")
+	if *current.device.ResourceID != resourceNew {
+		t.Fatalf("expected current task resource=%d, got %d", resourceNew, *current.device.ResourceID)
 	}
 }
 
-func TestUpsertTaskLocked_ResourceChangedKeepsSharedOldLock(t *testing.T) {
+func TestUpsertTaskLocked_ResourceChangedDoesNotAffectOtherTask(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
@@ -570,17 +640,20 @@ func TestUpsertTaskLocked_ResourceChangedKeepsSharedOldLock(t *testing.T) {
 	c.mu.Lock()
 	_ = c.upsertTaskLocked(deviceA)
 	_ = c.upsertTaskLocked(deviceB)
-	c.resourceLock.Store(resourceOld, make(chan struct{}, 1))
 
 	deviceA2 := *deviceA
 	deviceA2.ResourceID = &resourceNew
 	deviceA2.UpdatedAt = now.Add(time.Second)
 	_ = c.upsertTaskLocked(&deviceA2)
-	_, hasOld := c.resourceLock.Load(resourceOld)
+	currentA := c.tasks[deviceA.ID]
+	currentB := c.tasks[deviceB.ID]
 	c.mu.Unlock()
 
-	if !hasOld {
-		t.Fatalf("old resource lock should remain while another device still uses it")
+	if currentA == nil || currentA.device == nil || currentA.device.ResourceID == nil || *currentA.device.ResourceID != resourceNew {
+		t.Fatalf("device A should switch to resource %d", resourceNew)
+	}
+	if currentB == nil || currentB.device == nil || currentB.device.ResourceID == nil || *currentB.device.ResourceID != resourceOld {
+		t.Fatalf("device B should keep resource %d", resourceOld)
 	}
 }
 
@@ -620,7 +693,7 @@ func TestShouldRefreshCollectTask(t *testing.T) {
 	}
 }
 
-func TestRemoveTaskLocked_ReleasesUnusedResourceLock(t *testing.T) {
+func TestRemoveTaskLocked_DeletesTask(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
@@ -629,17 +702,16 @@ func TestRemoveTaskLocked_ReleasesUnusedResourceLock(t *testing.T) {
 
 	c.mu.Lock()
 	c.tasks[device.ID] = newCollectTask(device, nil)
-	c.resourceLock.Store(resourceID, make(chan struct{}, 1))
 	c.removeTaskLocked(device.ID)
-	_, exists := c.resourceLock.Load(resourceID)
+	_, exists := c.tasks[device.ID]
 	c.mu.Unlock()
 
 	if exists {
-		t.Fatalf("unused resource lock should be removed")
+		t.Fatalf("task should be removed")
 	}
 }
 
-func TestRemoveTaskLocked_KeepSharedResourceLock(t *testing.T) {
+func TestRemoveTaskLocked_KeepOtherTasks(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
@@ -650,13 +722,16 @@ func TestRemoveTaskLocked_KeepSharedResourceLock(t *testing.T) {
 	c.mu.Lock()
 	c.tasks[device1.ID] = newCollectTask(device1, nil)
 	c.tasks[device2.ID] = newCollectTask(device2, nil)
-	c.resourceLock.Store(resourceID, make(chan struct{}, 1))
 	c.removeTaskLocked(device1.ID)
-	_, exists := c.resourceLock.Load(resourceID)
+	_, hasTask1 := c.tasks[device1.ID]
+	_, hasTask2 := c.tasks[device2.ID]
 	c.mu.Unlock()
 
-	if !exists {
-		t.Fatalf("shared resource lock should be kept")
+	if hasTask1 {
+		t.Fatalf("task1 should be removed")
+	}
+	if !hasTask2 {
+		t.Fatalf("task2 should remain")
 	}
 }
 
@@ -672,14 +747,10 @@ func TestPruneMissingTasksLocked(t *testing.T) {
 	c.mu.Lock()
 	c.tasks[device1.ID] = newCollectTask(device1, nil)
 	c.tasks[device2.ID] = newCollectTask(device2, nil)
-	c.resourceLock.Store(resourceA, make(chan struct{}, 1))
-	c.resourceLock.Store(resourceB, make(chan struct{}, 1))
 
 	removed := c.pruneMissingTasksLocked(map[int64]struct{}{device1.ID: {}})
 	_, hasTask1 := c.tasks[device1.ID]
 	_, hasTask2 := c.tasks[device2.ID]
-	_, hasLockA := c.resourceLock.Load(resourceA)
-	_, hasLockB := c.resourceLock.Load(resourceB)
 	c.mu.Unlock()
 
 	if removed != 1 {
@@ -687,9 +758,6 @@ func TestPruneMissingTasksLocked(t *testing.T) {
 	}
 	if !hasTask1 || hasTask2 {
 		t.Fatalf("expected task1 kept and task2 removed, hasTask1=%v hasTask2=%v", hasTask1, hasTask2)
-	}
-	if !hasLockA || hasLockB {
-		t.Fatalf("expected lockA kept and lockB removed, hasLockA=%v hasLockB=%v", hasLockA, hasLockB)
 	}
 }
 

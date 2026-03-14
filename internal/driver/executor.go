@@ -315,36 +315,7 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 
 // ExecuteWithContext 执行驱动读取（支持超时/取消）
 func (e *DriverExecutor) ExecuteWithContext(ctx context.Context, device *models.Device) (*DriverResult, error) {
-	if device.DriverID == nil {
-		return nil, fmt.Errorf("device %s has no driver", device.Name)
-	}
-	done, err := e.startExecution(device)
-	if err != nil {
-		return nil, err
-	}
-	defer done()
-
-	resourceID, resourceType := resolveResource(device)
-	e.ensureResourcePath(resourceID, resourceType, device)
-
-	deviceConfig := buildDeviceConfig(device)
-	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
-
-	unlock := e.lockResource(resourceID)
-	if unlock != nil {
-		defer unlock()
-	}
-
-	if err := e.ensureSerialResource(resourceID, resourceType, device); err != nil {
-		return nil, err
-	}
-
-	if err := e.ensureDriverLoaded(device, resourceID); err != nil {
-		return nil, err
-	}
-
-	// 默认入口函数名（TinyGo 驱动导出为 handle）
-	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, defaultDriverFunction, driverCtx)
+	return e.executeWithContextAndConfig(ctx, device, defaultDriverFunction, nil)
 }
 
 // ExecuteCommand 执行指定函数（用于写入等主动命令）
@@ -354,6 +325,10 @@ func (e *DriverExecutor) ExecuteCommand(device *models.Device, function string, 
 
 // ExecuteCommandWithContext 执行指定函数（支持超时/取消）
 func (e *DriverExecutor) ExecuteCommandWithContext(ctx context.Context, device *models.Device, function string, config map[string]string) (*DriverResult, error) {
+	return e.executeWithContextAndConfig(ctx, device, function, config)
+}
+
+func (e *DriverExecutor) executeWithContextAndConfig(ctx context.Context, device *models.Device, function string, overrides map[string]string) (*DriverResult, error) {
 	if device.DriverID == nil {
 		return nil, fmt.Errorf("device %s has no driver", device.Name)
 	}
@@ -367,19 +342,8 @@ func (e *DriverExecutor) ExecuteCommandWithContext(ctx context.Context, device *
 	e.ensureResourcePath(resourceID, resourceType, device)
 
 	deviceConfig := buildDeviceConfig(device)
-	for key, value := range config {
-		trimmedKey := strings.TrimSpace(key)
-		if trimmedKey == "" {
-			continue
-		}
-		deviceConfig[trimmedKey] = value
-	}
-
-	pluginFunc := strings.TrimSpace(function)
-	if pluginFunc == "" {
-		pluginFunc = defaultDriverFunction
-	}
-
+	mergeDeviceConfig(deviceConfig, overrides)
+	pluginFunc := resolveExecutionFunction(function)
 	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
 
 	unlock := e.lockResource(resourceID)
@@ -396,6 +360,27 @@ func (e *DriverExecutor) ExecuteCommandWithContext(ctx context.Context, device *
 	}
 
 	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, pluginFunc, driverCtx)
+}
+
+func mergeDeviceConfig(base, overrides map[string]string) {
+	if base == nil || len(overrides) == 0 {
+		return
+	}
+	for key, value := range overrides {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		base[trimmedKey] = value
+	}
+}
+
+func resolveExecutionFunction(function string) string {
+	resolved := strings.TrimSpace(function)
+	if resolved == "" {
+		return defaultDriverFunction
+	}
+	return resolved
 }
 
 // CollectData 采集数据

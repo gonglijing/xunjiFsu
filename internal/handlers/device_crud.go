@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"net/http"
 
+	collectorpkg "github.com/gonglijing/xunjiFsu/internal/collector"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
+
+type deviceListItem struct {
+	*models.Device
+	CollectRuntime collectorpkg.DeviceRuntimeStatus `json:"collect_runtime"`
+}
 
 // GetDevices 获取所有设备
 func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +33,11 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 
 	drivers, _ := database.GetAllDrivers()
 	driverNameMap := buildDriverNameMap(drivers)
+	runtimeStatusMap := make(map[int64]collectorpkg.DeviceRuntimeStatus)
+	if h.collector != nil {
+		runtimeStatusMap = h.collector.ListDeviceRuntimeStatus()
+	}
+	deviceList := make([]*deviceListItem, 0, len(devices))
 
 	for _, device := range devices {
 		if device == nil {
@@ -46,9 +57,11 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 				device.ResourcePath = res.Path
 			}
 		}
+
+		deviceList = append(deviceList, buildDeviceListItem(device, runtimeStatusMap))
 	}
 
-	WriteSuccess(w, devices)
+	WriteSuccess(w, deviceList)
 }
 
 // CreateDevice 创建设备
@@ -148,4 +161,24 @@ func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, map[string]interface{}{
 		"enabled": nextState,
 	})
+}
+
+func buildDeviceListItem(device *models.Device, runtimeStatusMap map[int64]collectorpkg.DeviceRuntimeStatus) *deviceListItem {
+	if device == nil {
+		return nil
+	}
+
+	item := &deviceListItem{Device: device}
+	if status, ok := runtimeStatusMap[device.ID]; ok {
+		item.CollectRuntime = status
+	} else {
+		item.CollectRuntime = collectorpkg.DeviceRuntimeStatus{
+			DeviceID:   device.ID,
+			Registered: false,
+		}
+	}
+	if item.CollectRuntime.DeviceID == 0 {
+		item.CollectRuntime.DeviceID = device.ID
+	}
+	return item
 }

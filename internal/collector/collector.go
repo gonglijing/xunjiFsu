@@ -26,7 +26,6 @@ const (
 type Collector struct {
 	driverExecutor       *driver.DriverExecutor
 	northboundMgr        *northbound.NorthboundManager
-	resourceLock         sync.Map // key:int64 -> chan struct{}, 每个资源一个串行锁
 	driverIdentityMu     sync.RWMutex
 	driverProductKeys    map[int64]string // 驱动级固定 productKey 缓存
 	mu                   sync.RWMutex
@@ -45,12 +44,16 @@ type Collector struct {
 
 // collectTask 采集任务
 type collectTask struct {
-	device          *models.Device
-	interval        time.Duration
-	storageInterval time.Duration
-	nextRun         time.Time
-	lastRun         time.Time
-	lastStored      time.Time
+	device              *models.Device
+	interval            time.Duration
+	storageInterval     time.Duration
+	nextRun             time.Time
+	lastRun             time.Time
+	lastStored          time.Time
+	lastErrorAt         time.Time
+	lastError           string
+	lastErrorKind       collectErrorKind
+	consecutiveFailures int
 }
 
 type deviceSyncAction int
@@ -126,10 +129,6 @@ func (c *Collector) Start() error {
 	c.deviceSyncResetChan = make(chan time.Duration, 1)
 	c.commandPollResetChan = make(chan time.Duration, 1)
 	c.tasks = make(map[int64]*collectTask)
-	c.resourceLock.Range(func(key, _ any) bool {
-		c.resourceLock.Delete(key)
-		return true
-	})
 	h := &taskHeap{}
 	heap.Init(h)
 	c.taskHeap = h
@@ -238,50 +237,21 @@ func (c *Collector) runLoop() {
 
 // collectOnce 执行单次采集
 func (c *Collector) collectOnce(task *collectTask) {
-	if task == nil || task.device == nil || c.driverExecutor == nil {
+	if !c.canCollectTask(task) {
 		return
 	}
 
 	device := task.device
-	// 串行锁：同一资源串行访问
-	lockCh := c.getResourceLock(device.ResourceID)
-	lockCh <- struct{}{}
-	defer func() { <-lockCh }()
-
 	log.Printf("Collecting device %s (ID:%d)...", device.Name, device.ID)
 
-	result, err := c.driverExecutor.Execute(device)
+	collect, err := c.collectDataFromDriver(device)
 	if err != nil {
-		log.Printf("Failed to collect device %s: %v", device.Name, err)
+		c.handleCollectFailure(task, err)
 		return
 	}
 
-	collect := driverResultToCollectData(device, result)
-	if err := c.syncDeviceProductKey(device, collect); err != nil {
-		log.Printf("Failed to sync device product_key from driver output: %v", err)
-	}
-
-	storeHistory := shouldStoreHistory(task, collect.Timestamp)
-
-	// 保存数据：实时缓存始终写入，历史按设备 storage_interval 控制
-	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
-		log.Printf("Failed to insert data points: %v", err)
-	}
-	c.markTaskCollected(task, collect.Timestamp, storeHistory)
-
-	// 阈值计算 & 报警（按设备状态边沿触发 + 限频）
+	c.persistCollectData(task, collect)
 	c.handleThresholdForDevice(device, collect)
-}
-
-// getResourceLock 返回该资源的串行锁
-func (c *Collector) getResourceLock(resourceID *int64) chan struct{} {
-	key := resourceLockKey(resourceID)
-	if existing, ok := c.resourceLock.Load(key); ok {
-		return existing.(chan struct{})
-	}
-	ch := make(chan struct{}, 1)
-	actual, _ := c.resourceLock.LoadOrStore(key, ch)
-	return actual.(chan struct{})
 }
 
 // SyncDeviceStatus 同步设备状态（定时调用）
@@ -444,18 +414,9 @@ func (c *Collector) upsertTaskLocked(device *models.Device) deviceSyncAction {
 		return deviceSyncActionNone
 	}
 
-	var oldResourceID *int64
-	if exists && current != nil && current.device != nil {
-		oldResourceID = current.device.ResourceID
-	}
-
 	task := newCollectTask(device, current)
 	c.tasks[device.ID] = task
 	heap.Push(c.taskHeap, task)
-
-	if exists && !sameOptionalInt64(oldResourceID, task.device.ResourceID) {
-		c.releaseResourceLockIfUnusedLocked(oldResourceID)
-	}
 
 	if exists {
 		return deviceSyncActionUpdated
@@ -468,13 +429,6 @@ func sameOptionalInt64(a, b *int64) bool {
 		return a == b
 	}
 	return *a == *b
-}
-
-func resourceLockKey(resourceID *int64) int64 {
-	if resourceID == nil {
-		return 0
-	}
-	return *resourceID
 }
 
 func sameTaskDeviceConfig(current, next *models.Device) bool {
@@ -548,11 +502,7 @@ func (c *Collector) logDeviceSyncAction(device *models.Device, action deviceSync
 }
 
 func (c *Collector) removeTaskLocked(deviceID int64) {
-	removedTask, exists := c.tasks[deviceID]
 	delete(c.tasks, deviceID)
-	if exists && removedTask != nil && removedTask.device != nil {
-		c.releaseResourceLockIfUnusedLocked(removedTask.device.ResourceID)
-	}
 	clearAlarmStateForDevice(deviceID)
 }
 
@@ -570,24 +520,6 @@ func (c *Collector) pruneMissingTasksLocked(seenDeviceIDs map[int64]struct{}) in
 		removed++
 	}
 	return removed
-}
-
-func (c *Collector) releaseResourceLockIfUnusedLocked(resourceID *int64) {
-	key := resourceLockKey(resourceID)
-	if _, exists := c.resourceLock.Load(key); !exists {
-		return
-	}
-
-	for _, task := range c.tasks {
-		if task == nil || task.device == nil {
-			continue
-		}
-		if sameOptionalInt64(task.device.ResourceID, resourceID) {
-			return
-		}
-	}
-
-	c.resourceLock.Delete(key)
 }
 
 func (c *Collector) notifyTaskChangedLocked() {
@@ -626,10 +558,15 @@ func newCollectTask(device *models.Device, previous *collectTask) *collectTask {
 		storageInterval: resolveStorageInterval(device.StorageInterval),
 		nextRun:         time.Now().Add(interval),
 		lastRun:         time.Time{},
+		lastErrorKind:   collectErrorKindNone,
 	}
 	if previous != nil {
 		task.lastRun = previous.lastRun
 		task.lastStored = previous.lastStored
+		task.lastErrorAt = previous.lastErrorAt
+		task.lastError = previous.lastError
+		task.lastErrorKind = previous.lastErrorKind
+		task.consecutiveFailures = previous.consecutiveFailures
 	}
 	return task
 }
@@ -775,6 +712,29 @@ func (c *Collector) markTaskCollected(task *collectTask, collectedAt time.Time, 
 	if stored {
 		task.lastStored = collectedAt
 	}
+	task.consecutiveFailures = 0
+	task.lastError = ""
+	task.lastErrorKind = collectErrorKindNone
+	task.lastErrorAt = time.Time{}
+}
+
+func (c *Collector) markTaskFailed(task *collectTask, err error, kind collectErrorKind) int {
+	if task == nil || err == nil {
+		return 0
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.isTaskCurrentLocked(task) {
+		return 0
+	}
+
+	task.consecutiveFailures++
+	task.lastError = strings.TrimSpace(err.Error())
+	task.lastErrorKind = kind
+	task.lastErrorAt = time.Now()
+	return task.consecutiveFailures
 }
 
 func parseFloatFieldValue(fields map[string]string, field string) (float64, bool) {
@@ -939,142 +899,6 @@ func (c *Collector) handleAlarm(device *models.Device, threshold *models.Thresho
 }
 
 // driverResultToCollectData 转换驱动结果为采集数据
-func driverResultToCollectData(device *models.Device, res *driver.DriverResult) *models.CollectData {
-	if res == nil {
-		res = &driver.DriverResult{}
-	}
-
-	fields := make(map[string]string, len(res.Data)+len(res.Points))
-	if len(res.Data) > 0 {
-		for k, v := range res.Data {
-			name := strings.TrimSpace(k)
-			if name == "" {
-				continue
-			}
-			fields[name] = v
-		}
-	}
-	for _, p := range res.Points {
-		name := strings.TrimSpace(p.FieldName)
-		if name == "" {
-			continue
-		}
-		fields[name] = driverPointValueToString(p.Value)
-	}
-	ts := res.Timestamp
-	if ts.IsZero() {
-		ts = time.Now()
-	}
-	resultProductKey := strings.TrimSpace(res.ProductKey)
-	deviceProductKey := strings.TrimSpace(device.ProductKey)
-	if resultProductKey == "" {
-		resultProductKey = deviceProductKey
-	}
-	return &models.CollectData{
-		DeviceID:   device.ID,
-		DeviceName: device.Name,
-		ProductKey: resultProductKey,
-		DeviceKey:  strings.TrimSpace(device.DeviceKey),
-		Timestamp:  ts,
-		Fields:     fields,
-	}
-}
-
-func (c *Collector) syncDeviceProductKey(device *models.Device, collect *models.CollectData) error {
-	if device == nil || collect == nil {
-		return nil
-	}
-	nextProductKey := c.resolveFixedDriverProductKey(device.DriverID, collect.ProductKey)
-	if nextProductKey == "" {
-		return nil
-	}
-	collect.ProductKey = nextProductKey
-	currentProductKey := strings.TrimSpace(device.ProductKey)
-	if currentProductKey == nextProductKey {
-		return nil
-	}
-	if database.ParamDB != nil {
-		if err := database.UpdateDeviceProductKey(device.ID, nextProductKey); err != nil {
-			return err
-		}
-	}
-	device.ProductKey = nextProductKey
-	return nil
-}
-
-func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate string) string {
-	candidate = strings.TrimSpace(candidate)
-	if driverID == nil || *driverID <= 0 {
-		return candidate
-	}
-
-	id := *driverID
-	c.driverIdentityMu.Lock()
-	defer c.driverIdentityMu.Unlock()
-
-	cached := strings.TrimSpace(c.driverProductKeys[id])
-	if cached == "" {
-		if candidate != "" {
-			c.driverProductKeys[id] = candidate
-		}
-		return candidate
-	}
-
-	if candidate != "" && candidate != cached {
-		log.Printf("Collector: driver %d productKey mismatch (cached=%s incoming=%s), use cached", id, cached, candidate)
-	}
-	return cached
-}
-
-func driverPointValueToString(value interface{}) string {
-	switch v := value.(type) {
-	case nil:
-		return ""
-	case string:
-		return v
-	case []byte:
-		return string(v)
-	case bool:
-		return strconv.FormatBool(v)
-	case int:
-		return strconv.Itoa(v)
-	case int8:
-		return strconv.FormatInt(int64(v), 10)
-	case int16:
-		return strconv.FormatInt(int64(v), 10)
-	case int32:
-		return strconv.FormatInt(int64(v), 10)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case uint:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint8:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint16:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint32:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint64:
-		return strconv.FormatUint(v, 10)
-	case float32:
-		return strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		return fmt.Sprintf("%v", v)
-	}
-}
-
-// handleThresholdForDevice 仅检查阈值（用于采集时触发报警）
-func (c *Collector) handleThresholdForDevice(device *models.Device, data *models.CollectData) {
-	if device == nil || data == nil {
-		return
-	}
-	if err := c.checkThresholds(device, data); err != nil {
-		log.Printf("check thresholds error: %v", err)
-	}
-}
-
 func (c *Collector) processNorthboundCommands() {
 	if c.northboundMgr == nil {
 		return
