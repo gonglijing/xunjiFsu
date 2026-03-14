@@ -1,10 +1,9 @@
-//go:build no_extism
-
 package driver
 
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,6 +15,7 @@ import (
 )
 
 const defaultDriverFunction = "handle"
+
 const (
 	defaultSerialReadTimeout = 200 * time.Millisecond
 	defaultSerialOpenBackoff = 200 * time.Millisecond
@@ -236,12 +236,13 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 			if resourceID <= 0 || loaded.resourceID == resourceID {
 				return nil
 			}
+			logger.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
 		}
 	}
 
 	drv, err := database.GetDriverByID(driverID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			recovered, recoverErr := e.recoverMissingDriverBinding(device)
 			if recoverErr == nil && recovered != nil {
 				driverID = recovered.ID
@@ -267,6 +268,11 @@ LOAD_DRIVER:
 	}
 	if err := e.manager.LoadDriverFromModel(drv, resourceID); err != nil {
 		return fmt.Errorf("load driver %d failed: %w", drv.ID, err)
+	}
+	if version, err := e.manager.GetDriverVersion(driverID); err == nil && version != "" {
+		if err := database.UpdateDriverVersion(driverID, version); err != nil {
+			logger.Warn("Update driver version failed", "driver_id", driverID, "error", err)
+		}
 	}
 	return nil
 }
