@@ -86,6 +86,15 @@ type DriverContext struct {
 	DeviceConfig string            `json:"device_config"`
 }
 
+type driverInvocationInput struct {
+	DeviceID     int64             `json:"device_id"`
+	DeviceName   string            `json:"device_name"`
+	ResourceID   int64             `json:"resource_id"`
+	ResourceType string            `json:"resource_type"`
+	Config       map[string]string `json:"config"`
+	DeviceConfig string            `json:"device_config"`
+}
+
 // SerialPort 串口接口
 type SerialPort interface {
 	Write([]byte) (int, error)
@@ -256,17 +265,14 @@ func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, 
 		return nil, fmt.Errorf("plugin function not found: %s", function)
 	}
 
-	// 准备输入数据
-	input := map[string]interface{}{
-		"device_id":     driverCtx.DeviceID,
-		"device_name":   driverCtx.DeviceName,
-		"resource_id":   driverCtx.ResourceID,
-		"resource_type": driverCtx.ResourceType,
-		"config":        driverCtx.Config,
-		"device_config": driverCtx.DeviceConfig,
-	}
-
-	inputJSON, err := json.Marshal(input)
+	inputJSON, err := json.Marshal(driverInvocationInput{
+		DeviceID:     driverCtx.DeviceID,
+		DeviceName:   driverCtx.DeviceName,
+		ResourceID:   driverCtx.ResourceID,
+		ResourceType: driverCtx.ResourceType,
+		Config:       driverCtx.Config,
+		DeviceConfig: driverCtx.DeviceConfig,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal input: %w", err)
 	}

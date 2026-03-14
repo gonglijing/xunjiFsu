@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"container/heap"
 	"context"
 	"testing"
 	"time"
@@ -353,6 +354,22 @@ func TestDriverResultToCollectData_ProductKeyFromDriver(t *testing.T) {
 	}
 }
 
+func TestDriverResultToCollectData_EmptyResultKeepsNilFields(t *testing.T) {
+	device := &models.Device{
+		ID:        20,
+		Name:      "dev-empty",
+		DeviceKey: "dk-empty",
+	}
+
+	collect := driverResultToCollectData(device, &driver.DriverResult{})
+	if collect == nil {
+		t.Fatalf("collect data should not be nil")
+	}
+	if collect.Fields != nil {
+		t.Fatalf("expected nil fields for empty result, got %#v", collect.Fields)
+	}
+}
+
 func TestSyncDeviceProductKey_UpdateInMemory(t *testing.T) {
 	c := NewCollector(nil, nil)
 	device := &models.Device{ID: 3, ProductKey: "pk-old"}
@@ -565,7 +582,7 @@ func TestUpsertTaskLocked_UnchangedDeviceDoesNotGrowHeap(t *testing.T) {
 	}
 }
 
-func TestUpsertTaskLocked_ConfigChangedCreatesNewTask(t *testing.T) {
+func TestUpsertTaskLocked_ConfigChangedDoesNotGrowHeap(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
 
@@ -589,11 +606,11 @@ func TestUpsertTaskLocked_ConfigChangedCreatesNewTask(t *testing.T) {
 	if action2 != deviceSyncActionUpdated {
 		t.Fatalf("expected second upsert updated, got %v", action2)
 	}
-	if oldTask == newTask {
-		t.Fatalf("expected changed config to replace task")
+	if oldTask != newTask {
+		t.Fatalf("expected changed config to refresh existing task in place")
 	}
-	if heapLen != 2 {
-		t.Fatalf("expected heap len 2 with stale+current task before prune, got %d", heapLen)
+	if heapLen != 1 {
+		t.Fatalf("expected heap len 1 after in-place refresh, got %d", heapLen)
 	}
 }
 
@@ -701,13 +718,19 @@ func TestRemoveTaskLocked_DeletesTask(t *testing.T) {
 	device := &models.Device{ID: 201, Enabled: 1, ResourceID: &resourceID, CollectInterval: 1000, StorageInterval: 60}
 
 	c.mu.Lock()
-	c.tasks[device.ID] = newCollectTask(device, nil)
+	task := newCollectTask(device, nil)
+	c.tasks[device.ID] = task
+	heap.Push(c.taskHeap, task)
 	c.removeTaskLocked(device.ID)
 	_, exists := c.tasks[device.ID]
+	heapLen := len(*c.taskHeap)
 	c.mu.Unlock()
 
 	if exists {
 		t.Fatalf("task should be removed")
+	}
+	if heapLen != 0 {
+		t.Fatalf("heap should not retain removed task, got len=%d", heapLen)
 	}
 }
 
@@ -720,11 +743,16 @@ func TestRemoveTaskLocked_KeepOtherTasks(t *testing.T) {
 	device2 := &models.Device{ID: 203, Enabled: 1, ResourceID: &resourceID, CollectInterval: 1000, StorageInterval: 60}
 
 	c.mu.Lock()
-	c.tasks[device1.ID] = newCollectTask(device1, nil)
-	c.tasks[device2.ID] = newCollectTask(device2, nil)
+	task1 := newCollectTask(device1, nil)
+	task2 := newCollectTask(device2, nil)
+	c.tasks[device1.ID] = task1
+	c.tasks[device2.ID] = task2
+	heap.Push(c.taskHeap, task1)
+	heap.Push(c.taskHeap, task2)
 	c.removeTaskLocked(device1.ID)
 	_, hasTask1 := c.tasks[device1.ID]
 	_, hasTask2 := c.tasks[device2.ID]
+	heapLen := len(*c.taskHeap)
 	c.mu.Unlock()
 
 	if hasTask1 {
@@ -732,6 +760,9 @@ func TestRemoveTaskLocked_KeepOtherTasks(t *testing.T) {
 	}
 	if !hasTask2 {
 		t.Fatalf("task2 should remain")
+	}
+	if heapLen != 1 {
+		t.Fatalf("expected heap len 1 after removal, got %d", heapLen)
 	}
 }
 

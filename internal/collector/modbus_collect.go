@@ -58,7 +58,10 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		res = &driver.DriverResult{}
 	}
 
-	fields := make(map[string]string, len(res.Data)+len(res.Points))
+	var fields map[string]string
+	if totalFields := len(res.Data) + len(res.Points); totalFields > 0 {
+		fields = make(map[string]string, totalFields)
+	}
 	if len(res.Data) > 0 {
 		for k, v := range res.Data {
 			name := strings.TrimSpace(k)

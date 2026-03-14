@@ -67,8 +67,17 @@ func inferResourceType(device *models.Device) string {
 }
 
 func buildDeviceConfig(device *models.Device) map[string]string {
-	deviceConfig := make(map[string]string)
+	capHint := 4
+	if device != nil && device.DeviceAddress != "" {
+		capHint++
+	}
 	_, resourceType := resolveResource(device)
+	if resourceType == "serial" {
+		capHint += 5
+	} else {
+		capHint += 2
+	}
+	deviceConfig := make(map[string]string, capHint)
 	if resourceType == "serial" {
 		deviceConfig["serial_port"] = device.SerialPort
 		deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
