@@ -108,6 +108,23 @@ func (a *XunjiAdapter) currentAlarmTopic() string {
 	return a.alarmTopic
 }
 
+type xunjiRealtimePayloadItem struct {
+	TS     int64             `json:"ts"`
+	Values jsonFieldValueMap `json:"values"`
+}
+
+type xunjiAlarmMessage struct {
+	DeviceID    int64   `json:"device_id"`
+	DeviceName  string  `json:"device_name"`
+	FieldName   string  `json:"field_name"`
+	ActualValue float64 `json:"actual_value"`
+	Threshold   float64 `json:"threshold"`
+	Operator    string  `json:"operator"`
+	Severity    string  `json:"severity"`
+	Message     string  `json:"message"`
+	Timestamp   int64   `json:"timestamp"`
+}
+
 func (a *XunjiAdapter) buildBatchRealtimePayload(batch []*models.CollectData) []byte {
 	if len(batch) == 0 {
 		return []byte("{}")
@@ -117,25 +134,20 @@ func (a *XunjiAdapter) buildBatchRealtimePayload(batch []*models.CollectData) []
 	mode := a.subDeviceTokenMode
 	a.mu.RUnlock()
 
-	payload := make(map[string]interface{}, len(batch))
+	payload := make(map[string]xunjiRealtimePayloadItem, len(batch))
 	for _, data := range batch {
 		if data == nil {
 			continue
 		}
 		token := resolveXunjiSubToken(data, mode)
-		values := make(map[string]interface{}, len(data.Fields))
-		for key, value := range data.Fields {
-			values[key] = convertFieldValue(value)
-		}
-
 		ts := data.Timestamp.UnixMilli()
 		if ts <= 0 {
 			ts = time.Now().UnixMilli()
 		}
 
-		payload[token] = map[string]interface{}{
-			"ts":     ts,
-			"values": values,
+		payload[token] = xunjiRealtimePayloadItem{
+			TS:     ts,
+			Values: jsonFieldValueMap(data.Fields),
 		}
 	}
 
@@ -148,16 +160,16 @@ func (a *XunjiAdapter) buildAlarmMessage(alarm *models.AlarmPayload) []byte {
 		return []byte("{}")
 	}
 
-	msg := map[string]interface{}{
-		"device_id":    alarm.DeviceID,
-		"device_name":  alarm.DeviceName,
-		"field_name":   alarm.FieldName,
-		"actual_value": alarm.ActualValue,
-		"threshold":    alarm.Threshold,
-		"operator":     alarm.Operator,
-		"severity":     alarm.Severity,
-		"message":      alarm.Message,
-		"timestamp":    time.Now().UnixMilli(),
+	msg := xunjiAlarmMessage{
+		DeviceID:    alarm.DeviceID,
+		DeviceName:  alarm.DeviceName,
+		FieldName:   alarm.FieldName,
+		ActualValue: alarm.ActualValue,
+		Threshold:   alarm.Threshold,
+		Operator:    alarm.Operator,
+		Severity:    alarm.Severity,
+		Message:     alarm.Message,
+		Timestamp:   time.Now().UnixMilli(),
 	}
 	body, _ := json.Marshal(msg)
 	return body

@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -48,6 +49,101 @@ func TestIThingsPullCommands_PopsInBatch(t *testing.T) {
 	}
 	if len(adapter.commandQueue) != 1 {
 		t.Fatalf("remaining queue=%d, want=1", len(adapter.commandQueue))
+	}
+}
+
+func TestIThingsBuildRealtimePublish(t *testing.T) {
+	adapter := NewIThingsAdapter("ithings-test")
+	adapter.config = &IThingsConfig{ProductKey: "gwpk", DeviceKey: "gwdk"}
+	adapter.upPropertyTopicTemplate = "$thing/up/property/{productID}/{deviceName}"
+	adapter.deviceNameMode = "device_key"
+	adapter.subDeviceNameMode = "device_key"
+
+	topic, body, err := adapter.buildRealtimePublish(&models.CollectData{
+		DeviceID:   1,
+		DeviceName: "pump-1",
+		DeviceKey:  "dk-1",
+		Timestamp:  time.Unix(1700000000, 0),
+		Fields: map[string]string{
+			"temperature": "23.5",
+			"running":     "true",
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildRealtimePublish() error = %v", err)
+	}
+	if topic != "$thing/up/property/gwpk/gwdk" {
+		t.Fatalf("topic=%q", topic)
+	}
+
+	decoded := make(map[string]interface{})
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	subDevices, ok := decoded["subDevices"].([]interface{})
+	if !ok || len(subDevices) != 1 {
+		t.Fatalf("subDevices=%v", decoded["subDevices"])
+	}
+	subDevice, _ := subDevices[0].(map[string]interface{})
+	if subDevice["deviceName"] != "dk-1" {
+		t.Fatalf("deviceName=%v, want=dk-1", subDevice["deviceName"])
+	}
+	properties, ok := subDevice["properties"].([]interface{})
+	if !ok || len(properties) != 1 {
+		t.Fatalf("properties=%v", subDevice["properties"])
+	}
+	item, _ := properties[0].(map[string]interface{})
+	params, ok := item["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("params=%v", item["params"])
+	}
+	if params["temperature"] != 23.5 {
+		t.Fatalf("temperature=%v, want=23.5", params["temperature"])
+	}
+	if params["running"] != true {
+		t.Fatalf("running=%v, want=true", params["running"])
+	}
+}
+
+func TestIThingsBuildAlarmPublish(t *testing.T) {
+	adapter := NewIThingsAdapter("ithings-test")
+	adapter.config = &IThingsConfig{ProductKey: "gwpk", DeviceKey: "gwdk"}
+	adapter.upEventTopicTemplate = "$thing/up/event/{productID}/{deviceName}"
+	adapter.deviceNameMode = "device_key"
+	adapter.alarmEventID = "alarm"
+	adapter.alarmEventType = "alert"
+
+	topic, body, err := adapter.buildAlarmPublish(&models.AlarmPayload{
+		DeviceID:    1,
+		DeviceName:  "pump-1",
+		DeviceKey:   "dk-1",
+		FieldName:   "temperature",
+		ActualValue: 23.5,
+		Threshold:   30,
+		Operator:    ">",
+		Severity:    "high",
+		Message:     "too hot",
+	})
+	if err != nil {
+		t.Fatalf("buildAlarmPublish() error = %v", err)
+	}
+	if topic != "$thing/up/event/gwpk/gwdk" {
+		t.Fatalf("topic=%q", topic)
+	}
+
+	decoded := make(map[string]interface{})
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	params, ok := decoded["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("params=%v", decoded["params"])
+	}
+	if params["device_key"] != "dk-1" {
+		t.Fatalf("device_key=%v, want=dk-1", params["device_key"])
+	}
+	if params["actual_value"] != 23.5 {
+		t.Fatalf("actual_value=%v, want=23.5", params["actual_value"])
 	}
 }
 

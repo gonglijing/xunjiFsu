@@ -8,6 +8,24 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type pandaXRealtimePayloadItem struct {
+	TS     int64             `json:"ts"`
+	Values jsonFieldValueMap `json:"values"`
+}
+
+type pandaXAlarmPublishPayload struct {
+	DeviceName  string  `json:"device_name"`
+	ProductKey  string  `json:"product_key"`
+	DeviceKey   string  `json:"device_key"`
+	FieldName   string  `json:"field_name"`
+	ActualValue float64 `json:"actual_value"`
+	Threshold   float64 `json:"threshold"`
+	Operator    string  `json:"operator"`
+	Severity    string  `json:"severity"`
+	Message     string  `json:"message"`
+	TS          int64   `json:"ts"`
+}
+
 func (a *PandaXAdapter) Send(data *models.CollectData) error {
 	if data == nil {
 		log.Printf("[PandaX-%s] Send: data is nil", a.name)
@@ -82,26 +100,21 @@ func (a *PandaXAdapter) buildBatchRealtimePublish(batch []*models.CollectData) (
 		return topic, []byte("{}")
 	}
 
-	payload := make(map[string]interface{}, len(batch))
+	payload := make(map[string]pandaXRealtimePayloadItem, len(batch))
 	for _, data := range batch {
 		if data == nil {
 			continue
 		}
 
 		subToken := a.resolveSubDeviceToken(data)
-		values := make(map[string]interface{}, len(data.Fields))
-		for key, value := range data.Fields {
-			values[key] = convertFieldValue(value)
-		}
-
 		ts := data.Timestamp.UnixMilli()
 		if ts <= 0 {
 			ts = time.Now().UnixMilli()
 		}
 
-		payload[subToken] = map[string]interface{}{
-			"ts":     ts,
-			"values": values,
+		payload[subToken] = pandaXRealtimePayloadItem{
+			TS:     ts,
+			Values: jsonFieldValueMap(data.Fields),
 		}
 	}
 
@@ -157,17 +170,17 @@ func (a *PandaXAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, [
 		return topic, []byte("{}")
 	}
 
-	payload := map[string]interface{}{
-		"device_name":  alarm.DeviceName,
-		"product_key":  alarm.ProductKey,
-		"device_key":   alarm.DeviceKey,
-		"field_name":   alarm.FieldName,
-		"actual_value": alarm.ActualValue,
-		"threshold":    alarm.Threshold,
-		"operator":     alarm.Operator,
-		"severity":     alarm.Severity,
-		"message":      alarm.Message,
-		"ts":           time.Now().UnixMilli(),
+	payload := pandaXAlarmPublishPayload{
+		DeviceName:  alarm.DeviceName,
+		ProductKey:  alarm.ProductKey,
+		DeviceKey:   alarm.DeviceKey,
+		FieldName:   alarm.FieldName,
+		ActualValue: alarm.ActualValue,
+		Threshold:   alarm.Threshold,
+		Operator:    alarm.Operator,
+		Severity:    alarm.Severity,
+		Message:     alarm.Message,
+		TS:          time.Now().UnixMilli(),
 	}
 	body, _ := json.Marshal(payload)
 	return topic, body

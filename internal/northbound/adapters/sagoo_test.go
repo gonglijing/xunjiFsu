@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -249,6 +250,52 @@ func TestPullCommands_ClearPoppedReferences(t *testing.T) {
 	}
 	if len(adapter.commandQueue) != 1 {
 		t.Fatalf("remaining queue=%d, want=1", len(adapter.commandQueue))
+	}
+}
+
+func TestSagooBuildMessage(t *testing.T) {
+	adapter := NewSagooAdapter("sagoo-test")
+	adapter.config = &SagooConfig{ProductKey: "gwpk", DeviceKey: "gwdk"}
+
+	body := adapter.buildMessage(&models.CollectData{
+		DeviceID:   1,
+		ProductKey: "subpk",
+		DeviceKey:  "subdk",
+		Fields: map[string]string{
+			"temperature": "23.5",
+			"running":     "true",
+		},
+	})
+
+	decoded := make(map[string]interface{})
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	params, ok := decoded["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("params=%v", decoded["params"])
+	}
+	subDevices, ok := params["subDevices"].([]interface{})
+	if !ok || len(subDevices) != 1 {
+		t.Fatalf("subDevices=%v", params["subDevices"])
+	}
+	subDevice, _ := subDevices[0].(map[string]interface{})
+	identity, ok := subDevice["identity"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("identity=%v", subDevice["identity"])
+	}
+	if identity["productKey"] != "subpk" || identity["deviceKey"] != "subdk" {
+		t.Fatalf("identity=%v", identity)
+	}
+	properties, ok := subDevice["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("properties=%v", subDevice["properties"])
+	}
+	if properties["temperature"] != 23.5 {
+		t.Fatalf("temperature=%v, want=23.5", properties["temperature"])
+	}
+	if properties["running"] != true {
+		t.Fatalf("running=%v, want=true", properties["running"])
 	}
 }
 

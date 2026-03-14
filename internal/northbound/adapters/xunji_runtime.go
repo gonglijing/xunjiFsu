@@ -78,7 +78,7 @@ func (a *XunjiAdapter) IsConnected() bool {
 	return a.reconnectState().isConnected()
 }
 
-func (a *XunjiAdapter) GetStats() map[string]interface{} {
+func (a *XunjiAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	a.mu.RLock()
 	enabled := a.enabled
 	initialized := a.initialized
@@ -98,20 +98,24 @@ func (a *XunjiAdapter) GetStats() map[string]interface{} {
 	alarmCount := len(a.pendingAlarms)
 	a.alarmMu.RUnlock()
 
-	return map[string]interface{}{
-		"name":          a.name,
-		"type":          "xunji",
-		"enabled":       enabled,
-		"initialized":   initialized,
-		"connected":     connected,
-		"loop_state":    loopState.String(),
-		"interval_ms":   interval.Milliseconds(),
-		"pending_data":  pendingCount,
-		"pending_alarm": alarmCount,
-		"topic":         topic,
-		"alarm_topic":   alarmTopic,
-		"gateway_name":  gatewayName,
+	return RuntimeStatsSnapshot{
+		Name:         a.name,
+		Type:         "xunji",
+		Enabled:      enabled,
+		Initialized:  initialized,
+		Connected:    connected,
+		LoopState:    loopState.String(),
+		IntervalMS:   interval.Milliseconds(),
+		PendingData:  pendingCount,
+		PendingAlarm: alarmCount,
+		Topic:        topic,
+		AlarmTopic:   alarmTopic,
+		GatewayName:  gatewayName,
 	}
+}
+
+func (a *XunjiAdapter) GetStats() map[string]interface{} {
+	return a.RuntimeStatsSnapshot().ToMap()
 }
 
 func (a *XunjiAdapter) GetLastSendTime() time.Time {

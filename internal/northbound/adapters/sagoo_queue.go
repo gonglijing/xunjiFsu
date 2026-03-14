@@ -7,6 +7,72 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type sagooSysPayload struct {
+	Ack int `json:"ack"`
+}
+
+type sagooIdentityPayload struct {
+	ProductKey string `json:"productKey"`
+	DeviceKey  string `json:"deviceKey"`
+}
+
+type sagooRealtimeSubDevice struct {
+	Identity   sagooIdentityPayload `json:"identity"`
+	Properties jsonFieldValueMap    `json:"properties"`
+	Events     struct{}             `json:"events"`
+}
+
+type sagooRealtimeParams struct {
+	Properties struct{}                 `json:"properties"`
+	Events     struct{}                 `json:"events"`
+	SubDevices []sagooRealtimeSubDevice `json:"subDevices"`
+}
+
+type sagooRealtimeMessage struct {
+	ID      string              `json:"id"`
+	Version string              `json:"version"`
+	Sys     sagooSysPayload     `json:"sys"`
+	Method  string              `json:"method"`
+	Params  sagooRealtimeParams `json:"params"`
+}
+
+type sagooAlarmValue struct {
+	FieldName   string  `json:"field_name"`
+	ActualValue float64 `json:"actual_value"`
+	Threshold   float64 `json:"threshold"`
+	Operator    string  `json:"operator"`
+	Message     string  `json:"message"`
+}
+
+type sagooAlarmEvent struct {
+	Value sagooAlarmValue `json:"value"`
+	Time  int64           `json:"time"`
+}
+
+type sagooAlarmEvents struct {
+	Alarm sagooAlarmEvent `json:"alarm"`
+}
+
+type sagooAlarmSubDevice struct {
+	Identity   sagooIdentityPayload `json:"identity"`
+	Properties struct{}             `json:"properties"`
+	Events     sagooAlarmEvents     `json:"events"`
+}
+
+type sagooAlarmParams struct {
+	Properties struct{}              `json:"properties"`
+	Events     struct{}              `json:"events"`
+	SubDevices []sagooAlarmSubDevice `json:"subDevices"`
+}
+
+type sagooAlarmMessage struct {
+	ID      string           `json:"id"`
+	Version string           `json:"version"`
+	Sys     sagooSysPayload  `json:"sys"`
+	Method  string           `json:"method"`
+	Params  sagooAlarmParams `json:"params"`
+}
+
 // Send 发送数据（加入缓冲队列）
 func (a *SagooAdapter) Send(data *models.CollectData) error {
 	if data == nil {
@@ -104,11 +170,6 @@ func (a *SagooAdapter) buildMessage(data *models.CollectData) []byte {
 		return []byte("{}")
 	}
 
-	properties := make(map[string]interface{}, len(data.Fields))
-	for key, value := range data.Fields {
-		properties[key] = convertFieldValue(value)
-	}
-
 	defaultPK, defaultDK := a.defaultIdentity()
 	subPK := data.ProductKey
 	subDK := data.DeviceKey
@@ -119,24 +180,22 @@ func (a *SagooAdapter) buildMessage(data *models.CollectData) []byte {
 		subDK = defaultDK
 	}
 
-	msg := map[string]interface{}{
-		"id":      a.nextID("msg"),
-		"version": "1.0",
-		"sys": map[string]interface{}{
-			"ack": 0,
-		},
-		"method": "thing.event.property.pack.post",
-		"params": map[string]interface{}{
-			"properties": map[string]interface{}{},
-			"events":     map[string]interface{}{},
-			"subDevices": []interface{}{
-				map[string]interface{}{
-					"identity": map[string]string{
-						"productKey": subPK,
-						"deviceKey":  subDK,
+	msg := sagooRealtimeMessage{
+		ID:      a.nextID("msg"),
+		Version: "1.0",
+		Sys:     sagooSysPayload{Ack: 0},
+		Method:  "thing.event.property.pack.post",
+		Params: sagooRealtimeParams{
+			Properties: struct{}{},
+			Events:     struct{}{},
+			SubDevices: []sagooRealtimeSubDevice{
+				{
+					Identity: sagooIdentityPayload{
+						ProductKey: subPK,
+						DeviceKey:  subDK,
 					},
-					"properties": properties,
-					"events":     map[string]interface{}{},
+					Properties: jsonFieldValueMap(data.Fields),
+					Events:     struct{}{},
 				},
 			},
 		},
@@ -154,41 +213,33 @@ func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) []byte {
 
 	defaultPK, defaultDK := a.defaultIdentity()
 
-	eventValue := map[string]interface{}{
-		"field_name":   alarm.FieldName,
-		"actual_value": alarm.ActualValue,
-		"threshold":    alarm.Threshold,
-		"operator":     alarm.Operator,
-		"message":      alarm.Message,
-	}
-
-	event := map[string]interface{}{
-		"value": eventValue,
-		"time":  time.Now().UnixMilli(),
-	}
-
-	events := map[string]interface{}{
-		"alarm": event,
-	}
-
-	msg := map[string]interface{}{
-		"id":      a.nextID("alarm"),
-		"version": "1.0",
-		"sys": map[string]interface{}{
-			"ack": 0,
-		},
-		"method": "thing.event.property.pack.post",
-		"params": map[string]interface{}{
-			"properties": map[string]interface{}{},
-			"events":     map[string]interface{}{},
-			"subDevices": []interface{}{
-				map[string]interface{}{
-					"identity": map[string]string{
-						"productKey": pickFirstNonEmpty2(alarm.ProductKey, defaultPK),
-						"deviceKey":  pickFirstNonEmpty2(alarm.DeviceKey, defaultDK),
+	msg := sagooAlarmMessage{
+		ID:      a.nextID("alarm"),
+		Version: "1.0",
+		Sys:     sagooSysPayload{Ack: 0},
+		Method:  "thing.event.property.pack.post",
+		Params: sagooAlarmParams{
+			Properties: struct{}{},
+			Events:     struct{}{},
+			SubDevices: []sagooAlarmSubDevice{
+				{
+					Identity: sagooIdentityPayload{
+						ProductKey: pickFirstNonEmpty2(alarm.ProductKey, defaultPK),
+						DeviceKey:  pickFirstNonEmpty2(alarm.DeviceKey, defaultDK),
 					},
-					"properties": map[string]interface{}{},
-					"events":     events,
+					Properties: struct{}{},
+					Events: sagooAlarmEvents{
+						Alarm: sagooAlarmEvent{
+							Value: sagooAlarmValue{
+								FieldName:   alarm.FieldName,
+								ActualValue: alarm.ActualValue,
+								Threshold:   alarm.Threshold,
+								Operator:    alarm.Operator,
+								Message:     alarm.Message,
+							},
+							Time: time.Now().UnixMilli(),
+						},
+					},
 				},
 			},
 		},

@@ -136,7 +136,7 @@ func (a *MQTTAdapter) runLoop() {
 }
 
 // GetStats 获取适配器统计信息
-func (a *MQTTAdapter) GetStats() map[string]interface{} {
+func (a *MQTTAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	a.mu.RLock()
 	enabled := a.enabled
 	initialized := a.initialized
@@ -153,23 +153,27 @@ func (a *MQTTAdapter) GetStats() map[string]interface{} {
 	alarmCount := len(a.pendingAlarms)
 	a.alarmMu.RUnlock()
 
-	return map[string]interface{}{
-		"name":          a.name,
-		"type":          "mqtt",
-		"enabled":       enabled,
-		"initialized":   initialized,
-		"connected":     connected,
-		"loop_state":    loopState.String(),
-		"interval_ms":   interval.Milliseconds(),
-		"pending_data":  pendingCount,
-		"pending_alarm": alarmCount,
-		"broker":        a.broker,
-		"topic":         a.topic,
-		"alarm_topic":   a.alarmTopic,
-		"client_id":     a.clientID,
-		"qos":           a.qos,
-		"retain":        a.retain,
+	return RuntimeStatsSnapshot{
+		Name:         a.name,
+		Type:         "mqtt",
+		Enabled:      enabled,
+		Initialized:  initialized,
+		Connected:    connected,
+		LoopState:    loopState.String(),
+		IntervalMS:   interval.Milliseconds(),
+		PendingData:  pendingCount,
+		PendingAlarm: alarmCount,
+		Broker:       a.broker,
+		Topic:        a.topic,
+		AlarmTopic:   a.alarmTopic,
+		ClientID:     a.clientID,
+		QOS:          a.qos,
+		Retain:       a.retain,
 	}
+}
+
+func (a *MQTTAdapter) GetStats() map[string]interface{} {
+	return a.RuntimeStatsSnapshot().ToMap()
 }
 
 // GetLastSendTime 获取最后发送时间

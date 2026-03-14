@@ -7,6 +7,19 @@ import (
 	"time"
 )
 
+type jsonFieldValueMap map[string]string
+type jsonConvertedValue string
+
+type jsonSingleConvertedField struct {
+	Key   string
+	Value string
+}
+
+type jsonSingleRawField struct {
+	Key   string
+	Value string
+}
+
 func mapFromAnyByKey2(values map[string]interface{}, key1, key2 string) (map[string]interface{}, bool) {
 	if out, ok := mapFromAny(values[key1]); ok {
 		return out, true
@@ -80,6 +93,71 @@ func convertFieldValue(value string) interface{} {
 		return f
 	}
 	return value
+}
+
+func (m jsonFieldValueMap) MarshalJSON() ([]byte, error) {
+	if len(m) == 0 {
+		return []byte("{}"), nil
+	}
+
+	buf := make([]byte, 0, len(m)*24)
+	buf = append(buf, '{')
+	index := 0
+	for key, value := range m {
+		if index > 0 {
+			buf = append(buf, ',')
+		}
+		buf = strconv.AppendQuote(buf, key)
+		buf = append(buf, ':')
+		buf = appendConvertedFieldJSON(buf, value)
+		index++
+	}
+	buf = append(buf, '}')
+	return buf, nil
+}
+
+func appendConvertedFieldJSON(dst []byte, value string) []byte {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return strconv.AppendQuote(dst, "")
+	}
+	if b, err := strconv.ParseBool(trimmed); err == nil {
+		if b {
+			return append(dst, "true"...)
+		}
+		return append(dst, "false"...)
+	}
+	if i, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+		return strconv.AppendInt(dst, i, 10)
+	}
+	if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
+		return strconv.AppendFloat(dst, f, 'f', -1, 64)
+	}
+	return strconv.AppendQuote(dst, value)
+}
+
+func (v jsonConvertedValue) MarshalJSON() ([]byte, error) {
+	return appendConvertedFieldJSON(nil, string(v)), nil
+}
+
+func (f jsonSingleConvertedField) MarshalJSON() ([]byte, error) {
+	buf := make([]byte, 0, len(f.Key)+len(f.Value)+8)
+	buf = append(buf, '{')
+	buf = strconv.AppendQuote(buf, f.Key)
+	buf = append(buf, ':')
+	buf = appendConvertedFieldJSON(buf, f.Value)
+	buf = append(buf, '}')
+	return buf, nil
+}
+
+func (f jsonSingleRawField) MarshalJSON() ([]byte, error) {
+	buf := make([]byte, 0, len(f.Key)+len(f.Value)+8)
+	buf = append(buf, '{')
+	buf = strconv.AppendQuote(buf, f.Key)
+	buf = append(buf, ':')
+	buf = strconv.AppendQuote(buf, f.Value)
+	buf = append(buf, '}')
+	return buf, nil
 }
 
 func pickFirstNonEmpty(values ...string) string {

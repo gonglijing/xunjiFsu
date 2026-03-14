@@ -5,12 +5,27 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 )
+
+type northboundStatusItem struct {
+	ID               int64  `json:"id,omitempty"`
+	Name             string `json:"name"`
+	Type             string `json:"type,omitempty"`
+	Configured       bool   `json:"configured"`
+	Registered       bool   `json:"registered"`
+	Enabled          bool   `json:"enabled"`
+	Connected        bool   `json:"connected"`
+	UploadInterval   int64  `json:"upload_interval"`
+	Pending          bool   `json:"pending"`
+	BreakerState     string `json:"breaker_state"`
+	DBEnabled        bool   `json:"db_enabled,omitempty"`
+	DBUploadInterval int    `json:"db_upload_interval,omitempty"`
+	LastSentAt       string `json:"last_sent_at,omitempty"`
+}
 
 // ToggleNorthboundEnable 切换北向使能状态
 func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request) {
@@ -147,44 +162,45 @@ func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 		configByName[name] = cfg
 	}
 
-	nameSet := make(map[string]struct{}, len(configByName)+8)
-	for _, name := range h.northboundMgr.ListRuntimeNames() {
-		name = normalizeNorthboundName(name)
-		if name != "" {
-			nameSet[name] = struct{}{}
-		}
-	}
+	names := make([]string, 0, len(configByName)+8)
 	for name := range configByName {
-		nameSet[name] = struct{}{}
+		names = append(names, name)
 	}
-
-	names := make([]string, 0, len(nameSet))
-	for name := range nameSet {
+	for _, runtimeName := range h.northboundMgr.ListRuntimeNames() {
+		name := normalizeNorthboundName(runtimeName)
+		if name == "" {
+			continue
+		}
+		if _, exists := configByName[name]; exists {
+			continue
+		}
+		configByName[name] = nil
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
-	items := make([]map[string]interface{}, 0, len(names))
+	items := make([]northboundStatusItem, 0, len(names))
 	for _, name := range names {
 		cfg := configByName[name]
-		item := map[string]interface{}{
-			"name":            name,
-			"configured":      cfg != nil,
-			"registered":      h.northboundMgr.HasAdapter(name),
-			"enabled":         h.northboundMgr.IsEnabled(name),
-			"connected":       h.northboundMgr.IsConnected(name),
-			"upload_interval": h.northboundMgr.GetInterval(name).Milliseconds(),
-			"pending":         h.northboundMgr.HasPending(name),
-			"breaker_state":   h.northboundMgr.GetBreakerState(name).String(),
+		runtimeStatus := h.northboundMgr.RuntimeStatus(name)
+		item := northboundStatusItem{
+			Name:           name,
+			Configured:     cfg != nil,
+			Registered:     runtimeStatus.Registered,
+			Enabled:        runtimeStatus.Enabled,
+			Connected:      runtimeStatus.Connected,
+			UploadInterval: runtimeStatus.UploadIntervalMS,
+			Pending:        runtimeStatus.Pending,
+			BreakerState:   runtimeStatus.BreakerState,
 		}
 		if cfg != nil {
-			item["id"] = cfg.ID
-			item["type"] = normalizeNorthboundType(cfg.Type)
-			item["db_enabled"] = cfg.Enabled == 1
-			item["db_upload_interval"] = cfg.UploadInterval
+			item.ID = cfg.ID
+			item.Type = normalizeNorthboundType(cfg.Type)
+			item.DBEnabled = cfg.Enabled == 1
+			item.DBUploadInterval = cfg.UploadInterval
 		}
-		if ts := h.northboundMgr.GetLastUploadTime(name); !ts.IsZero() {
-			item["last_sent_at"] = ts.Format(time.RFC3339)
+		if !runtimeStatus.LastSentAt.IsZero() {
+			item.LastSentAt = runtimeStatus.LastSentAt.Format("2006-01-02T15:04:05Z07:00")
 		}
 		items = append(items, item)
 	}

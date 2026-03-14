@@ -9,6 +9,48 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type iThingsRealtimePropertyItem struct {
+	Timestamp int64             `json:"timestamp"`
+	Params    jsonFieldValueMap `json:"params"`
+}
+
+type iThingsRealtimeSubDevice struct {
+	ProductID  string                        `json:"productID"`
+	DeviceName string                        `json:"deviceName"`
+	Properties []iThingsRealtimePropertyItem `json:"properties"`
+	Events     []struct{}                    `json:"events"`
+}
+
+type iThingsRealtimePublishPayload struct {
+	Method     string                     `json:"method"`
+	MsgToken   string                     `json:"msgToken"`
+	Timestamp  int64                      `json:"timestamp"`
+	Properties []struct{}                 `json:"properties"`
+	Events     []struct{}                 `json:"events"`
+	SubDevices []iThingsRealtimeSubDevice `json:"subDevices"`
+}
+
+type iThingsAlarmPublishParams struct {
+	DeviceName  string  `json:"device_name"`
+	ProductKey  string  `json:"product_key"`
+	DeviceKey   string  `json:"device_key"`
+	FieldName   string  `json:"field_name"`
+	ActualValue float64 `json:"actual_value"`
+	Threshold   float64 `json:"threshold"`
+	Operator    string  `json:"operator"`
+	Severity    string  `json:"severity"`
+	Message     string  `json:"message"`
+}
+
+type iThingsAlarmPublishPayload struct {
+	Method    string                    `json:"method"`
+	MsgToken  string                    `json:"msgToken"`
+	Timestamp int64                     `json:"timestamp"`
+	EventID   string                    `json:"eventID"`
+	Type      string                    `json:"type"`
+	Params    iThingsAlarmPublishParams `json:"params"`
+}
+
 func (a *IThingsAdapter) Send(data *models.CollectData) error {
 	if data == nil {
 		return nil
@@ -122,11 +164,6 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 		return upPropertyTpl, []byte("{}"), nil
 	}
 
-	values := make(map[string]interface{}, len(data.Fields))
-	for key, value := range data.Fields {
-		values[key] = convertFieldValue(value)
-	}
-
 	ts := data.Timestamp.UnixMilli()
 	if ts <= 0 {
 		ts = time.Now().UnixMilli()
@@ -149,23 +186,23 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 		subDeviceName = defaultDeviceToken(data.DeviceID)
 	}
 
-	payload := map[string]interface{}{
-		"method":     "packReport",
-		"msgToken":   a.nextID("pack"),
-		"timestamp":  ts,
-		"properties": []interface{}{},
-		"events":     []interface{}{},
-		"subDevices": []interface{}{
-			map[string]interface{}{
-				"productID":  subProductID,
-				"deviceName": subDeviceName,
-				"properties": []interface{}{
-					map[string]interface{}{
-						"timestamp": ts,
-						"params":    values,
+	payload := iThingsRealtimePublishPayload{
+		Method:     "packReport",
+		MsgToken:   a.nextID("pack"),
+		Timestamp:  ts,
+		Properties: []struct{}{},
+		Events:     []struct{}{},
+		SubDevices: []iThingsRealtimeSubDevice{
+			{
+				ProductID:  subProductID,
+				DeviceName: subDeviceName,
+				Properties: []iThingsRealtimePropertyItem{
+					{
+						Timestamp: ts,
+						Params:    jsonFieldValueMap(data.Fields),
 					},
 				},
-				"events": []interface{}{},
+				Events: []struct{}{},
 			},
 		},
 	}
@@ -202,24 +239,23 @@ func (a *IThingsAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, 
 		subDeviceName = defaultDeviceToken(alarm.DeviceID)
 	}
 
-	params := map[string]interface{}{
-		"device_name":  alarm.DeviceName,
-		"product_key":  subProductID,
-		"device_key":   subDeviceName,
-		"field_name":   alarm.FieldName,
-		"actual_value": alarm.ActualValue,
-		"threshold":    alarm.Threshold,
-		"operator":     alarm.Operator,
-		"severity":     alarm.Severity,
-		"message":      alarm.Message,
-	}
-	payload := map[string]interface{}{
-		"method":    "eventPost",
-		"msgToken":  a.nextID("alarm"),
-		"timestamp": time.Now().UnixMilli(),
-		"eventID":   alarmEventID,
-		"type":      alarmEventType,
-		"params":    params,
+	payload := iThingsAlarmPublishPayload{
+		Method:    "eventPost",
+		MsgToken:  a.nextID("alarm"),
+		Timestamp: time.Now().UnixMilli(),
+		EventID:   alarmEventID,
+		Type:      alarmEventType,
+		Params: iThingsAlarmPublishParams{
+			DeviceName:  alarm.DeviceName,
+			ProductKey:  subProductID,
+			DeviceKey:   subDeviceName,
+			FieldName:   alarm.FieldName,
+			ActualValue: alarm.ActualValue,
+			Threshold:   alarm.Threshold,
+			Operator:    alarm.Operator,
+			Severity:    alarm.Severity,
+			Message:     alarm.Message,
+		},
 	}
 	body, _ := json.Marshal(payload)
 	return topic, body, nil

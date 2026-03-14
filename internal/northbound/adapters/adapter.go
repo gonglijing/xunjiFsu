@@ -40,6 +40,118 @@ type NorthboundAdapter interface {
 	PendingCommandCount() int
 }
 
+type RuntimeStatsSnapshot struct {
+	Name                    string
+	Type                    string
+	Enabled                 bool
+	Initialized             bool
+	Connected               bool
+	LoopState               string
+	IntervalMS              int64
+	PendingData             int
+	PendingAlarm            int
+	PendingCmd              int
+	Broker                  string
+	Topic                   string
+	AlarmTopic              string
+	ClientID                string
+	QOS                     byte
+	Retain                  bool
+	GatewayName             string
+	TelemetryTopic          string
+	GatewayTelemetryTopic   string
+	GatewayRegisterTopic    string
+	RPCRequestTopic         string
+	RPCResponseTopic        string
+	UpPropertyTopicTemplate string
+	DownPropertyTopic       string
+	DownActionTopic         string
+	ProductKey              string
+	DeviceKey               string
+	Error                   string
+}
+
+func (s RuntimeStatsSnapshot) HasPending() bool {
+	return s.PendingData > 0 || s.PendingAlarm > 0 || s.PendingCmd > 0
+}
+
+func (s RuntimeStatsSnapshot) ToMap() map[string]interface{} {
+	out := make(map[string]interface{}, 18)
+	out["name"] = s.Name
+	out["type"] = s.Type
+	out["enabled"] = s.Enabled
+	out["initialized"] = s.Initialized
+	out["connected"] = s.Connected
+	if s.LoopState != "" {
+		out["loop_state"] = s.LoopState
+	}
+	out["interval_ms"] = s.IntervalMS
+	out["pending_data"] = s.PendingData
+	out["pending_alarm"] = s.PendingAlarm
+	if s.PendingCmd > 0 {
+		out["pending_cmd"] = s.PendingCmd
+	}
+	if s.Broker != "" {
+		out["broker"] = s.Broker
+	}
+	if s.Topic != "" {
+		out["topic"] = s.Topic
+	}
+	if s.AlarmTopic != "" {
+		out["alarm_topic"] = s.AlarmTopic
+	}
+	if s.ClientID != "" {
+		out["client_id"] = s.ClientID
+	}
+	if s.QOS > 0 {
+		out["qos"] = s.QOS
+	}
+	if s.Retain {
+		out["retain"] = s.Retain
+	}
+	if s.GatewayName != "" {
+		out["gateway_name"] = s.GatewayName
+	}
+	if s.TelemetryTopic != "" {
+		out["telemetry_topic"] = s.TelemetryTopic
+	}
+	if s.GatewayTelemetryTopic != "" {
+		out["gateway_telemetry_topic"] = s.GatewayTelemetryTopic
+	}
+	if s.GatewayRegisterTopic != "" {
+		out["gateway_register_topic"] = s.GatewayRegisterTopic
+	}
+	if s.RPCRequestTopic != "" {
+		out["rpc_request_topic"] = s.RPCRequestTopic
+	}
+	if s.RPCResponseTopic != "" {
+		out["rpc_response_topic"] = s.RPCResponseTopic
+	}
+	if s.UpPropertyTopicTemplate != "" {
+		out["up_property_topic_template"] = s.UpPropertyTopicTemplate
+	}
+	if s.DownPropertyTopic != "" {
+		out["down_property_topic"] = s.DownPropertyTopic
+	}
+	if s.DownActionTopic != "" {
+		out["down_action_topic"] = s.DownActionTopic
+	}
+	if s.ProductKey != "" {
+		out["product_key"] = s.ProductKey
+	}
+	if s.DeviceKey != "" {
+		out["device_key"] = s.DeviceKey
+	}
+	if s.Error != "" {
+		out["error"] = s.Error
+	}
+	return out
+}
+
+type NorthboundAdapterWithRuntimeStats interface {
+	RuntimeStatsSnapshot() RuntimeStatsSnapshot
+}
+
 // NorthboundAdapterWithCommands 支持命令下发的适配器接口
 type NorthboundAdapterWithCommands interface {
 	NorthboundAdapter

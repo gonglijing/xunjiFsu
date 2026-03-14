@@ -397,6 +397,49 @@ func TestPandaXPullCommands_PopsInBatch(t *testing.T) {
 	}
 }
 
+func TestPandaXBuildBatchRealtimePublish(t *testing.T) {
+	adapter := NewPandaXAdapter("pandax-test")
+	adapter.config = &PandaXConfig{SubDeviceTokenMode: "device_key"}
+	adapter.gatewayTelemetryTopic = "v1/gateway/telemetry"
+
+	topic, body := adapter.buildBatchRealtimePublish([]*models.CollectData{
+		{
+			DeviceID:   1,
+			DeviceName: "pump-1",
+			DeviceKey:  "dk-1",
+			Timestamp:  time.Unix(1700000000, 0),
+			Fields: map[string]string{
+				"temperature": "23.5",
+				"running":     "true",
+			},
+		},
+	})
+
+	if topic != "v1/gateway/telemetry" {
+		t.Fatalf("topic=%q", topic)
+	}
+
+	decoded := make(map[string]interface{})
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+
+	item, ok := decoded["dk-1"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing sub token dk-1")
+	}
+	values, ok := item["values"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing values for dk-1")
+	}
+	if values["temperature"] != 23.5 {
+		t.Fatalf("temperature=%v, want=23.5", values["temperature"])
+	}
+	if values["running"] != true {
+		t.Fatalf("running=%v, want=true", values["running"])
+	}
+}
+
 func TestIsPandaXReservedRPCKey(t *testing.T) {
 	reserved := []string{"productKey", "device_key", "subDevices", "field_name", "value"}
 	for _, key := range reserved {

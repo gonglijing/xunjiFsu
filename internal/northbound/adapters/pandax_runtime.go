@@ -12,6 +12,22 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type pandaXCommandResultParams struct {
+	Success    bool               `json:"success"`
+	Code       int                `json:"code"`
+	Message    string             `json:"message"`
+	ProductKey string             `json:"productKey"`
+	DeviceKey  string             `json:"deviceKey"`
+	FieldName  string             `json:"fieldName"`
+	Value      jsonConvertedValue `json:"value"`
+}
+
+type pandaXCommandResultPayload struct {
+	RequestID string                    `json:"requestId"`
+	Method    string                    `json:"method"`
+	Params    pandaXCommandResultParams `json:"params"`
+}
+
 func (a *PandaXAdapter) Start() {
 	needReconnect := false
 	transition := loopStateTransition{}
@@ -176,17 +192,17 @@ func (a *PandaXAdapter) ReportCommandResult(result *models.NorthboundCommandResu
 		}
 	}
 
-	resp := map[string]interface{}{
-		"requestId": result.RequestID,
-		"method":    "write",
-		"params": map[string]interface{}{
-			"success":    result.Success,
-			"code":       code,
-			"message":    message,
-			"productKey": result.ProductKey,
-			"deviceKey":  result.DeviceKey,
-			"fieldName":  result.FieldName,
-			"value":      convertFieldValue(result.Value),
+	resp := pandaXCommandResultPayload{
+		RequestID: result.RequestID,
+		Method:    "write",
+		Params: pandaXCommandResultParams{
+			Success:    result.Success,
+			Code:       code,
+			Message:    message,
+			ProductKey: result.ProductKey,
+			DeviceKey:  result.DeviceKey,
+			FieldName:  result.FieldName,
+			Value:      jsonConvertedValue(result.Value),
 		},
 	}
 	body, _ := json.Marshal(resp)
@@ -194,9 +210,19 @@ func (a *PandaXAdapter) ReportCommandResult(result *models.NorthboundCommandResu
 	return a.publish(topic, body)
 }
 
-func (a *PandaXAdapter) GetStats() map[string]interface{} {
+func (a *PandaXAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
+	enabled := a.enabled
+	initialized := a.initialized
+	connected := a.connected && a.client != nil && a.client.IsConnected()
+	loopState := a.loopState.String()
+	intervalMS := a.reportEvery.Milliseconds()
+	telemetryTopic := a.telemetryTopic
+	gatewayTelemetryTopic := a.gatewayTelemetryTopic
+	gatewayRegisterTopic := a.gatewayRegisterTopic
+	rpcRequestTopic := a.rpcRequestTopic
+	rpcResponseTopic := a.rpcResponseTopic
+	a.mu.RUnlock()
 
 	a.dataMu.RLock()
 	pendingData := len(a.realtimeQueue)
@@ -210,23 +236,27 @@ func (a *PandaXAdapter) GetStats() map[string]interface{} {
 	pendingCmd := len(a.commandQueue)
 	a.commandMu.RUnlock()
 
-	return map[string]interface{}{
-		"name":                    a.name,
-		"type":                    "pandax",
-		"enabled":                 a.enabled,
-		"initialized":             a.initialized,
-		"connected":               a.connected && a.client != nil && a.client.IsConnected(),
-		"loop_state":              a.loopState.String(),
-		"interval_ms":             a.reportEvery.Milliseconds(),
-		"pending_data":            pendingData,
-		"pending_alarm":           pendingAlarm,
-		"pending_cmd":             pendingCmd,
-		"telemetry_topic":         a.telemetryTopic,
-		"gateway_telemetry_topic": a.gatewayTelemetryTopic,
-		"gateway_register_topic":  a.gatewayRegisterTopic,
-		"rpc_request_topic":       a.rpcRequestTopic,
-		"rpc_response_topic":      a.rpcResponseTopic,
+	return RuntimeStatsSnapshot{
+		Name:                  a.name,
+		Type:                  "pandax",
+		Enabled:               enabled,
+		Initialized:           initialized,
+		Connected:             connected,
+		LoopState:             loopState,
+		IntervalMS:            intervalMS,
+		PendingData:           pendingData,
+		PendingAlarm:          pendingAlarm,
+		PendingCmd:            pendingCmd,
+		TelemetryTopic:        telemetryTopic,
+		GatewayTelemetryTopic: gatewayTelemetryTopic,
+		GatewayRegisterTopic:  gatewayRegisterTopic,
+		RPCRequestTopic:       rpcRequestTopic,
+		RPCResponseTopic:      rpcResponseTopic,
 	}
+}
+
+func (a *PandaXAdapter) GetStats() map[string]interface{} {
+	return a.RuntimeStatsSnapshot().ToMap()
 }
 
 func (a *PandaXAdapter) GetLastSendTime() time.Time {

@@ -43,6 +43,17 @@ type adapterRuntimeRef struct {
 	adapter adapters.NorthboundAdapter
 }
 
+type RuntimeStatus struct {
+	Name             string
+	Registered       bool
+	Enabled          bool
+	Connected        bool
+	UploadIntervalMS int64
+	Pending          bool
+	BreakerState     string
+	LastSentAt       time.Time
+}
+
 // DefaultBreakerConfig 默认熔断器配置
 var DefaultBreakerConfig = circuit.Config{
 	FailureThreshold: 5,                // 5次失败后打开熔断
@@ -228,19 +239,49 @@ func (m *NorthboundManager) GetLastUploadTime(name string) time.Time {
 
 // HasPending 返回是否存在待发送数据（检查适配器状态）
 func (m *NorthboundManager) HasPending(name string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	return m.RuntimeStatus(name).Pending
+}
 
-	if adapter, exists := m.adapters[name]; exists {
+func (m *NorthboundManager) RuntimeStatus(name string) RuntimeStatus {
+	m.mu.RLock()
+	adapter, registered := m.adapters[name]
+	enabled := m.enabled[name]
+	interval := m.intervals[name]
+	breaker := m.breakers[name]
+	m.mu.RUnlock()
+
+	status := RuntimeStatus{
+		Name:             name,
+		Registered:       registered,
+		Enabled:          enabled,
+		UploadIntervalMS: interval.Milliseconds(),
+		BreakerState:     circuit.Closed.String(),
+	}
+	if breaker != nil {
+		status.BreakerState = breaker.State().String()
+	}
+	if !registered || adapter == nil {
+		return status
+	}
+
+	if runtimeStats, ok := adapter.(adapters.NorthboundAdapterWithRuntimeStats); ok {
+		snapshot := runtimeStats.RuntimeStatsSnapshot()
+		status.Connected = enabled && snapshot.Connected
+		status.Pending = snapshot.HasPending()
+	} else {
+		if enabled {
+			status.Connected = adapter.IsConnected()
+		}
 		stats := adapter.GetStats()
 		if pending, ok := stats["pending_data"].(int); ok && pending > 0 {
-			return true
+			status.Pending = true
 		}
 		if pending, ok := stats["pending_alarm"].(int); ok && pending > 0 {
-			return true
+			status.Pending = true
 		}
 	}
-	return false
+	status.LastSentAt = adapter.GetLastSendTime()
+	return status
 }
 
 func appendUniqueMapKeys[T any](dst []string, src map[string]T) []string {
@@ -385,7 +426,12 @@ func (m *NorthboundManager) GetStats() map[string]map[string]interface{} {
 
 	result := make(map[string]map[string]interface{})
 	for name, adapter := range m.adapters {
-		stats := adapter.GetStats()
+		var stats map[string]interface{}
+		if runtimeStats, ok := adapter.(adapters.NorthboundAdapterWithRuntimeStats); ok {
+			stats = runtimeStats.RuntimeStatsSnapshot().ToMap()
+		} else {
+			stats = adapter.GetStats()
+		}
 		stats["manager_enabled"] = m.enabled[name]
 		stats["manager_interval_ms"] = m.intervals[name].Milliseconds()
 		result[name] = stats

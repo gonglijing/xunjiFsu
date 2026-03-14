@@ -9,6 +9,14 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type sagooCommandReplyPayload struct {
+	Code    int                `json:"code"`
+	ID      string             `json:"id"`
+	Message string             `json:"message"`
+	Version string             `json:"version"`
+	Data    jsonSingleRawField `json:"data"`
+}
+
 func (a *SagooAdapter) lifecycleState() adapterLifecycleState {
 	return adapterLifecycleState{
 		adapterType:    "sagoo",
@@ -132,13 +140,14 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 		msg = "success"
 	}
 
-	resp := map[string]interface{}{
-		"code":    code,
-		"id":      result.RequestID,
-		"message": msg,
-		"version": "1.0.0",
-		"data": map[string]interface{}{
-			result.FieldName: result.Value,
+	resp := sagooCommandReplyPayload{
+		Code:    code,
+		ID:      result.RequestID,
+		Message: msg,
+		Version: "1.0.0",
+		Data: jsonSingleRawField{
+			Key:   result.FieldName,
+			Value: result.Value,
 		},
 	}
 	body, _ := json.Marshal(resp)
@@ -186,7 +195,7 @@ func (a *SagooAdapter) runLoop() {
 }
 
 // GetStats 获取适配器统计信息
-func (a *SagooAdapter) GetStats() map[string]interface{} {
+func (a *SagooAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	a.mu.RLock()
 	productKey := ""
 	deviceKey := ""
@@ -194,7 +203,12 @@ func (a *SagooAdapter) GetStats() map[string]interface{} {
 		productKey = strings.TrimSpace(a.config.ProductKey)
 		deviceKey = strings.TrimSpace(a.config.DeviceKey)
 	}
-	defer a.mu.RUnlock()
+	enabled := a.enabled
+	initialized := a.initialized
+	connected := a.connected && a.client != nil && a.client.IsConnected()
+	loopState := a.loopState.String()
+	intervalMS := a.reportEvery.Milliseconds()
+	a.mu.RUnlock()
 
 	a.dataMu.RLock()
 	dataCount := len(a.latestData)
@@ -208,20 +222,24 @@ func (a *SagooAdapter) GetStats() map[string]interface{} {
 	commandCount := len(a.commandQueue)
 	a.commandMu.RUnlock()
 
-	return map[string]interface{}{
-		"name":          a.name,
-		"type":          "sagoo",
-		"enabled":       a.enabled,
-		"initialized":   a.initialized,
-		"connected":     a.connected && a.client != nil && a.client.IsConnected(),
-		"loop_state":    a.loopState.String(),
-		"interval_ms":   a.reportEvery.Milliseconds(),
-		"pending_data":  dataCount,
-		"pending_alarm": alarmCount,
-		"pending_cmd":   commandCount,
-		"product_key":   productKey,
-		"device_key":    deviceKey,
+	return RuntimeStatsSnapshot{
+		Name:         a.name,
+		Type:         "sagoo",
+		Enabled:      enabled,
+		Initialized:  initialized,
+		Connected:    connected,
+		LoopState:    loopState,
+		IntervalMS:   intervalMS,
+		PendingData:  dataCount,
+		PendingAlarm: alarmCount,
+		PendingCmd:   commandCount,
+		ProductKey:   productKey,
+		DeviceKey:    deviceKey,
 	}
+}
+
+func (a *SagooAdapter) GetStats() map[string]interface{} {
+	return a.RuntimeStatsSnapshot().ToMap()
 }
 
 // GetLastSendTime 获取最后发送时间（返回零值，因为是内部管理）

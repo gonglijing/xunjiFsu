@@ -9,6 +9,24 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type iThingsControlReplyPayload struct {
+	Method    string `json:"method"`
+	MsgToken  string `json:"msgToken"`
+	Code      int    `json:"code"`
+	Msg       string `json:"msg"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type iThingsActionReplyPayload struct {
+	Method    string                    `json:"method"`
+	MsgToken  string                    `json:"msgToken"`
+	Code      int                       `json:"code"`
+	Msg       string                    `json:"msg"`
+	Timestamp int64                     `json:"timestamp"`
+	ActionID  string                    `json:"actionID,omitempty"`
+	Data      *jsonSingleConvertedField `json:"data,omitempty"`
+}
+
 func (a *IThingsAdapter) lifecycleState() adapterLifecycleState {
 	return adapterLifecycleState{
 		adapterType:    "ithings",
@@ -130,39 +148,57 @@ func (a *IThingsAdapter) ReportCommandResult(result *models.NorthboundCommandRes
 		}
 	}
 
-	payload := map[string]interface{}{
-		"msgToken":  state.RequestID,
-		"code":      code,
-		"msg":       message,
-		"timestamp": time.Now().UnixMilli(),
-	}
+	timestamp := time.Now().UnixMilli()
 
 	if state.TopicType == "action" {
-		payload["method"] = "actionReply"
-		if strings.TrimSpace(state.ActionID) != "" {
-			payload["actionID"] = state.ActionID
-		} else if strings.TrimSpace(state.FieldName) != "" {
-			payload["actionID"] = state.FieldName
+		actionID := strings.TrimSpace(state.ActionID)
+		if actionID == "" {
+			actionID = strings.TrimSpace(state.FieldName)
 		}
+		var data *jsonSingleConvertedField
 		if strings.TrimSpace(state.FieldName) != "" {
-			payload["data"] = map[string]interface{}{
-				state.FieldName: convertFieldValue(state.Value),
+			data = &jsonSingleConvertedField{
+				Key:   state.FieldName,
+				Value: state.Value,
 			}
+		}
+		payload := iThingsActionReplyPayload{
+			Method:    "actionReply",
+			MsgToken:  state.RequestID,
+			Code:      code,
+			Msg:       message,
+			Timestamp: timestamp,
+			ActionID:  actionID,
+			Data:      data,
 		}
 		topic := renderIThingsTopic(a.upActionTopicTemplate, state.ProductID, state.DeviceName)
 		body, _ := json.Marshal(payload)
 		return a.publish(topic, body)
 	}
 
-	payload["method"] = "controlReply"
+	payload := iThingsControlReplyPayload{
+		Method:    "controlReply",
+		MsgToken:  state.RequestID,
+		Code:      code,
+		Msg:       message,
+		Timestamp: timestamp,
+	}
 	topic := renderIThingsTopic(a.upPropertyTopicTemplate, state.ProductID, state.DeviceName)
 	body, _ := json.Marshal(payload)
 	return a.publish(topic, body)
 }
 
-func (a *IThingsAdapter) GetStats() map[string]interface{} {
+func (a *IThingsAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
+	enabled := a.enabled
+	initialized := a.initialized
+	connected := a.connected && a.client != nil && a.client.IsConnected()
+	loopState := a.loopState.String()
+	intervalMS := a.reportEvery.Milliseconds()
+	upPropertyTopicTemplate := a.upPropertyTopicTemplate
+	downPropertyTopic := a.downPropertyTopic
+	downActionTopic := a.downActionTopic
+	a.mu.RUnlock()
 
 	a.dataMu.RLock()
 	pendingData := len(a.realtimeQueue)
@@ -176,21 +212,25 @@ func (a *IThingsAdapter) GetStats() map[string]interface{} {
 	pendingCmd := len(a.commandQueue)
 	a.commandMu.RUnlock()
 
-	return map[string]interface{}{
-		"name":                       a.name,
-		"type":                       "ithings",
-		"enabled":                    a.enabled,
-		"initialized":                a.initialized,
-		"connected":                  a.connected && a.client != nil && a.client.IsConnected(),
-		"loop_state":                 a.loopState.String(),
-		"interval_ms":                a.reportEvery.Milliseconds(),
-		"pending_data":               pendingData,
-		"pending_alarm":              pendingAlarm,
-		"pending_cmd":                pendingCmd,
-		"up_property_topic_template": a.upPropertyTopicTemplate,
-		"down_property_topic":        a.downPropertyTopic,
-		"down_action_topic":          a.downActionTopic,
+	return RuntimeStatsSnapshot{
+		Name:                    a.name,
+		Type:                    "ithings",
+		Enabled:                 enabled,
+		Initialized:             initialized,
+		Connected:               connected,
+		LoopState:               loopState,
+		IntervalMS:              intervalMS,
+		PendingData:             pendingData,
+		PendingAlarm:            pendingAlarm,
+		PendingCmd:              pendingCmd,
+		UpPropertyTopicTemplate: upPropertyTopicTemplate,
+		DownPropertyTopic:       downPropertyTopic,
+		DownActionTopic:         downActionTopic,
 	}
+}
+
+func (a *IThingsAdapter) GetStats() map[string]interface{} {
+	return a.RuntimeStatsSnapshot().ToMap()
 }
 
 func (a *IThingsAdapter) GetLastSendTime() time.Time {

@@ -17,6 +17,7 @@ type fakeAdapter struct {
 	sendCalls   int32
 	alarmCalls  int32
 	reportCalls int32
+	statsCalls  int32
 	fail        bool
 	enabled     bool
 	connected   bool
@@ -38,6 +39,7 @@ func (f *fakeAdapter) IsConnected() bool                  { return f.connected }
 func (f *fakeAdapter) GetLastSendTime() time.Time         { return f.lastSend }
 func (f *fakeAdapter) PendingCommandCount() int           { return len(f.commands) }
 func (f *fakeAdapter) GetStats() map[string]interface{} {
+	atomic.AddInt32(&f.statsCalls, 1)
 	return map[string]interface{}{
 		"name":          f.name,
 		"type":          "fake",
@@ -45,6 +47,18 @@ func (f *fakeAdapter) GetStats() map[string]interface{} {
 		"connected":     f.connected,
 		"pending_data":  0,
 		"pending_alarm": 0,
+	}
+}
+
+func (f *fakeAdapter) RuntimeStatsSnapshot() adapters.RuntimeStatsSnapshot {
+	return adapters.RuntimeStatsSnapshot{
+		Name:         f.name,
+		Type:         "fake",
+		Enabled:      f.enabled,
+		Connected:    f.connected,
+		PendingData:  0,
+		PendingAlarm: 0,
+		PendingCmd:   len(f.commands),
 	}
 }
 
@@ -92,6 +106,7 @@ func (f *fakeAdapter) ReportCommandResult(result *models.NorthboundCommandResult
 // 确保 fakeAdapter 实现 adapters.NorthboundAdapter
 var _ adapters.NorthboundAdapter = (*fakeAdapter)(nil)
 var _ adapters.NorthboundAdapterWithCommands = (*fakeAdapter)(nil)
+var _ adapters.NorthboundAdapterWithRuntimeStats = (*fakeAdapter)(nil)
 
 func TestNewNorthboundManager(t *testing.T) {
 	mgr := NewNorthboundManager()
@@ -333,6 +348,53 @@ func TestNorthboundManager_GetStats(t *testing.T) {
 	}
 	if _, ok := stats["a1"]; !ok {
 		t.Fatalf("expected stats for adapter a1")
+	}
+}
+
+func TestNorthboundManager_HasPending_UsesRuntimeSnapshot(t *testing.T) {
+	mgr := NewNorthboundManager()
+	adapter := &fakeAdapter{
+		name:     "a1",
+		enabled:  true,
+		commands: []*models.NorthboundCommand{{RequestID: "r1"}},
+	}
+	mgr.RegisterAdapter("a1", adapter)
+
+	if !mgr.HasPending("a1") {
+		t.Fatal("expected pending=true")
+	}
+	if atomic.LoadInt32(&adapter.statsCalls) != 0 {
+		t.Fatalf("expected HasPending not to call GetStats, got %d", atomic.LoadInt32(&adapter.statsCalls))
+	}
+}
+
+func TestNorthboundManager_RuntimeStatus_DisabledMasksConnected(t *testing.T) {
+	mgr := NewNorthboundManager()
+	adapter := &fakeAdapter{
+		name:      "a1",
+		enabled:   true,
+		connected: true,
+		commands:  []*models.NorthboundCommand{{RequestID: "r1"}},
+	}
+	mgr.RegisterAdapter("a1", adapter)
+	mgr.SetEnabled("a1", false)
+	mgr.SetInterval("a1", 2*time.Second)
+
+	status := mgr.RuntimeStatus("a1")
+	if !status.Registered {
+		t.Fatal("expected registered=true")
+	}
+	if status.Enabled {
+		t.Fatal("expected enabled=false")
+	}
+	if status.Connected {
+		t.Fatal("expected connected=false when disabled")
+	}
+	if !status.Pending {
+		t.Fatal("expected pending=true from runtime snapshot")
+	}
+	if status.UploadIntervalMS != 2000 {
+		t.Fatalf("uploadIntervalMS=%d, want=2000", status.UploadIntervalMS)
 	}
 }
 

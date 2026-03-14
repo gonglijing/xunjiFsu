@@ -40,13 +40,15 @@ func (a *MQTTAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 func (a *MQTTAdapter) SetInterval(interval time.Duration) {}
 func (a *MQTTAdapter) IsEnabled() bool                    { return false }
 func (a *MQTTAdapter) IsConnected() bool                  { return false }
-func (a *MQTTAdapter) GetStats() map[string]interface{} {
-	return map[string]interface{}{
-		"type":      "mqtt",
-		"enabled":   false,
-		"connected": false,
-		"error":     "mqtt adapter is disabled (build tag no_paho_mqtt)",
+func (a *MQTTAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
+	return RuntimeStatsSnapshot{
+		Name:      a.name,
+		Type:      "mqtt",
+		Enabled:   false,
+		Connected: false,
+		Error:     "mqtt adapter is disabled (build tag no_paho_mqtt)",
 	}
 }
-func (a *MQTTAdapter) GetLastSendTime() time.Time { return time.Time{} }
-func (a *MQTTAdapter) PendingCommandCount() int   { return 0 }
+func (a *MQTTAdapter) GetStats() map[string]interface{} { return a.RuntimeStatsSnapshot().ToMap() }
+func (a *MQTTAdapter) GetLastSendTime() time.Time       { return time.Time{} }
+func (a *MQTTAdapter) PendingCommandCount() int         { return 0 }

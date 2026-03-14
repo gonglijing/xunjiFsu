@@ -35,13 +35,15 @@ func (a *XunjiAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 func (a *XunjiAdapter) SetInterval(interval time.Duration) {}
 func (a *XunjiAdapter) IsEnabled() bool                    { return false }
 func (a *XunjiAdapter) IsConnected() bool                  { return false }
-func (a *XunjiAdapter) GetStats() map[string]interface{} {
-	return map[string]interface{}{
-		"type":      "xunji",
-		"enabled":   false,
-		"connected": false,
-		"error":     "xunji adapter is disabled (build tag no_paho_mqtt)",
+func (a *XunjiAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
+	return RuntimeStatsSnapshot{
+		Name:      a.name,
+		Type:      "xunji",
+		Enabled:   false,
+		Connected: false,
+		Error:     "xunji adapter is disabled (build tag no_paho_mqtt)",
 	}
 }
-func (a *XunjiAdapter) GetLastSendTime() time.Time { return time.Time{} }
-func (a *XunjiAdapter) PendingCommandCount() int   { return 0 }
+func (a *XunjiAdapter) GetStats() map[string]interface{} { return a.RuntimeStatsSnapshot().ToMap() }
+func (a *XunjiAdapter) GetLastSendTime() time.Time       { return time.Time{} }
+func (a *XunjiAdapter) PendingCommandCount() int         { return 0 }
