@@ -5,6 +5,17 @@ import (
 	"strings"
 )
 
+type driverIdentityProbe struct {
+	ProductKeyAlt string                   `json:"product_key"`
+	ProductKey    string                   `json:"productKey"`
+	Data          *driverIdentityProbeData `json:"data"`
+}
+
+type driverIdentityProbeData struct {
+	ProductKeyAlt string `json:"product_key"`
+	ProductKey    string `json:"productKey"`
+}
+
 func normalizeDriverResultIdentity(result *DriverResult, rawOutput []byte) {
 	if result == nil {
 		return
@@ -38,40 +49,23 @@ func pickProductKeyFromMap(data map[string]string) string {
 }
 
 func pickProductKeyFromRawOutput(rawOutput []byte) string {
-	obj := make(map[string]interface{})
-	if err := json.Unmarshal(rawOutput, &obj); err != nil {
+	var probe driverIdentityProbe
+	if err := json.Unmarshal(rawOutput, &probe); err != nil {
 		return ""
 	}
-	return pickProductKeyFromAnyMap(obj)
-}
-
-func pickProductKeyFromAnyMap(data map[string]interface{}) string {
-	if len(data) == 0 {
-		return ""
-	}
-	if value := trimmedAnyString(data["productKey"]); value != "" {
+	if value := strings.TrimSpace(probe.ProductKey); value != "" {
 		return value
 	}
-	if value := trimmedAnyString(data["product_key"]); value != "" {
+	if value := strings.TrimSpace(probe.ProductKeyAlt); value != "" {
 		return value
 	}
-	if rawData, ok := data["data"].(map[string]interface{}); ok {
-		if value := pickProductKeyFromAnyMap(rawData); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func trimmedAnyString(value interface{}) string {
-	if value == nil {
+	if probe.Data == nil {
 		return ""
 	}
-	str, ok := value.(string)
-	if !ok {
-		return ""
+	if value := strings.TrimSpace(probe.Data.ProductKey); value != "" {
+		return value
 	}
-	return strings.TrimSpace(str)
+	return strings.TrimSpace(probe.Data.ProductKeyAlt)
 }
 
 func isDriverIdentityField(field string) bool {

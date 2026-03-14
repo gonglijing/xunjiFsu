@@ -17,6 +17,7 @@
 - **设备管理**：设备绑定资源、驱动，支持启停。
 - **驱动管理**：WASM 驱动上传、重载、执行。
 - **数据采集**：按设备采集周期调度，缓存最新值并归档历史。
+- **采集运行时可观测**：可查看设备是否已注册、下次采集时间、连续失败次数、最近错误。
 - **阈值告警**：阈值规则、告警记录、确认流程。
 - **北向对接**：内置适配器（非插件模式）统一调度发送。
 - **运行时热更新**：采集/驱动/MQTT 重连等参数可在线更新并审计。
@@ -60,9 +61,9 @@ fsu/
 ├── internal/
 │   ├── app/                     # 应用启动、路由、运行时调优
 │   ├── auth/                    # JWT 认证
-│   ├── collector/               # 采集调度、命令轮询
+│   ├── collector/               # 采集调度、阈值报警、北向命令轮询、运行时状态
 │   ├── database/                # DB 初始化、CRUD、同步、保留策略
-│   ├── driver/                  # WASM 驱动管理与执行
+│   ├── driver/                  # WASM 驱动管理、执行器、资源访问控制
 │   ├── handlers/                # HTTP API handlers
 │   ├── models/                  # 领域模型
 │   └── northbound/              # 北向管理器与内置适配器
@@ -173,6 +174,21 @@ Schema 接口：
 - 按网关配置中的 `data_retention_days` 清理历史数据。
 - 默认每天执行一次清理任务。
 
+### 采集链路当前结构
+
+- `internal/collector/collector.go`：设备任务调度、启停同步、任务堆管理。
+- `internal/collector/modbus_collect.go`：单次设备采集、结果落库、驱动 `productKey` 回写。
+- `internal/collector/collector_thresholds.go`：阈值匹配、报警落库、北向告警发送。
+- `internal/collector/collector_commands.go`：北向写命令轮询、执行与结果回传。
+- `internal/driver/executor.go`：设备执行入口、资源锁、串口/TCP 连接复用。
+- `internal/driver/manager.go`：WASM 驱动生命周期与插件调用。
+
+### 最近的内存优化点
+
+- 采集任务堆改为“原位更新/删除”，设备配置变化时不再把旧任务节点留在堆里等待延迟清理。
+- 驱动执行输入改为强类型结构序列化，减少热路径上的 `map[string]interface{}` 分配和接口装箱。
+- 设备配置与空采集结果采用更保守的 map 分配策略，降低高频小对象分配。
+
 ---
 
 ## 9. 认证与默认账户
@@ -216,12 +232,20 @@ Schema 接口：
 ### 设备
 
 - `GET /api/devices`
+- `GET /api/devices/runtime`
 - `POST /api/devices`
 - `PUT /api/devices/{id}`
 - `DELETE /api/devices/{id}`
 - `POST /api/devices/{id}/toggle`
 - `POST /api/devices/{id}/execute`
+- `GET /api/devices/{id}/runtime`
 - `GET /api/devices/{id}/writables`
+
+说明：
+
+- `GET /api/devices` 返回列表时，已附带 `collect_runtime` 字段。
+- `GET /api/devices/runtime` 返回所有设备的采集运行时快照。
+- `GET /api/devices/{id}/runtime` 返回单设备采集运行时快照。
 
 ### 驱动
 
