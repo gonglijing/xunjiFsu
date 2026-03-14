@@ -119,6 +119,29 @@ func buildDriverContext(device *models.Device, resourceID int64, resourceType st
 	}
 }
 
+// PreparedExecution caches the static execution context for a device.
+type PreparedExecution struct {
+	ResourceID    int64
+	ResourceType  string
+	Config        map[string]string
+	DriverContext *DriverContext
+}
+
+func NewPreparedExecution(device *models.Device) *PreparedExecution {
+	if device == nil {
+		return nil
+	}
+
+	resourceID, resourceType := resolveResource(device)
+	deviceConfig := buildDeviceConfig(device)
+	return &PreparedExecution{
+		ResourceID:    resourceID,
+		ResourceType:  resourceType,
+		Config:        deviceConfig,
+		DriverContext: buildDriverContext(device, resourceID, resourceType, deviceConfig),
+	}
+}
+
 func (e *DriverExecutor) startExecution(device *models.Device) (func(), error) {
 	e.mu.Lock()
 	if e.executing[device.ID] {

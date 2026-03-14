@@ -1,0 +1,4 @@
+interface:
+  display_name: "FSU Memory Refactor"
+  short_description: "Reduce fsu allocations and steady-state memory safely"
+  default_prompt: "Use $fsu-memory-refactor to reduce fsu memory usage with hot-path-first changes and targeted validation."

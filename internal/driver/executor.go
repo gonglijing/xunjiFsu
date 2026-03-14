@@ -315,7 +315,7 @@ func (e *DriverExecutor) Execute(device *models.Device) (*DriverResult, error) {
 
 // ExecuteWithContext 执行驱动读取（支持超时/取消）
 func (e *DriverExecutor) ExecuteWithContext(ctx context.Context, device *models.Device) (*DriverResult, error) {
-	return e.executeWithContextAndConfig(ctx, device, defaultDriverFunction, nil)
+	return e.executePreparedWithContextAndConfig(ctx, device, defaultDriverFunction, NewPreparedExecution(device), nil)
 }
 
 // ExecuteCommand 执行指定函数（用于写入等主动命令）
@@ -328,7 +328,21 @@ func (e *DriverExecutor) ExecuteCommandWithContext(ctx context.Context, device *
 	return e.executeWithContextAndConfig(ctx, device, function, config)
 }
 
+// ExecutePrepared executes a driver call with a cached device execution context.
+func (e *DriverExecutor) ExecutePrepared(device *models.Device, function string, prepared *PreparedExecution, overrides map[string]string) (*DriverResult, error) {
+	return e.ExecutePreparedWithContext(context.Background(), device, function, prepared, overrides)
+}
+
+// ExecutePreparedWithContext executes a driver call with a cached device execution context.
+func (e *DriverExecutor) ExecutePreparedWithContext(ctx context.Context, device *models.Device, function string, prepared *PreparedExecution, overrides map[string]string) (*DriverResult, error) {
+	return e.executePreparedWithContextAndConfig(ctx, device, function, prepared, overrides)
+}
+
 func (e *DriverExecutor) executeWithContextAndConfig(ctx context.Context, device *models.Device, function string, overrides map[string]string) (*DriverResult, error) {
+	return e.executePreparedWithContextAndConfig(ctx, device, function, NewPreparedExecution(device), overrides)
+}
+
+func (e *DriverExecutor) executePreparedWithContextAndConfig(ctx context.Context, device *models.Device, function string, prepared *PreparedExecution, overrides map[string]string) (*DriverResult, error) {
 	if device.DriverID == nil {
 		return nil, fmt.Errorf("device %s has no driver", device.Name)
 	}
@@ -338,13 +352,18 @@ func (e *DriverExecutor) executeWithContextAndConfig(ctx context.Context, device
 	}
 	defer done()
 
-	resourceID, resourceType := resolveResource(device)
+	prepared = normalizePreparedExecution(device, prepared)
+	resourceID := prepared.ResourceID
+	resourceType := prepared.ResourceType
 	e.ensureResourcePath(resourceID, resourceType, device)
 
-	deviceConfig := buildDeviceConfig(device)
-	mergeDeviceConfig(deviceConfig, overrides)
 	pluginFunc := resolveExecutionFunction(function)
-	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
+	driverCtx := prepared.DriverContext
+	if len(overrides) > 0 {
+		deviceConfig := cloneDeviceConfig(prepared.Config, len(overrides))
+		mergeDeviceConfig(deviceConfig, overrides)
+		driverCtx = cloneDriverContext(prepared.DriverContext, deviceConfig)
+	}
 
 	unlock := e.lockResource(resourceID)
 	if unlock != nil {
@@ -360,6 +379,36 @@ func (e *DriverExecutor) executeWithContextAndConfig(ctx context.Context, device
 	}
 
 	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, pluginFunc, driverCtx)
+}
+
+func normalizePreparedExecution(device *models.Device, prepared *PreparedExecution) *PreparedExecution {
+	if prepared == nil || prepared.DriverContext == nil || prepared.Config == nil {
+		return NewPreparedExecution(device)
+	}
+	return prepared
+}
+
+func cloneDeviceConfig(base map[string]string, extra int) map[string]string {
+	if len(base) == 0 {
+		if extra <= 0 {
+			return nil
+		}
+		return make(map[string]string, extra)
+	}
+	cloned := make(map[string]string, len(base)+extra)
+	for key, value := range base {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneDriverContext(base *DriverContext, deviceConfig map[string]string) *DriverContext {
+	if base == nil {
+		return nil
+	}
+	cloned := *base
+	cloned.Config = deviceConfig
+	return &cloned
 }
 
 func mergeDeviceConfig(base, overrides map[string]string) {

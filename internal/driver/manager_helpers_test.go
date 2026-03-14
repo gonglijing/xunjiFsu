@@ -88,6 +88,38 @@ func TestBuildDeviceConfigTCP(t *testing.T) {
 	}
 }
 
+func TestNewPreparedExecution(t *testing.T) {
+	device := &models.Device{
+		ID:            11,
+		Name:          "dev-prepared",
+		DriverType:    "modbus_rtu",
+		SerialPort:    "/dev/ttyUSB1",
+		BaudRate:      9600,
+		DataBits:      8,
+		StopBits:      1,
+		Parity:        "N",
+		DeviceAddress: "2",
+	}
+
+	prepared := NewPreparedExecution(device)
+	if prepared == nil {
+		t.Fatalf("prepared execution should not be nil")
+	}
+	if prepared.DriverContext == nil {
+		t.Fatalf("prepared driver context should not be nil")
+	}
+	if prepared.DriverContext.DeviceID != device.ID {
+		t.Fatalf("prepared device id = %d, want %d", prepared.DriverContext.DeviceID, device.ID)
+	}
+	if prepared.Config["serial_port"] != "/dev/ttyUSB1" {
+		t.Fatalf("prepared config missing serial_port: %#v", prepared.Config)
+	}
+	prepared.Config["probe"] = "x"
+	if prepared.DriverContext.Config["probe"] != "x" {
+		t.Fatalf("driver context should share prepared config map")
+	}
+}
+
 func TestMergeDeviceConfig(t *testing.T) {
 	base := map[string]string{
 		"func_name": "read",
@@ -131,6 +163,31 @@ func TestResolveExecutionFunction(t *testing.T) {
 	}
 	if got := resolveExecutionFunction(" write "); got != "write" {
 		t.Fatalf("expected trimmed function name, got %q", got)
+	}
+}
+
+func TestCloneDriverContextWithOverridesDoesNotMutateBase(t *testing.T) {
+	baseConfig := map[string]string{
+		"func_name": "read",
+		"address":   "1",
+	}
+	baseCtx := &DriverContext{
+		DeviceID:     1,
+		DeviceName:   "dev",
+		ResourceID:   2,
+		ResourceType: "serial",
+		Config:       baseConfig,
+	}
+
+	clonedConfig := cloneDeviceConfig(baseConfig, 1)
+	mergeDeviceConfig(clonedConfig, map[string]string{"func_name": "write"})
+	clonedCtx := cloneDriverContext(baseCtx, clonedConfig)
+
+	if baseConfig["func_name"] != "read" {
+		t.Fatalf("base config mutated: %#v", baseConfig)
+	}
+	if clonedCtx == nil || clonedCtx.Config["func_name"] != "write" {
+		t.Fatalf("cloned context should contain override: %#v", clonedCtx)
 	}
 }
 

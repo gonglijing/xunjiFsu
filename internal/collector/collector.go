@@ -44,6 +44,7 @@ type Collector struct {
 // collectTask 采集任务
 type collectTask struct {
 	device              *models.Device
+	preparedRead        *driver.PreparedExecution
 	interval            time.Duration
 	storageInterval     time.Duration
 	nextRun             time.Time
@@ -251,7 +252,7 @@ func (c *Collector) collectOnce(task *collectTask) {
 	device := task.device
 	log.Printf("Collecting device %s (ID:%d)...", device.Name, device.ID)
 
-	collect, err := c.collectDataFromDriver(device)
+	collect, err := c.collectDataFromDriver(task)
 	if err != nil {
 		c.handleCollectFailure(task, err)
 		return
@@ -565,6 +566,7 @@ func newCollectTask(device *models.Device, previous *collectTask) *collectTask {
 	interval := resolveCollectInterval(device.CollectInterval)
 	task := &collectTask{
 		device:          device,
+		preparedRead:    driver.NewPreparedExecution(device),
 		interval:        interval,
 		storageInterval: resolveStorageInterval(device.StorageInterval),
 		nextRun:         time.Now().Add(interval),
@@ -589,6 +591,7 @@ func (c *Collector) refreshTaskLocked(task *collectTask, device *models.Device) 
 	}
 
 	task.device = device
+	task.preparedRead = driver.NewPreparedExecution(device)
 	task.interval = resolveCollectInterval(device.CollectInterval)
 	task.storageInterval = resolveStorageInterval(device.StorageInterval)
 	task.nextRun = time.Now().Add(task.interval)

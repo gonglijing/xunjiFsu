@@ -16,8 +16,13 @@ func (c *Collector) canCollectTask(task *collectTask) bool {
 	return task != nil && task.device != nil && c.driverExecutor != nil
 }
 
-func (c *Collector) collectDataFromDriver(device *models.Device) (*models.CollectData, error) {
-	result, err := c.driverExecutor.Execute(device)
+func (c *Collector) collectDataFromDriver(task *collectTask) (*models.CollectData, error) {
+	if task == nil || task.device == nil {
+		return nil, fmt.Errorf("collect task is nil")
+	}
+
+	device := task.device
+	result, err := c.driverExecutor.ExecutePrepared(device, "handle", task.preparedRead, nil)
 	if err != nil {
 		return nil, err
 	}

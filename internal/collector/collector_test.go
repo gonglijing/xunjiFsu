@@ -127,6 +127,30 @@ func TestNewCollectTask_PreservePreviousTimes(t *testing.T) {
 	}
 }
 
+func TestNewCollectTask_PreparesReadExecution(t *testing.T) {
+	device := &models.Device{
+		ID:              12,
+		Name:            "d-12",
+		DriverType:      "modbus_rtu",
+		SerialPort:      "/dev/ttyUSB2",
+		BaudRate:        9600,
+		DataBits:        8,
+		StopBits:        1,
+		Parity:          "N",
+		DeviceAddress:   "3",
+		CollectInterval: 1000,
+		StorageInterval: 60,
+	}
+
+	task := newCollectTask(device, nil)
+	if task.preparedRead == nil {
+		t.Fatalf("prepared read should not be nil")
+	}
+	if task.preparedRead.DriverContext == nil || task.preparedRead.DriverContext.DeviceID != device.ID {
+		t.Fatalf("prepared driver context mismatch: %#v", task.preparedRead)
+	}
+}
+
 func TestCollectorTaskIdentityChecks(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)
