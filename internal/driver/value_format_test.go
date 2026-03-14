@@ -49,6 +49,18 @@ func TestMapResultFields(t *testing.T) {
 	}
 }
 
+func TestMapResultFields_ReusesCleanDataMap(t *testing.T) {
+	data := map[string]string{"legacy": "1", "temp": "2"}
+	result := &DriverResult{Data: data}
+
+	fields := mapResultFields(result)
+	fields["extra"] = "3"
+
+	if data["extra"] != "3" {
+		t.Fatalf("expected clean data map to be reused")
+	}
+}
+
 func TestMapResultFields_SkipIdentityFields(t *testing.T) {
 	result := &DriverResult{
 		Data: map[string]string{
@@ -62,6 +74,27 @@ func TestMapResultFields_SkipIdentityFields(t *testing.T) {
 	}
 	if fields["temperature"] != "26.1" {
 		t.Fatalf("temperature mismatch: %#v", fields)
+	}
+}
+
+func TestMapResultFields_TrimsDirtyKeysIntoNewMap(t *testing.T) {
+	data := map[string]string{
+		" temp ": "26.1",
+		"   ":    "bad",
+	}
+	result := &DriverResult{Data: data}
+
+	fields := mapResultFields(result)
+	fields["temp"] = "27.0"
+
+	if _, ok := fields[""]; ok {
+		t.Fatalf("blank key should be removed: %#v", fields)
+	}
+	if fields["temp"] != "27.0" {
+		t.Fatalf("trimmed temp mismatch: %#v", fields)
+	}
+	if data[" temp "] != "26.1" {
+		t.Fatalf("expected original dirty data map to remain unchanged")
 	}
 }
 

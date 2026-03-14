@@ -400,7 +400,7 @@ func (e *DriverExecutor) CollectDataWithContext(ctx context.Context, device *mod
 	}
 
 	// 解析返回数据
-	fields := mapResultFields(result)
+	fields := ResultFields(result)
 
 	return &models.CollectData{
 		DeviceID:   device.ID,
@@ -410,37 +410,72 @@ func (e *DriverExecutor) CollectDataWithContext(ctx context.Context, device *mod
 	}, nil
 }
 
+// ResultFields converts a driver result into field data.
+// When the legacy data map is already clean, it may be returned directly.
+func ResultFields(result *DriverResult) map[string]string {
+	return mapResultFields(result)
+}
+
 func mapResultFields(result *DriverResult) map[string]string {
 	if result == nil {
-		return map[string]string{}
+		return nil
 	}
 
 	if len(result.Points) > 0 {
-		fields := make(map[string]string, len(result.Points))
+		var fields map[string]string
 		for _, point := range result.Points {
-			if point.FieldName == "" {
+			name := strings.TrimSpace(point.FieldName)
+			if name == "" {
 				continue
 			}
-			if isDriverIdentityField(point.FieldName) {
+			if isDriverIdentityField(name) {
 				continue
 			}
-			fields[point.FieldName] = formatDriverValue(point.Value)
+			if fields == nil {
+				fields = make(map[string]string, len(result.Points))
+			}
+			fields[name] = formatDriverValue(point.Value)
 		}
 		return fields
 	}
 
 	if len(result.Data) == 0 {
-		return map[string]string{}
+		return nil
+	}
+	if canReuseResultData(result.Data) {
+		return result.Data
 	}
 
-	fields := make(map[string]string, len(result.Data))
+	var fields map[string]string
 	for key, value := range result.Data {
-		if isDriverIdentityField(key) {
+		name := strings.TrimSpace(key)
+		if name == "" {
 			continue
 		}
-		fields[key] = value
+		if isDriverIdentityField(name) {
+			continue
+		}
+		if fields == nil {
+			fields = make(map[string]string, len(result.Data))
+		}
+		fields[name] = value
 	}
 	return fields
+}
+
+func canReuseResultData(data map[string]string) bool {
+	for key := range data {
+		if strings.TrimSpace(key) == "" {
+			return false
+		}
+		if key != strings.TrimSpace(key) {
+			return false
+		}
+		if isDriverIdentityField(key) {
+			return false
+		}
+	}
+	return true
 }
 
 func formatDriverValue(value interface{}) string {

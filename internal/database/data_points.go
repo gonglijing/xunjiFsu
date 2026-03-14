@@ -35,6 +35,8 @@ var (
 	dataPointsCleanupMinInterval time.Duration = 2 * time.Second
 )
 
+const collectDataValueTypeString = "string"
+
 func normalizeDeviceName(deviceID int64, deviceName string) string {
 	if deviceID == models.SystemStatsDeviceID {
 		return models.SystemStatsDeviceName
@@ -732,8 +734,6 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 		return nil
 	}
 
-	deviceName := normalizeDeviceName(data.DeviceID, data.DeviceName)
-
 	tx, err := DataDB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin collect data transaction: %w", err)
@@ -751,23 +751,27 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 	}
 	defer cacheStmt.Close()
 
-	var historyStmt *sql.Stmt
-	if storeHistory {
-		historyStmt, err = tx.Prepare(`INSERT OR REPLACE INTO data_points
+	if !storeHistory {
+		for field, value := range data.Fields {
+			if _, err := cacheStmt.Exec(data.DeviceID, field, value, collectDataValueTypeString); err != nil {
+				return fmt.Errorf("failed to upsert data cache: %w", err)
+			}
+		}
+	} else {
+		deviceName := normalizeDeviceName(data.DeviceID, data.DeviceName)
+		historyStmt, err := tx.Prepare(`INSERT OR REPLACE INTO data_points
 			(device_id, device_name, field_name, value, value_type, collected_at)
 			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
 		if err != nil {
 			return fmt.Errorf("failed to prepare history statement: %w", err)
 		}
 		defer historyStmt.Close()
-	}
 
-	for field, value := range data.Fields {
-		if _, err := cacheStmt.Exec(data.DeviceID, field, value, "string"); err != nil {
-			return fmt.Errorf("failed to upsert data cache: %w", err)
-		}
-		if historyStmt != nil {
-			if _, err := historyStmt.Exec(data.DeviceID, deviceName, field, value, "string"); err != nil {
+		for field, value := range data.Fields {
+			if _, err := cacheStmt.Exec(data.DeviceID, field, value, collectDataValueTypeString); err != nil {
+				return fmt.Errorf("failed to upsert data cache: %w", err)
+			}
+			if _, err := historyStmt.Exec(data.DeviceID, deviceName, field, value, collectDataValueTypeString); err != nil {
 				return fmt.Errorf("failed to upsert data point: %w", err)
 			}
 		}

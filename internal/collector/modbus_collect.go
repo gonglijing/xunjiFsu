@@ -58,26 +58,7 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		res = &driver.DriverResult{}
 	}
 
-	var fields map[string]string
-	if totalFields := len(res.Data) + len(res.Points); totalFields > 0 {
-		fields = make(map[string]string, totalFields)
-	}
-	if len(res.Data) > 0 {
-		for k, v := range res.Data {
-			name := strings.TrimSpace(k)
-			if name == "" {
-				continue
-			}
-			fields[name] = v
-		}
-	}
-	for _, p := range res.Points {
-		name := strings.TrimSpace(p.FieldName)
-		if name == "" {
-			continue
-		}
-		fields[name] = driverPointValueToString(p.Value)
-	}
+	fields := resultFieldsForCollect(res)
 	ts := res.Timestamp
 	if ts.IsZero() {
 		ts = time.Now()
@@ -141,6 +122,63 @@ func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate stri
 		log.Printf("Collector: driver %d productKey mismatch (cached=%s incoming=%s), use cached", id, cached, candidate)
 	}
 	return cached
+}
+
+func resultFieldsForCollect(res *driver.DriverResult) map[string]string {
+	if res == nil {
+		return nil
+	}
+
+	if len(res.Points) == 0 {
+		return normalizedDataFields(res.Data)
+	}
+
+	fields := normalizedDataFields(res.Data)
+	if fields == nil {
+		fields = make(map[string]string, len(res.Points))
+	}
+	for _, p := range res.Points {
+		name := strings.TrimSpace(p.FieldName)
+		if name == "" {
+			continue
+		}
+		fields[name] = driverPointValueToString(p.Value)
+	}
+	return fields
+}
+
+func normalizedDataFields(data map[string]string) map[string]string {
+	if len(data) == 0 {
+		return nil
+	}
+	if canReuseCollectedDataFields(data) {
+		return data
+	}
+
+	var fields map[string]string
+	for key, value := range data {
+		name := strings.TrimSpace(key)
+		if name == "" {
+			continue
+		}
+		if fields == nil {
+			fields = make(map[string]string, len(data))
+		}
+		fields[name] = value
+	}
+	return fields
+}
+
+func canReuseCollectedDataFields(data map[string]string) bool {
+	for key := range data {
+		if strings.TrimSpace(key) == "" {
+			return false
+		}
+		if key != strings.TrimSpace(key) {
+			return false
+		}
+	}
+	return true
 }
 
 func driverPointValueToString(value interface{}) string {
