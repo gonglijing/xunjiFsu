@@ -1,0 +1,78 @@
+package adapters
+
+import "github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
+
+// GetSupportedTypes 返回支持的北向类型及其字段描述
+func GetSupportedTypes() map[string][]string {
+	return map[string][]string{
+		nbtype.TypeMQTT: {
+			"server_url: Broker地址",
+			"port: 端口 (默认1883)",
+			"client_id: 客户端ID (可选)",
+			"username: 用户名 (可选)",
+			"password: 密码 (可选)",
+			"topic: 数据主题",
+			"alarm_topic: 报警主题 (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+		},
+		nbtype.TypeXunji: {
+			"server_url: MQTT Broker 地址",
+			"port: 端口 (默认1883)",
+			"topic: 实时上报 Topic（默认 v1/gateway/{gatewayname}）",
+			"username: 用户名 (可选)",
+			"password: 密码 (可选)",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
+		},
+		nbtype.TypeSagoo: {
+			"server_url: 服务器地址",
+			"port: 端口 (默认1883)",
+			"product_key: 产品密钥",
+			"device_key: 设备密钥",
+			"username: 用户名 (可选)",
+			"password: 密码 (可选)",
+			"topic: 数据主题 (可选)",
+			"alarm_topic: 报警主题 (可选)",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
+		},
+		nbtype.TypePandaX: {
+			"server_url: PandaX Broker 地址",
+			"port: 端口 (默认1883)",
+			"username: 设备 Token（MQTT Username）",
+			"password: 密码 (可选)",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
+		},
+		nbtype.TypeIThings: {
+			"server_url: iThings Broker 地址",
+			"port: 端口 (默认1883)",
+			"username: MQTT 用户名",
+			"password: MQTT 密码",
+			"product_key: 网关产品ID",
+			"device_key: 网关设备名",
+			"gateway_mode: 仅支持 true（网关+子设备）",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
+		},
+	}
+}

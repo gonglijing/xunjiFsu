@@ -118,6 +118,30 @@ func TestValidateConfig_PandaXGatewayModeMustBeTrue(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_SagooRequiresIdentityFields(t *testing.T) {
+	cfg := map[string]interface{}{
+		"serverUrl": "tcp://sagoo.example.com:1883",
+	}
+
+	err := ValidateConfig(nbtype.TypeSagoo, cfg)
+	if err == nil {
+		t.Fatal("ValidateConfig() expected error")
+	}
+	if err.Error() != "productKey is required for Sagoo adapter" {
+		t.Fatalf("ValidateConfig() error = %q, want %q", err.Error(), "productKey is required for Sagoo adapter")
+	}
+}
+
+func TestValidateConfig_UnknownType(t *testing.T) {
+	err := ValidateConfig("custom", map[string]interface{}{})
+	if err == nil {
+		t.Fatal("ValidateConfig() expected error")
+	}
+	if err.Error() != "unknown northbound type: custom" {
+		t.Fatalf("ValidateConfig() error = %q, want %q", err.Error(), "unknown northbound type: custom")
+	}
+}
+
 func decodeConfigJSON(t *testing.T, raw string) map[string]interface{} {
 	t.Helper()
 

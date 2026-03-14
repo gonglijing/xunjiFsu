@@ -1,7 +1,6 @@
 package adapters
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -26,36 +25,32 @@ type sagooInitSettings struct {
 }
 
 func parseSagooConfig(configStr string) (*SagooConfig, error) {
-	raw := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(configStr), &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+	raw, err := parseAdapterRawConfig(configStr)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := &SagooConfig{
-		ProductKey:           strings.TrimSpace(pickConfigString(raw, "productKey", "product_key", "productID", "product_id")),
-		DeviceKey:            strings.TrimSpace(pickConfigString(raw, "deviceKey", "device_key", "deviceName", "device_name")),
-		Username:             strings.TrimSpace(pickConfigString(raw, "username")),
-		Password:             strings.TrimSpace(pickConfigString(raw, "password")),
-		Topic:                strings.TrimSpace(pickConfigString(raw, "topic")),
-		AlarmTopic:           strings.TrimSpace(pickConfigString(raw, "alarmTopic", "alarm_topic")),
-		ClientID:             strings.TrimSpace(pickConfigString(raw, "clientId", "client_id")),
-		QOS:                  pickConfigInt(raw, 0, "qos"),
-		Retain:               pickConfigBool(raw, false, "retain"),
-		KeepAlive:            pickConfigInt(raw, 60, "keepAlive", "keep_alive"),
-		Timeout:              pickConfigInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
-		UploadIntervalMs:     pickConfigInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms"),
-		ReportIntervalMs:     pickConfigInt(raw, 0, "reportIntervalMs", "report_interval_ms"),
-		AlarmFlushIntervalMs: pickConfigInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs", "alarm_flush_interval_ms"),
-		AlarmBatchSize:       pickConfigInt(raw, defaultAlarmBatch, "alarmBatchSize", "alarm_batch_size"),
-		AlarmQueueSize:       pickConfigInt(raw, defaultAlarmQueue, "alarmQueueSize", "alarm_queue_size"),
-		RealtimeQueueSize:    pickConfigInt(raw, defaultRealtimeQueue, "realtimeQueueSize", "realtime_queue_size"),
+		ProductKey:           raw.string("productKey", "product_key", "productID", "product_id"),
+		DeviceKey:            raw.string("deviceKey", "device_key", "deviceName", "device_name"),
+		Username:             raw.string("username"),
+		Password:             raw.string("password"),
+		Topic:                raw.string("topic"),
+		AlarmTopic:           raw.string("alarmTopic", "alarm_topic"),
+		ClientID:             raw.string("clientId", "client_id"),
+		QOS:                  raw.int(0, "qos"),
+		Retain:               raw.bool(false, "retain"),
+		KeepAlive:            raw.int(60, "keepAlive", "keep_alive"),
+		Timeout:              raw.int(10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:     raw.int(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms"),
+		ReportIntervalMs:     raw.int(0, "reportIntervalMs", "report_interval_ms"),
+		AlarmFlushIntervalMs: raw.int(int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs", "alarm_flush_interval_ms"),
+		AlarmBatchSize:       raw.int(defaultAlarmBatch, "alarmBatchSize", "alarm_batch_size"),
+		AlarmQueueSize:       raw.int(defaultAlarmQueue, "alarmQueueSize", "alarm_queue_size"),
+		RealtimeQueueSize:    raw.int(defaultRealtimeQueue, "realtimeQueueSize", "realtime_queue_size"),
 	}
 
-	cfg.ServerURL = normalizeServerURLWithPort(
-		pickConfigString(raw, "serverUrl", "server_url", "broker"),
-		pickConfigString(raw, "protocol"),
-		pickConfigInt(raw, 0, "port"),
-	)
+	cfg.ServerURL = raw.normalizedServerURL("serverUrl", "server_url", "broker")
 
 	if err := normalizeSagooConfig(cfg); err != nil {
 		return nil, err
@@ -78,31 +73,16 @@ func normalizeSagooConfig(cfg *SagooConfig) error {
 	if cfg.ServerURL == "" {
 		return fmt.Errorf("serverUrl is required")
 	}
-	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return fmt.Errorf("qos must be between 0 and 2")
+	if err := validateConfigQOS(cfg.QOS); err != nil {
+		return err
 	}
-
-	if cfg.KeepAlive <= 0 {
-		cfg.KeepAlive = 60
-	}
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = 10
-	}
-	if cfg.UploadIntervalMs <= 0 && cfg.ReportIntervalMs <= 0 {
-		cfg.UploadIntervalMs = int(defaultReportInterval.Milliseconds())
-	}
-	if cfg.AlarmFlushIntervalMs <= 0 {
-		cfg.AlarmFlushIntervalMs = int(defaultAlarmInterval.Milliseconds())
-	}
-	if cfg.AlarmBatchSize <= 0 {
-		cfg.AlarmBatchSize = defaultAlarmBatch
-	}
-	if cfg.AlarmQueueSize <= 0 {
-		cfg.AlarmQueueSize = defaultAlarmQueue
-	}
-	if cfg.RealtimeQueueSize <= 0 {
-		cfg.RealtimeQueueSize = defaultRealtimeQueue
-	}
+	applyDefaultPositiveInt(&cfg.KeepAlive, 60)
+	applyDefaultPositiveInt(&cfg.Timeout, 10)
+	applyFallbackOrDefaultPositiveInt(&cfg.UploadIntervalMs, cfg.ReportIntervalMs, int(defaultReportInterval.Milliseconds()))
+	applyDefaultPositiveInt(&cfg.AlarmFlushIntervalMs, int(defaultAlarmInterval.Milliseconds()))
+	applyDefaultPositiveInt(&cfg.AlarmBatchSize, defaultAlarmBatch)
+	applyDefaultPositiveInt(&cfg.AlarmQueueSize, defaultAlarmQueue)
+	applyDefaultPositiveInt(&cfg.RealtimeQueueSize, defaultRealtimeQueue)
 
 	return nil
 }

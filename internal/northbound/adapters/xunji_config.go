@@ -3,7 +3,6 @@
 package adapters
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -26,29 +25,25 @@ type xunjiInitSettings struct {
 }
 
 func parseXunjiConfig(configStr string) (*XunjiConfig, error) {
-	raw := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(configStr), &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+	raw, err := parseAdapterRawConfig(configStr)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := &XunjiConfig{
-		ServerURL: normalizeServerURLWithPort(
-			pickConfigString(raw, "serverUrl", "broker", "server_url"),
-			pickConfigString(raw, "protocol"),
-			pickConfigInt(raw, 0, "port"),
-		),
-		Username:           strings.TrimSpace(pickConfigString(raw, "username")),
-		Password:           strings.TrimSpace(pickConfigString(raw, "password")),
-		ClientID:           strings.TrimSpace(pickConfigString(raw, "clientId", "client_id")),
-		QOS:                pickConfigInt(raw, 0, "qos"),
-		Retain:             pickConfigBool(raw, false, "retain"),
-		KeepAlive:          pickConfigInt(raw, 60, "keepAlive", "keep_alive"),
-		Timeout:            pickConfigInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
-		UploadIntervalMs:   pickConfigInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
-		Topic:              strings.TrimSpace(pickConfigString(raw, "topic", "gatewayTelemetryTopic", "gatewayTopic")),
-		AlarmTopic:         strings.TrimSpace(pickConfigString(raw, "alarmTopic", "alarm_topic")),
-		GatewayName:        strings.TrimSpace(pickConfigString(raw, "gatewayName", "gateway_name")),
-		SubDeviceTokenMode: strings.TrimSpace(pickConfigString(raw, "subDeviceTokenMode")),
+		ServerURL:          raw.normalizedServerURL("serverUrl", "broker", "server_url"),
+		Username:           raw.string("username"),
+		Password:           raw.string("password"),
+		ClientID:           raw.string("clientId", "client_id"),
+		QOS:                raw.int(0, "qos"),
+		Retain:             raw.bool(false, "retain"),
+		KeepAlive:          raw.int(60, "keepAlive", "keep_alive"),
+		Timeout:            raw.int(10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:   raw.int(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
+		Topic:              raw.string("topic", "gatewayTelemetryTopic", "gatewayTopic"),
+		AlarmTopic:         raw.string("alarmTopic", "alarm_topic"),
+		GatewayName:        raw.string("gatewayName", "gateway_name"),
+		SubDeviceTokenMode: raw.string("subDeviceTokenMode"),
 	}
 
 	if err := normalizeXunjiConfig(cfg); err != nil {
@@ -65,21 +60,13 @@ func normalizeXunjiConfig(cfg *XunjiConfig) error {
 	if strings.TrimSpace(cfg.ServerURL) == "" {
 		return fmt.Errorf("serverUrl is required")
 	}
-	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return fmt.Errorf("qos must be between 0 and 2")
+	if err := validateConfigQOS(cfg.QOS); err != nil {
+		return err
 	}
-	if cfg.KeepAlive <= 0 {
-		cfg.KeepAlive = 60
-	}
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = 10
-	}
-	if cfg.UploadIntervalMs <= 0 {
-		cfg.UploadIntervalMs = int(defaultReportInterval.Milliseconds())
-	}
-	if strings.TrimSpace(cfg.Topic) == "" {
-		cfg.Topic = defaultXunjiTopicTemplate
-	}
+	applyDefaultPositiveInt(&cfg.KeepAlive, 60)
+	applyDefaultPositiveInt(&cfg.Timeout, 10)
+	applyDefaultPositiveInt(&cfg.UploadIntervalMs, int(defaultReportInterval.Milliseconds()))
+	applyDefaultString(&cfg.Topic, defaultXunjiTopicTemplate)
 	return nil
 }
 

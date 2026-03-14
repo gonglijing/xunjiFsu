@@ -45,18 +45,12 @@ func normalizeMQTTConfig(cfg *MQTTConfig) error {
 	if strings.TrimSpace(cfg.Topic) == "" {
 		return fmt.Errorf("topic is required")
 	}
-	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return fmt.Errorf("qos must be between 0 and 2")
+	if err := validateConfigQOS(cfg.QOS); err != nil {
+		return err
 	}
-	if cfg.ConnectTimeout <= 0 {
-		cfg.ConnectTimeout = 10
-	}
-	if cfg.KeepAlive <= 0 {
-		cfg.KeepAlive = 60
-	}
-	if cfg.UploadInterval > 0 && cfg.UploadInterval < 500 {
-		cfg.UploadInterval = 500
-	}
+	applyDefaultPositiveInt(&cfg.ConnectTimeout, 10)
+	applyDefaultPositiveInt(&cfg.KeepAlive, 60)
+	applyMinimumPositiveInt(&cfg.UploadInterval, 500)
 	return nil
 }
 

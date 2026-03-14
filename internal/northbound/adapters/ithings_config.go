@@ -1,7 +1,6 @@
 package adapters
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -33,40 +32,40 @@ type iThingsInitSettings struct {
 }
 
 func parseIThingsConfig(configStr string) (*IThingsConfig, error) {
-	raw := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(configStr), &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+	raw, err := parseAdapterRawConfig(configStr)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := &IThingsConfig{
-		ServerURL:               strings.TrimSpace(pickConfigString(raw, "serverUrl", "broker", "server_url")),
-		Username:                strings.TrimSpace(pickConfigString(raw, "username")),
-		Password:                strings.TrimSpace(pickConfigString(raw, "password")),
-		ClientID:                strings.TrimSpace(pickConfigString(raw, "clientId", "client_id")),
-		QOS:                     pickConfigInt(raw, 0, "qos"),
-		Retain:                  pickConfigBool(raw, false, "retain"),
-		KeepAlive:               pickConfigInt(raw, 60, "keepAlive", "keep_alive"),
-		Timeout:                 pickConfigInt(raw, 10, "connectTimeout", "connect_timeout", "timeout"),
-		UploadIntervalMs:        pickConfigInt(raw, int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
-		AlarmFlushIntervalMs:    pickConfigInt(raw, int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs"),
-		AlarmBatchSize:          pickConfigInt(raw, defaultAlarmBatch, "alarmBatchSize"),
-		AlarmQueueSize:          pickConfigInt(raw, defaultAlarmQueue, "alarmQueueSize"),
-		RealtimeQueueSize:       pickConfigInt(raw, defaultRealtimeQueue, "realtimeQueueSize"),
-		GatewayMode:             pickConfigBool(raw, true, "gatewayMode"),
-		ProductKey:              strings.TrimSpace(pickConfigString(raw, "productKey", "productID", "product_id")),
-		DeviceKey:               strings.TrimSpace(pickConfigString(raw, "deviceKey", "deviceName", "device_name")),
-		DeviceNameMode:          strings.TrimSpace(pickConfigString(raw, "deviceNameMode")),
-		SubDeviceNameMode:       strings.TrimSpace(pickConfigString(raw, "subDeviceNameMode")),
-		UpPropertyTopicTemplate: strings.TrimSpace(pickConfigString(raw, "upPropertyTopicTemplate")),
-		UpEventTopicTemplate:    strings.TrimSpace(pickConfigString(raw, "upEventTopicTemplate")),
-		UpActionTopicTemplate:   strings.TrimSpace(pickConfigString(raw, "upActionTopicTemplate")),
-		DownPropertyTopic:       strings.TrimSpace(pickConfigString(raw, "downPropertyTopic")),
-		DownActionTopic:         strings.TrimSpace(pickConfigString(raw, "downActionTopic")),
-		AlarmEventID:            strings.TrimSpace(pickConfigString(raw, "alarmEventID")),
-		AlarmEventType:          strings.TrimSpace(pickConfigString(raw, "alarmEventType")),
+		ServerURL:               raw.string("serverUrl", "broker", "server_url"),
+		Username:                raw.string("username"),
+		Password:                raw.string("password"),
+		ClientID:                raw.string("clientId", "client_id"),
+		QOS:                     raw.int(0, "qos"),
+		Retain:                  raw.bool(false, "retain"),
+		KeepAlive:               raw.int(60, "keepAlive", "keep_alive"),
+		Timeout:                 raw.int(10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:        raw.int(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
+		AlarmFlushIntervalMs:    raw.int(int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs"),
+		AlarmBatchSize:          raw.int(defaultAlarmBatch, "alarmBatchSize"),
+		AlarmQueueSize:          raw.int(defaultAlarmQueue, "alarmQueueSize"),
+		RealtimeQueueSize:       raw.int(defaultRealtimeQueue, "realtimeQueueSize"),
+		GatewayMode:             raw.bool(true, "gatewayMode"),
+		ProductKey:              raw.string("productKey", "productID", "product_id"),
+		DeviceKey:               raw.string("deviceKey", "deviceName", "device_name"),
+		DeviceNameMode:          raw.string("deviceNameMode"),
+		SubDeviceNameMode:       raw.string("subDeviceNameMode"),
+		UpPropertyTopicTemplate: raw.string("upPropertyTopicTemplate"),
+		UpEventTopicTemplate:    raw.string("upEventTopicTemplate"),
+		UpActionTopicTemplate:   raw.string("upActionTopicTemplate"),
+		DownPropertyTopic:       raw.string("downPropertyTopic"),
+		DownActionTopic:         raw.string("downActionTopic"),
+		AlarmEventID:            raw.string("alarmEventID"),
+		AlarmEventType:          raw.string("alarmEventType"),
 	}
 
-	cfg.CommandQueueSize = pickConfigInt(raw, cfg.RealtimeQueueSize, "commandQueueSize")
+	cfg.CommandQueueSize = raw.int(cfg.RealtimeQueueSize, "commandQueueSize")
 
 	if err := normalizeIThingsConfig(cfg); err != nil {
 		return nil, err
@@ -95,55 +94,25 @@ func normalizeIThingsConfig(cfg *IThingsConfig) error {
 	if !cfg.GatewayMode {
 		return fmt.Errorf("iThings adapter only supports gatewayMode=true")
 	}
-	if cfg.QOS < 0 || cfg.QOS > 2 {
-		return fmt.Errorf("qos must be between 0 and 2")
+	if err := validateConfigQOS(cfg.QOS); err != nil {
+		return err
 	}
-	if cfg.UploadIntervalMs <= 0 {
-		cfg.UploadIntervalMs = int(defaultReportInterval.Milliseconds())
-	}
-	if cfg.AlarmFlushIntervalMs <= 0 {
-		cfg.AlarmFlushIntervalMs = int(defaultAlarmInterval.Milliseconds())
-	}
-	if cfg.AlarmBatchSize <= 0 {
-		cfg.AlarmBatchSize = defaultAlarmBatch
-	}
-	if cfg.AlarmQueueSize <= 0 {
-		cfg.AlarmQueueSize = defaultAlarmQueue
-	}
-	if cfg.RealtimeQueueSize <= 0 {
-		cfg.RealtimeQueueSize = defaultRealtimeQueue
-	}
-	if cfg.CommandQueueSize <= 0 {
-		cfg.CommandQueueSize = cfg.RealtimeQueueSize
-	}
+	applyDefaultPositiveInt(&cfg.UploadIntervalMs, int(defaultReportInterval.Milliseconds()))
+	applyDefaultPositiveInt(&cfg.AlarmFlushIntervalMs, int(defaultAlarmInterval.Milliseconds()))
+	applyDefaultPositiveInt(&cfg.AlarmBatchSize, defaultAlarmBatch)
+	applyDefaultPositiveInt(&cfg.AlarmQueueSize, defaultAlarmQueue)
+	applyDefaultPositiveInt(&cfg.RealtimeQueueSize, defaultRealtimeQueue)
+	applyFallbackPositiveInt(&cfg.CommandQueueSize, cfg.RealtimeQueueSize)
 
-	if cfg.UpPropertyTopicTemplate == "" {
-		cfg.UpPropertyTopicTemplate = defaultIThingsUpPropertyTopicTemplate
-	}
-	if cfg.UpEventTopicTemplate == "" {
-		cfg.UpEventTopicTemplate = defaultIThingsUpEventTopicTemplate
-	}
-	if cfg.UpActionTopicTemplate == "" {
-		cfg.UpActionTopicTemplate = defaultIThingsUpActionTopicTemplate
-	}
-	if cfg.DownPropertyTopic == "" {
-		cfg.DownPropertyTopic = defaultIThingsDownPropertyTopic
-	}
-	if cfg.DownActionTopic == "" {
-		cfg.DownActionTopic = defaultIThingsDownActionTopic
-	}
-	if cfg.AlarmEventID == "" {
-		cfg.AlarmEventID = defaultIThingsAlarmEventID
-	}
-	if cfg.AlarmEventType == "" {
-		cfg.AlarmEventType = defaultIThingsAlarmEventType
-	}
-	if cfg.DeviceNameMode == "" {
-		cfg.DeviceNameMode = "deviceKey"
-	}
-	if cfg.SubDeviceNameMode == "" {
-		cfg.SubDeviceNameMode = cfg.DeviceNameMode
-	}
+	applyDefaultString(&cfg.UpPropertyTopicTemplate, defaultIThingsUpPropertyTopicTemplate)
+	applyDefaultString(&cfg.UpEventTopicTemplate, defaultIThingsUpEventTopicTemplate)
+	applyDefaultString(&cfg.UpActionTopicTemplate, defaultIThingsUpActionTopicTemplate)
+	applyDefaultString(&cfg.DownPropertyTopic, defaultIThingsDownPropertyTopic)
+	applyDefaultString(&cfg.DownActionTopic, defaultIThingsDownActionTopic)
+	applyDefaultString(&cfg.AlarmEventID, defaultIThingsAlarmEventID)
+	applyDefaultString(&cfg.AlarmEventType, defaultIThingsAlarmEventType)
+	applyDefaultString(&cfg.DeviceNameMode, "deviceKey")
+	applyDefaultString(&cfg.SubDeviceNameMode, cfg.DeviceNameMode)
 
 	return nil
 }
