@@ -61,6 +61,8 @@ func NewAdapter(northboundType, name string) NorthboundAdapter {
 	switch nbtype.Normalize(northboundType) {
 	case nbtype.TypeMQTT:
 		return NewMQTTAdapter(name)
+	case nbtype.TypeXunji:
+		return NewXunjiAdapter(name)
 	case nbtype.TypePandaX:
 		return NewPandaXAdapter(name)
 	case nbtype.TypeIThings:

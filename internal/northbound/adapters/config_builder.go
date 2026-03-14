@@ -148,101 +148,8 @@ func (b *NorthboundConfigBuilder) SetExtConfig(extConfig string) *NorthboundConf
 
 // Build 生成配置JSON字符串
 func (b *NorthboundConfigBuilder) Build() string {
-	// 根据类型设置默认值
-	switch nbtype.Normalize(b.northboundType) {
-	case nbtype.TypeMQTT:
-		if _, ok := b.config["broker"]; !ok {
-			b.config["broker"] = ""
-		}
-		if _, ok := b.config["topic"]; !ok {
-			b.config["topic"] = ""
-		}
-		if _, ok := b.config["qos"]; !ok {
-			b.config["qos"] = 0
-		}
-		if _, ok := b.config["keepAlive"]; !ok {
-			b.config["keepAlive"] = 60
-		}
-		if _, ok := b.config["connectTimeout"]; !ok {
-			b.config["connectTimeout"] = 30
-		}
-	case nbtype.TypeSagoo:
-		if _, ok := b.config["serverUrl"]; !ok {
-			b.config["serverUrl"] = ""
-		}
-		if _, ok := b.config["productKey"]; !ok {
-			b.config["productKey"] = ""
-		}
-		if _, ok := b.config["deviceKey"]; !ok {
-			b.config["deviceKey"] = ""
-		}
-		if _, ok := b.config["qos"]; !ok {
-			b.config["qos"] = 0
-		}
-		if _, ok := b.config["keepAlive"]; !ok {
-			b.config["keepAlive"] = 60
-		}
-		if _, ok := b.config["connectTimeout"]; !ok {
-			b.config["connectTimeout"] = 30
-		}
-		if _, ok := b.config["uploadIntervalMs"]; !ok {
-			b.config["uploadIntervalMs"] = 5000
-		}
-	case nbtype.TypePandaX:
-		if _, ok := b.config["serverUrl"]; !ok {
-			if v, exists := b.config["broker"]; exists {
-				b.config["serverUrl"] = v
-			} else {
-				b.config["serverUrl"] = ""
-			}
-		}
-		if _, ok := b.config["username"]; !ok {
-			b.config["username"] = ""
-		}
-		if _, ok := b.config["qos"]; !ok {
-			b.config["qos"] = 0
-		}
-		if _, ok := b.config["keepAlive"]; !ok {
-			b.config["keepAlive"] = 60
-		}
-		if _, ok := b.config["connectTimeout"]; !ok {
-			b.config["connectTimeout"] = 10
-		}
-		if _, ok := b.config["uploadIntervalMs"]; !ok {
-			b.config["uploadIntervalMs"] = 5000
-		}
-	case nbtype.TypeIThings:
-		if _, ok := b.config["serverUrl"]; !ok {
-			if v, exists := b.config["broker"]; exists {
-				b.config["serverUrl"] = v
-			} else {
-				b.config["serverUrl"] = ""
-			}
-		}
-		if _, ok := b.config["username"]; !ok {
-			b.config["username"] = ""
-		}
-		if _, ok := b.config["productKey"]; !ok {
-			b.config["productKey"] = ""
-		}
-		if _, ok := b.config["deviceKey"]; !ok {
-			b.config["deviceKey"] = ""
-		}
-		if _, ok := b.config["gatewayMode"]; !ok {
-			b.config["gatewayMode"] = true
-		}
-		if _, ok := b.config["qos"]; !ok {
-			b.config["qos"] = 0
-		}
-		if _, ok := b.config["keepAlive"]; !ok {
-			b.config["keepAlive"] = 60
-		}
-		if _, ok := b.config["connectTimeout"]; !ok {
-			b.config["connectTimeout"] = 10
-		}
-		if _, ok := b.config["uploadIntervalMs"]; !ok {
-			b.config["uploadIntervalMs"] = 5000
-		}
+	if defaults, ok := northboundConfigDefaults[nbtype.Normalize(b.northboundType)]; ok {
+		b.applyDefaults(defaults)
 	}
 
 	data, _ := json.Marshal(b.config)
@@ -255,81 +162,36 @@ func BuildConfigFromModel(cfg *models.NorthboundConfig) string {
 
 	switch nbtype.Normalize(cfg.Type) {
 	case nbtype.TypeMQTT:
-		// 构建MQTT配置
-		broker := buildBrokerURL(cfg.ServerURL, cfg.Port)
-		builder.SetBrokerURL(broker)
-		builder.SetClientID(cfg.ClientID)
-		if cfg.Username != "" {
-			builder.SetUsername(cfg.Username)
-		}
-		if cfg.Password != "" {
-			builder.SetPassword(cfg.Password)
-		}
-		builder.SetTopic(cfg.Topic)
-		builder.SetAlarmTopic(cfg.AlarmTopic)
-		builder.SetQOS(cfg.QOS)
-		builder.SetRetain(cfg.Retain)
-		builder.SetKeepAlive(cfg.KeepAlive)
-		builder.SetTimeout(cfg.Timeout)
-		builder.SetExtConfig(cfg.ExtConfig)
+		applySharedModelFields(builder, cfg, modelBuildOptions{
+			includeTopic:      true,
+			includeAlarmTopic: true,
+		})
+
+	case nbtype.TypeXunji:
+		applySharedModelFields(builder, cfg, modelBuildOptions{
+			includeTopic:          true,
+			includeAlarmTopic:     true,
+			includeUploadInterval: true,
+		})
 
 	case nbtype.TypeSagoo:
-		// 构建Sagoo配置
-		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
-		builder.SetBrokerURL(serverURL)
-		builder.SetProductKey(cfg.ProductKey)
-		builder.SetDeviceKey(cfg.DeviceKey)
-		if cfg.Username != "" {
-			builder.SetUsername(cfg.Username)
-		}
-		if cfg.Password != "" {
-			builder.SetPassword(cfg.Password)
-		}
-		builder.SetTopic(cfg.Topic)
-		builder.SetAlarmTopic(cfg.AlarmTopic)
-		builder.SetClientID(cfg.ClientID)
-		builder.SetQOS(cfg.QOS)
-		builder.SetRetain(cfg.Retain)
-		builder.SetKeepAlive(cfg.KeepAlive)
-		builder.SetTimeout(cfg.Timeout)
-		builder.SetUploadIntervalMs(cfg.UploadInterval)
-		builder.SetExtConfig(cfg.ExtConfig)
+		applySharedModelFields(builder, cfg, modelBuildOptions{
+			includeTopic:           true,
+			includeAlarmTopic:      true,
+			includeProductIdentity: true,
+			includeUploadInterval:  true,
+		})
 
 	case nbtype.TypePandaX:
-		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
-		builder.SetBrokerURL(serverURL)
-		builder.SetClientID(cfg.ClientID)
-		if cfg.Username != "" {
-			builder.SetUsername(cfg.Username)
-		}
-		if cfg.Password != "" {
-			builder.SetPassword(cfg.Password)
-		}
-		builder.SetQOS(cfg.QOS)
-		builder.SetRetain(cfg.Retain)
-		builder.SetKeepAlive(cfg.KeepAlive)
-		builder.SetTimeout(cfg.Timeout)
-		builder.SetUploadIntervalMs(cfg.UploadInterval)
-		builder.SetExtConfig(cfg.ExtConfig)
+		applySharedModelFields(builder, cfg, modelBuildOptions{
+			includeUploadInterval: true,
+		})
 
 	case nbtype.TypeIThings:
-		serverURL := buildBrokerURL(cfg.ServerURL, cfg.Port)
-		builder.SetBrokerURL(serverURL)
-		builder.SetClientID(cfg.ClientID)
-		builder.SetProductKey(cfg.ProductKey)
-		builder.SetDeviceKey(cfg.DeviceKey)
-		if cfg.Username != "" {
-			builder.SetUsername(cfg.Username)
-		}
-		if cfg.Password != "" {
-			builder.SetPassword(cfg.Password)
-		}
-		builder.SetQOS(cfg.QOS)
-		builder.SetRetain(cfg.Retain)
-		builder.SetKeepAlive(cfg.KeepAlive)
-		builder.SetTimeout(cfg.Timeout)
-		builder.SetUploadIntervalMs(cfg.UploadInterval)
-		builder.SetExtConfig(cfg.ExtConfig)
+		applySharedModelFields(builder, cfg, modelBuildOptions{
+			includeProductIdentity: true,
+			includeUploadInterval:  true,
+		})
 	}
 
 	return builder.Build()
@@ -384,6 +246,19 @@ func GetSupportedTypes() map[string][]string {
 			"retain: 是否保留消息",
 			"keep_alive: 心跳周期秒数",
 			"timeout: 连接超时秒数",
+		},
+		nbtype.TypeXunji: {
+			"server_url: MQTT Broker 地址",
+			"port: 端口 (默认1883)",
+			"topic: 实时上报 Topic（默认 v1/gateway/{gatewayname}）",
+			"username: 用户名 (可选)",
+			"password: 密码 (可选)",
+			"client_id: 客户端ID (可选)",
+			"qos: QoS等级 (0-2)",
+			"retain: 是否保留消息",
+			"keep_alive: 心跳周期秒数",
+			"timeout: 连接超时秒数",
+			"upload_interval: 上传周期毫秒数",
 		},
 		nbtype.TypeSagoo: {
 			"server_url: 服务器地址",
@@ -441,6 +316,10 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 		if topic, ok := config["topic"].(string); !ok || strings.TrimSpace(topic) == "" {
 			return fmt.Errorf("topic is required for MQTT adapter")
 		}
+	case nbtype.TypeXunji:
+		if strings.TrimSpace(configServerURL(config)) == "" {
+			return fmt.Errorf("serverUrl is required for Xunji adapter")
+		}
 	case nbtype.TypeSagoo:
 		if serverURL, ok := config["serverUrl"].(string); !ok || strings.TrimSpace(serverURL) == "" {
 			return fmt.Errorf("serverUrl is required for Sagoo adapter")
@@ -452,39 +331,17 @@ func ValidateConfig(northboundType string, config map[string]interface{}) error 
 			return fmt.Errorf("deviceKey is required for Sagoo adapter")
 		}
 	case nbtype.TypePandaX:
-		serverURL, _ := config["serverUrl"].(string)
-		if strings.TrimSpace(serverURL) == "" {
-			if broker, ok := config["broker"].(string); ok {
-				serverURL = broker
-			}
-		}
-		if strings.TrimSpace(serverURL) == "" {
+		if strings.TrimSpace(configServerURL(config)) == "" {
 			return fmt.Errorf("serverUrl is required for PandaX adapter")
 		}
 		if username, ok := config["username"].(string); !ok || strings.TrimSpace(username) == "" {
 			return fmt.Errorf("username is required for PandaX adapter")
 		}
-		if v, ok := config["gatewayMode"]; ok {
-			switch value := v.(type) {
-			case bool:
-				if !value {
-					return fmt.Errorf("gatewayMode must be true for PandaX adapter")
-				}
-			case string:
-				text := strings.TrimSpace(strings.ToLower(value))
-				if text == "false" || text == "0" || text == "no" {
-					return fmt.Errorf("gatewayMode must be true for PandaX adapter")
-				}
-			}
+		if _, ok := config["gatewayMode"]; ok && !pickConfigBool(config, true, "gatewayMode") {
+			return fmt.Errorf("gatewayMode must be true for PandaX adapter")
 		}
 	case nbtype.TypeIThings:
-		serverURL, _ := config["serverUrl"].(string)
-		if strings.TrimSpace(serverURL) == "" {
-			if broker, ok := config["broker"].(string); ok {
-				serverURL = broker
-			}
-		}
-		if strings.TrimSpace(serverURL) == "" {
+		if strings.TrimSpace(configServerURL(config)) == "" {
 			return fmt.Errorf("serverUrl is required for iThings adapter")
 		}
 		if username, ok := config["username"].(string); !ok || strings.TrimSpace(username) == "" {

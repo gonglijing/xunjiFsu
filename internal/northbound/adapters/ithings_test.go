@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -59,6 +60,62 @@ func TestResolveDeviceNameByMode(t *testing.T) {
 	}
 	if got := resolveDeviceNameByMode("", " dev-key ", ""); got != "dev-key" {
 		t.Fatalf("default mode got=%q, want=dev-key", got)
+	}
+}
+
+func TestBuildIThingsInitSettings_Defaults(t *testing.T) {
+	cfg, err := parseIThingsConfig(`{"serverUrl":"127.0.0.1","port":1883,"username":"u","productKey":"pk","deviceKey":"dk","gatewayMode":true}`)
+	if err != nil {
+		t.Fatalf("parseIThingsConfig() error = %v", err)
+	}
+
+	settings := buildIThingsInitSettings("ithings-test", cfg)
+	if settings.broker != "tcp://127.0.0.1" {
+		t.Fatalf("broker=%q, want=tcp://127.0.0.1", settings.broker)
+	}
+	if settings.reportEvery != 5*time.Second {
+		t.Fatalf("reportEvery=%v, want=5s", settings.reportEvery)
+	}
+	if settings.alarmEvery != 2*time.Second {
+		t.Fatalf("alarmEvery=%v, want=2s", settings.alarmEvery)
+	}
+	if settings.downPropertyTopic != defaultIThingsDownPropertyTopic {
+		t.Fatalf("downPropertyTopic=%q", settings.downPropertyTopic)
+	}
+	if settings.downActionTopic != defaultIThingsDownActionTopic {
+		t.Fatalf("downActionTopic=%q", settings.downActionTopic)
+	}
+	if settings.deviceNameMode != "deviceKey" || settings.subDeviceNameMode != "deviceKey" {
+		t.Fatalf("device modes mismatch: %q/%q", settings.deviceNameMode, settings.subDeviceNameMode)
+	}
+}
+
+func TestIThingsApplyConfig_ResetsRuntimeState(t *testing.T) {
+	cfg, err := parseIThingsConfig(`{"serverUrl":"tcp://localhost:1883","username":"u","productKey":"pk","deviceKey":"dk","gatewayMode":true}`)
+	if err != nil {
+		t.Fatalf("parseIThingsConfig() error = %v", err)
+	}
+
+	adapter := NewIThingsAdapter("ithings-test")
+	adapter.requestStates = map[string]*iThingsRequestState{"old": {RequestID: "old"}}
+	adapter.enabled = true
+	adapter.loopState = adapterLoopRunning
+
+	settings := buildIThingsInitSettings("ithings-test", cfg)
+	var client mqtt.Client
+	adapter.applyConfig(cfg, client, settings)
+
+	if adapter.enabled {
+		t.Fatal("expected adapter disabled after applyConfig")
+	}
+	if adapter.loopState != adapterLoopStopped {
+		t.Fatalf("loopState=%s, want=stopped", adapter.loopState.String())
+	}
+	if adapter.flushNow == nil || adapter.stopChan == nil {
+		t.Fatal("expected runtime channels initialized")
+	}
+	if adapter.requestStates == nil || len(adapter.requestStates) != 0 {
+		t.Fatalf("requestStates=%v, want empty map", adapter.requestStates)
 	}
 }
 

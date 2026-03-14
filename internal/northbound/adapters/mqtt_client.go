@@ -1,16 +1,16 @@
-//go:build no_paho_mqtt
+//go:build !no_paho_mqtt
 
 package adapters
 
 import (
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+// connectMQTT 创建并连接通用 MQTT 客户端。
 func connectMQTT(broker, clientID, username, password string, keepAliveSec, timeoutSec int) (mqtt.Client, error) {
 	opts := mqtt.NewClientOptions().AddBroker(broker)
 	opts.SetClientID(clientID)

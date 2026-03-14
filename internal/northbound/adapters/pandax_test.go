@@ -163,6 +163,69 @@ func TestParsePandaXConfig_Defaults(t *testing.T) {
 	}
 }
 
+func TestBuildPandaXInitSettings_Defaults(t *testing.T) {
+	cfg, err := parsePandaXConfig(`{"serverUrl":"127.0.0.1","port":1883,"username":"token","gatewayMode":true}`)
+	if err != nil {
+		t.Fatalf("parsePandaXConfig() error = %v", err)
+	}
+
+	settings := buildPandaXInitSettings("pandax-test", cfg)
+	if settings.broker != "tcp://127.0.0.1:1883" {
+		t.Fatalf("broker=%q, want=tcp://127.0.0.1:1883", settings.broker)
+	}
+	if settings.telemetryTopic != defaultPandaXTelemetryTopic {
+		t.Fatalf("telemetryTopic=%q", settings.telemetryTopic)
+	}
+	if settings.gatewayRegisterTopic != defaultPandaXGatewayRegisterTopic {
+		t.Fatalf("gatewayRegisterTopic=%q", settings.gatewayRegisterTopic)
+	}
+	if settings.alarmTopic != defaultPandaXEventPrefix+"/"+defaultPandaXAlarmIdentifier {
+		t.Fatalf("alarmTopic=%q", settings.alarmTopic)
+	}
+	if settings.rpcRequestTopic != defaultPandaXRPCRequestTopic || settings.rpcResponseTopic != defaultPandaXRPCResponseTopic {
+		t.Fatalf("rpc topics mismatch: %q / %q", settings.rpcRequestTopic, settings.rpcResponseTopic)
+	}
+	if settings.reportEvery != 5*time.Second || settings.alarmEvery != 2*time.Second {
+		t.Fatalf("interval mismatch: report=%v alarm=%v", settings.reportEvery, settings.alarmEvery)
+	}
+	if !strings.HasPrefix(settings.clientID, "pandax-pandax-test-") {
+		t.Fatalf("clientID=%q, want pandax-pandax-test-*", settings.clientID)
+	}
+}
+
+func TestPandaXApplyConfig_SetsRuntimeFields(t *testing.T) {
+	cfg, err := parsePandaXConfig(`{"serverUrl":"tcp://localhost:1883","username":"token","gatewayMode":true}`)
+	if err != nil {
+		t.Fatalf("parsePandaXConfig() error = %v", err)
+	}
+
+	adapter := NewPandaXAdapter("pandax-test")
+	settings := buildPandaXInitSettings("pandax-test", cfg)
+	adapter.applyConfig(cfg, nil, settings)
+
+	if adapter.telemetryTopic != defaultPandaXTelemetryTopic {
+		t.Fatalf("telemetryTopic=%q", adapter.telemetryTopic)
+	}
+	if adapter.gatewayRegisterTopic != defaultPandaXGatewayRegisterTopic {
+		t.Fatalf("gatewayRegisterTopic=%q", adapter.gatewayRegisterTopic)
+	}
+	if adapter.rpcRequestTopic != defaultPandaXRPCRequestTopic || adapter.rpcResponseTopic != defaultPandaXRPCResponseTopic {
+		t.Fatalf("rpc topics mismatch: %q / %q", adapter.rpcRequestTopic, adapter.rpcResponseTopic)
+	}
+	if adapter.flushNow == nil || adapter.stopChan == nil || adapter.reconnectNow == nil {
+		t.Fatal("expected runtime channels initialized")
+	}
+	if adapter.enabled {
+		t.Fatal("expected adapter disabled after applyConfig")
+	}
+	if !adapter.initialized || !adapter.connected {
+		t.Fatalf("state mismatch: initialized=%v connected=%v", adapter.initialized, adapter.connected)
+	}
+	if adapter.loopState != adapterLoopStopped {
+		t.Fatalf("loopState=%s, want=stopped", adapter.loopState.String())
+	}
+}
+
 func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 	adapter := NewPandaXAdapter("pandax-test")
 	adapter.config = &PandaXConfig{
@@ -230,6 +293,9 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 	if values["temp"] != 23.5 {
 		t.Fatalf("temp=%v, want=23.5", values["temp"])
 	}
+	if _, exists := first["deviceKey"]; exists {
+		t.Fatalf("deviceKey should be omitted in sync payload")
+	}
 	if _, exists := first["fields"]; exists {
 		t.Fatalf("fields should be omitted in sync payload")
 	}
@@ -274,6 +340,39 @@ func TestPandaXBuildSyncDevicesPayload_PrecheckFailsWhenProductHasNoFields(t *te
 	}
 	if !strings.Contains(err.Error(), "prodA") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSortSyncSubDevices_ByProductThenDeviceName(t *testing.T) {
+	subDevices := []pandaXSyncSubDevice{
+		{ProductKey: "prodB", DeviceName: "zeta"},
+		{ProductKey: "prodA", DeviceName: "zeta"},
+		{ProductKey: "prodA", DeviceName: "alpha"},
+	}
+
+	sortSyncSubDevices(subDevices)
+
+	if subDevices[0].ProductKey != "prodA" || subDevices[0].DeviceName != "alpha" {
+		t.Fatalf("first subDevice = %+v", subDevices[0])
+	}
+	if subDevices[1].ProductKey != "prodA" || subDevices[1].DeviceName != "zeta" {
+		t.Fatalf("second subDevice = %+v", subDevices[1])
+	}
+	if subDevices[2].ProductKey != "prodB" || subDevices[2].DeviceName != "zeta" {
+		t.Fatalf("third subDevice = %+v", subDevices[2])
+	}
+}
+
+func TestSyncTimestampOrNow_UsesFallbackForZeroTime(t *testing.T) {
+	nowMS := int64(1700000000123)
+
+	if got := syncTimestampOrNow(time.Time{}, nowMS); got != nowMS {
+		t.Fatalf("syncTimestampOrNow()=%d, want=%d", got, nowMS)
+	}
+
+	ts := time.Unix(1700000000, 0)
+	if got := syncTimestampOrNow(ts, nowMS); got != ts.UnixMilli() {
+		t.Fatalf("syncTimestampOrNow()=%d, want=%d", got, ts.UnixMilli())
 	}
 }
 

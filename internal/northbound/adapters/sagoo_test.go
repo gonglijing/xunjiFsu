@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -173,6 +174,60 @@ func TestParseSagooConfig_Defaults(t *testing.T) {
 	}
 	if cfg.AlarmFlushIntervalMs != int((2 * time.Second).Milliseconds()) {
 		t.Fatalf("default alarm flush mismatch: %d", cfg.AlarmFlushIntervalMs)
+	}
+}
+
+func TestBuildSagooInitSettings_Defaults(t *testing.T) {
+	cfg, err := parseSagooConfig(`{"productKey":"pk","deviceKey":"dk","serverUrl":"127.0.0.1","port":1883}`)
+	if err != nil {
+		t.Fatalf("parseSagooConfig() error = %v", err)
+	}
+
+	settings := buildSagooInitSettings("sagoo-test", cfg)
+	if settings.broker != "tcp://127.0.0.1:1883" {
+		t.Fatalf("broker=%q, want=tcp://127.0.0.1:1883", settings.broker)
+	}
+	if settings.topic != "/sys/pk/dk/thing/event/property/pack/post" {
+		t.Fatalf("topic=%q", settings.topic)
+	}
+	if settings.alarmTopic != settings.topic {
+		t.Fatalf("alarmTopic=%q, want same as topic=%q", settings.alarmTopic, settings.topic)
+	}
+	if settings.reportEvery != 5*time.Second {
+		t.Fatalf("reportEvery=%v, want=5s", settings.reportEvery)
+	}
+	if settings.alarmEvery != 2*time.Second {
+		t.Fatalf("alarmEvery=%v, want=2s", settings.alarmEvery)
+	}
+	if !strings.HasPrefix(settings.clientID, "sagoo-pk-dk-") {
+		t.Fatalf("clientID=%q, want sagoo-pk-dk-*", settings.clientID)
+	}
+}
+
+func TestSagooApplyConfig_SetsRuntimeFields(t *testing.T) {
+	cfg, err := parseSagooConfig(`{"productKey":"pk","deviceKey":"dk","serverUrl":"tcp://127.0.0.1:1883"}`)
+	if err != nil {
+		t.Fatalf("parseSagooConfig() error = %v", err)
+	}
+
+	adapter := NewSagooAdapter("sagoo-test")
+	settings := buildSagooInitSettings("sagoo-test", cfg)
+	adapter.applyConfig(cfg, nil, settings)
+
+	if adapter.topic != "/sys/pk/dk/thing/event/property/pack/post" {
+		t.Fatalf("topic=%q", adapter.topic)
+	}
+	if adapter.alarmTopic != adapter.topic {
+		t.Fatalf("alarmTopic=%q, want=%q", adapter.alarmTopic, adapter.topic)
+	}
+	if adapter.flushNow == nil || adapter.stopChan == nil {
+		t.Fatal("expected runtime channels initialized")
+	}
+	if !adapter.initialized || !adapter.connected {
+		t.Fatalf("state mismatch: initialized=%v connected=%v", adapter.initialized, adapter.connected)
+	}
+	if adapter.loopState != adapterLoopStopped {
+		t.Fatalf("loopState=%s, want=stopped", adapter.loopState.String())
 	}
 }
 
