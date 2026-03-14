@@ -100,7 +100,7 @@ type DeviceDriverMapping struct {
 type NorthboundConfig struct {
 	ID      int64  `json:"id" db:"id"`
 	Name    string `json:"name" db:"name"`
-	Type    string `json:"type" db:"type"` // sagoo, pandax, ithings, mqtt, http
+	Type    string `json:"type" db:"type"` // sagoo, xunji, pandax, ithings, mqtt, http
 	Enabled int    `json:"enabled" db:"enabled"`
 
 	// 基础配置

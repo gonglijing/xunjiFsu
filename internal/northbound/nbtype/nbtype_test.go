@@ -8,6 +8,7 @@ func TestNormalize(t *testing.T) {
 		"sagoo":    TypeSagoo,
 		"SAGOO":    TypeSagoo,
 		"mqtt":     TypeMQTT,
+		"XunJi":    TypeXunji,
 		" PANDAX ": TypePandaX,
 	}
 
@@ -25,8 +26,8 @@ func TestIsSupported(t *testing.T) {
 	if !IsSupported(TypeMQTT) {
 		t.Fatal("expected mqtt to be supported")
 	}
-	if IsSupported("xunji") {
-		t.Fatal("expected xunji to be unsupported")
+	if !IsSupported(TypeXunji) {
+		t.Fatal("expected xunji to be supported")
 	}
 	if IsSupported("unknown") {
 		t.Fatal("expected unknown to be unsupported")
@@ -39,5 +40,8 @@ func TestDisplayName(t *testing.T) {
 	}
 	if got := DisplayName("pandax"); got != "PandaX" {
 		t.Fatalf("DisplayName(pandax)=%q, want %q", got, "PandaX")
+	}
+	if got := DisplayName("xunji"); got != "XunJi" {
+		t.Fatalf("DisplayName(xunji)=%q, want %q", got, "XunJi")
 	}
 }

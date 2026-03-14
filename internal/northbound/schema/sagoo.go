@@ -15,6 +15,7 @@ const SagooSchemaVersion = "1.0.0"
 
 var SupportedNorthboundSchemaTypes = []string{
 	nbtype.TypeMQTT,
+	nbtype.TypeXunji,
 	nbtype.TypePandaX,
 	nbtype.TypeIThings,
 	nbtype.TypeSagoo,
@@ -47,6 +48,8 @@ func FieldsByType(nbType string) ([]Field, bool) {
 		return cloneFields(SagooConfigSchema), true
 	case nbtype.TypeMQTT:
 		return cloneFields(MQTTConfigSchema), true
+	case nbtype.TypeXunji:
+		return cloneFields(XunjiConfigSchema), true
 	case nbtype.TypePandaX:
 		return cloneFields(PandaXConfigSchema), true
 	case nbtype.TypeIThings:

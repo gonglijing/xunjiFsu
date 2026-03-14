@@ -90,7 +90,6 @@ FSU 对 PandaX 配置分两层：
     {
       "productKey": "productA",
       "deviceName": "pump01",
-      "deviceKey": "pump01-key",
       "ts": 1739433600000,
       "values": {
         "temperature": 23.5,
@@ -245,7 +244,7 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 
 - Topic 必须是 `v1/gateway/register/telemetry`；
 - 根字段必须包含：`ts`、`subDevices`；
-- `subDevices` 必须是数组，且每项包含：`productKey`、`deviceName`、`deviceKey`、`ts`、`values`；
+- `subDevices` 必须是数组，且每项包含：`productKey`、`deviceName`、`ts`、`values`；
 - `subDevices[*].productKey` 应与该设备驱动固定 `productKey` 一致；
 - `values` 不能为空对象（至少一个可用字段），否则 PandaX 可能跳过模型创建。
 
@@ -411,7 +410,7 @@ mosquitto_sub -h <broker_host> -p <broker_port> -u <username> -P <password> \
 ### 10.5 设备同步链路（手动触发）
 
 - `SyncDevices()` 读取设备列表 + 最新遥测，构造 `subDevices[]` 并发布到 `gatewayRegisterTopic`；
-- `subDevices[i]` 包含 `productKey/deviceName/deviceKey/ts/values`；
+- `subDevices[i]` 包含 `productKey/deviceName/ts/values`；
 - 同步前会执行按产品维度预检查：若某产品下全部子设备均无字段，则整次同步失败并返回错误；
 - `productKey` 优先取驱动固定值：
   - `driver_id -> 驱动 wasm version() -> productKey`；

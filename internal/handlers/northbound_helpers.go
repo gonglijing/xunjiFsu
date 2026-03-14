@@ -24,6 +24,9 @@ var northboundRequiredFieldRules = map[string][]requiredFieldRule{
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "topic", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.Topic) != "" }},
 	},
+	nbtype.TypeXunji: {
+		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
+	},
 	nbtype.TypeSagoo: {
 		{fieldName: "server_url", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ServerURL) != "" }},
 		{fieldName: "product_key", present: func(cfg *models.NorthboundConfig) bool { return strings.TrimSpace(cfg.ProductKey) != "" }},
@@ -113,7 +116,7 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 		switch config.Type {
 		case "http":
 			config.Port = 80
-		case nbtype.TypeMQTT, nbtype.TypeSagoo, nbtype.TypePandaX, nbtype.TypeIThings:
+		case nbtype.TypeMQTT, nbtype.TypeXunji, nbtype.TypeSagoo, nbtype.TypePandaX, nbtype.TypeIThings:
 			config.Port = 1883
 		}
 	}
