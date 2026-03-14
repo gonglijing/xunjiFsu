@@ -46,7 +46,7 @@ func (a *MQTTAdapter) flushPendingData() {
 		return
 	}
 	batch := a.pendingData
-	a.pendingData = a.pendingData[:0]
+	a.pendingData = nil
 	a.pendingMu.Unlock()
 
 	for idx, data := range batch {
@@ -74,7 +74,7 @@ func (a *MQTTAdapter) flushAlarms() error {
 		return nil
 	}
 	batch := a.pendingAlarms
-	a.pendingAlarms = a.pendingAlarms[:0]
+	a.pendingAlarms = nil
 	a.alarmMu.Unlock()
 
 	for idx, alarm := range batch {

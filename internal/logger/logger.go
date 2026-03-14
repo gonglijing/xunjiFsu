@@ -126,9 +126,13 @@ func (l *StructuredLogger) log(level LogLevel, msg string, keysAndValues ...inte
 
 // newEntry 创建日志条目
 func (l *StructuredLogger) newEntry(level LogLevel, msg string) *LogEntry {
-	// 获取调用者信息
-	pc, _, _, _ := runtime.Caller(2)
-	caller := runtime.FuncForPC(pc).Name()
+	caller := ""
+	if l != nil && l.jsonOutput {
+		pc, _, _, _ := runtime.Caller(2)
+		if fn := runtime.FuncForPC(pc); fn != nil {
+			caller = fn.Name()
+		}
+	}
 
 	return &LogEntry{
 		Level:     LevelNames[level],
@@ -137,6 +141,14 @@ func (l *StructuredLogger) newEntry(level LogLevel, msg string) *LogEntry {
 		Module:    l.module,
 		Caller:    caller,
 	}
+}
+
+// Enabled reports whether the given level will be emitted by this logger.
+func (l *StructuredLogger) Enabled(level LogLevel) bool {
+	if l == nil {
+		return false
+	}
+	return level >= l.level
 }
 
 // output 输出日志
@@ -160,7 +172,7 @@ func (l *StructuredLogger) output(entry *LogEntry) {
 
 // parseKeyValues 解析键值对
 func parseKeyValues(keysAndValues ...interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
+	result := make(map[string]interface{}, len(keysAndValues)/2)
 	for i := 0; i < len(keysAndValues)-1; i += 2 {
 		key, ok := keysAndValues[i].(string)
 		if !ok {
@@ -194,6 +206,11 @@ func init() {
 // SetLevel 设置日志级别
 func SetLevel(level LogLevel) {
 	global.level = level
+}
+
+// Enabled reports whether the global logger will emit the given level.
+func Enabled(level LogLevel) bool {
+	return global.Enabled(level)
 }
 
 // SetJSONOutput 设置JSON输出

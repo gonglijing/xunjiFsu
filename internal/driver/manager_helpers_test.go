@@ -114,6 +114,12 @@ func TestNewPreparedExecution(t *testing.T) {
 	if prepared.Config["serial_port"] != "/dev/ttyUSB1" {
 		t.Fatalf("prepared config missing serial_port: %#v", prepared.Config)
 	}
+	if len(prepared.InputJSON) == 0 {
+		t.Fatalf("prepared input json should not be empty")
+	}
+	if !strings.Contains(string(prepared.InputJSON), "\"device_id\":11") {
+		t.Fatalf("prepared input json should contain device id, got %s", string(prepared.InputJSON))
+	}
 	prepared.Config["probe"] = "x"
 	if prepared.DriverContext.Config["probe"] != "x" {
 		t.Fatalf("driver context should share prepared config map")

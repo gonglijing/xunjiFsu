@@ -252,17 +252,6 @@ func TestPullCommands_ClearPoppedReferences(t *testing.T) {
 	}
 }
 
-func TestCloneCollectData_EmptyFieldsNil(t *testing.T) {
-	in := &models.CollectData{DeviceID: 1, Fields: map[string]string{}}
-	out := cloneCollectData(in)
-	if out == nil {
-		t.Fatal("cloneCollectData() returned nil")
-	}
-	if out.Fields != nil {
-		t.Fatalf("out.Fields expected nil, got %#v", out.Fields)
-	}
-}
-
 func TestIsReservedCommandKeyNormalized(t *testing.T) {
 	if !isReservedCommandKeyNormalized("subdevices") {
 		t.Fatal("expected reserved key: subdevices")

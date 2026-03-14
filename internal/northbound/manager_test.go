@@ -17,29 +17,29 @@ type fakeAdapter struct {
 	sendCalls   int32
 	alarmCalls  int32
 	reportCalls int32
-	fail       bool
+	fail        bool
 	enabled     bool
 	connected   bool
-	interval   time.Duration
-	lastSend   time.Time
-	commands   []*models.NorthboundCommand // commands to return from PullCommands
-	lastResult *models.NorthboundCommandResult
+	interval    time.Duration
+	lastSend    time.Time
+	commands    []*models.NorthboundCommand // commands to return from PullCommands
+	lastResult  *models.NorthboundCommandResult
 }
 
-func (f *fakeAdapter) Name() string                                    { return f.name }
-func (f *fakeAdapter) Type() string                                    { return "fake" }
-func (f *fakeAdapter) Initialize(config string) error                   { return nil }
-func (f *fakeAdapter) Start()                                          { f.enabled = true }
-func (f *fakeAdapter) Stop()                                           { f.enabled = false }
-func (f *fakeAdapter) Close() error                                    { return nil }
-func (f *fakeAdapter) SetInterval(interval time.Duration)              { f.interval = interval }
-func (f *fakeAdapter) IsEnabled() bool                                { return f.enabled }
-func (f *fakeAdapter) IsConnected() bool                              { return f.connected }
-func (f *fakeAdapter) GetLastSendTime() time.Time                     { return f.lastSend }
-func (f *fakeAdapter) PendingCommandCount() int                       { return len(f.commands) }
+func (f *fakeAdapter) Name() string                       { return f.name }
+func (f *fakeAdapter) Type() string                       { return "fake" }
+func (f *fakeAdapter) Initialize(config string) error     { return nil }
+func (f *fakeAdapter) Start()                             { f.enabled = true }
+func (f *fakeAdapter) Stop()                              { f.enabled = false }
+func (f *fakeAdapter) Close() error                       { return nil }
+func (f *fakeAdapter) SetInterval(interval time.Duration) { f.interval = interval }
+func (f *fakeAdapter) IsEnabled() bool                    { return f.enabled }
+func (f *fakeAdapter) IsConnected() bool                  { return f.connected }
+func (f *fakeAdapter) GetLastSendTime() time.Time         { return f.lastSend }
+func (f *fakeAdapter) PendingCommandCount() int           { return len(f.commands) }
 func (f *fakeAdapter) GetStats() map[string]interface{} {
 	return map[string]interface{}{
-		"name":           f.name,
+		"name":          f.name,
 		"type":          "fake",
 		"enabled":       f.enabled,
 		"connected":     f.connected,
@@ -176,6 +176,23 @@ func TestNorthboundManager_Intervals(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected a1 in runtime names")
+	}
+}
+
+func TestNorthboundManager_ListRuntimeNames_DeduplicatesAcrossRuntimeMaps(t *testing.T) {
+	mgr := NewNorthboundManager()
+	adapter := &fakeAdapter{name: "a1"}
+	mgr.RegisterAdapter("a1", adapter)
+	mgr.SetInterval("a1", time.Second)
+	breakerConfig := DefaultBreakerConfig
+	mgr.breakers["a1"] = circuit.NewCircuitBreaker(&breakerConfig)
+
+	names := mgr.ListRuntimeNames()
+	if len(names) != 1 {
+		t.Fatalf("expected 1 unique runtime name, got %d (%v)", len(names), names)
+	}
+	if names[0] != "a1" {
+		t.Fatalf("expected runtime name a1, got %v", names)
 	}
 }
 

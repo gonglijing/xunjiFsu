@@ -359,10 +359,15 @@ func (e *DriverExecutor) executePreparedWithContextAndConfig(ctx context.Context
 
 	pluginFunc := resolveExecutionFunction(function)
 	driverCtx := prepared.DriverContext
+	inputJSON := prepared.InputJSON
 	if len(overrides) > 0 {
 		deviceConfig := cloneDeviceConfig(prepared.Config, len(overrides))
 		mergeDeviceConfig(deviceConfig, overrides)
 		driverCtx = cloneDriverContext(prepared.DriverContext, deviceConfig)
+		inputJSON, err = marshalDriverInvocationInput(driverCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal input: %w", err)
+		}
 	}
 
 	unlock := e.lockResource(resourceID)
@@ -378,11 +383,11 @@ func (e *DriverExecutor) executePreparedWithContextAndConfig(ctx context.Context
 		return nil, err
 	}
 
-	return e.manager.ExecuteDriverWithContext(ctx, *device.DriverID, pluginFunc, driverCtx)
+	return e.manager.executeDriverWithInput(ctx, *device.DriverID, pluginFunc, driverCtx, inputJSON)
 }
 
 func normalizePreparedExecution(device *models.Device, prepared *PreparedExecution) *PreparedExecution {
-	if prepared == nil || prepared.DriverContext == nil || prepared.Config == nil {
+	if prepared == nil || prepared.DriverContext == nil || prepared.Config == nil || prepared.InputJSON == nil {
 		return NewPreparedExecution(device)
 	}
 	return prepared

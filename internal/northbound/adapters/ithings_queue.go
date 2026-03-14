@@ -15,7 +15,7 @@ func (a *IThingsAdapter) Send(data *models.CollectData) error {
 	}
 
 	a.dataMu.Lock()
-	a.enqueueRealtimeLocked(cloneCollectData(data))
+	a.enqueueRealtimeLocked(data)
 	a.dataMu.Unlock()
 
 	return nil
@@ -27,7 +27,7 @@ func (a *IThingsAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	}
 
 	a.alarmMu.Lock()
-	a.enqueueAlarmLocked(cloneAlarmPayload(alarm))
+	a.enqueueAlarmLocked(alarm)
 	needFlush := len(a.alarmQueue) >= a.alarmBatch
 	flushNow := a.flushNow
 	a.alarmMu.Unlock()
@@ -45,10 +45,8 @@ func (a *IThingsAdapter) flushRealtime() error {
 		a.dataMu.Unlock()
 		return nil
 	}
-	batch := make([]*models.CollectData, len(a.realtimeQueue))
-	copy(batch, a.realtimeQueue)
-	clear(a.realtimeQueue)
-	a.realtimeQueue = a.realtimeQueue[:0]
+	batch := a.realtimeQueue
+	a.realtimeQueue = nil
 	a.dataMu.Unlock()
 
 	for _, item := range batch {
@@ -57,16 +55,19 @@ func (a *IThingsAdapter) flushRealtime() error {
 			a.dataMu.Lock()
 			a.prependRealtime(batch)
 			a.dataMu.Unlock()
+			clear(batch)
 			return err
 		}
 		if err := a.publish(topic, body); err != nil {
 			a.dataMu.Lock()
 			a.prependRealtime(batch)
 			a.dataMu.Unlock()
+			clear(batch)
 			return err
 		}
 	}
 
+	clear(batch)
 	return nil
 }
 
@@ -82,10 +83,9 @@ func (a *IThingsAdapter) flushAlarmBatch() error {
 		count = len(a.alarmQueue)
 	}
 
-	batch := make([]*models.AlarmPayload, count)
-	copy(batch, a.alarmQueue[:count])
-	clear(a.alarmQueue[:count])
+	batch := a.alarmQueue[:count]
 	a.alarmQueue = a.alarmQueue[count:]
+	a.alarmQueue = a.alarmQueue[:len(a.alarmQueue):len(a.alarmQueue)]
 	a.alarmMu.Unlock()
 
 	for _, item := range batch {
@@ -94,16 +94,19 @@ func (a *IThingsAdapter) flushAlarmBatch() error {
 			a.alarmMu.Lock()
 			a.prependAlarms(batch)
 			a.alarmMu.Unlock()
+			clear(batch)
 			return err
 		}
 		if err := a.publish(topic, body); err != nil {
 			a.alarmMu.Lock()
 			a.prependAlarms(batch)
 			a.alarmMu.Unlock()
+			clear(batch)
 			return err
 		}
 	}
 
+	clear(batch)
 	return nil
 }
 

@@ -94,6 +94,20 @@ func TestNewStructuredLogger(t *testing.T) {
 	}
 }
 
+func TestStructuredLogger_NewEntryCallerOnlyForJSON(t *testing.T) {
+	textLogger := NewStructuredLogger(INFO, "test", false)
+	textEntry := textLogger.newEntry(INFO, "text")
+	if textEntry.Caller != "" {
+		t.Fatalf("text logger should not populate caller, got %q", textEntry.Caller)
+	}
+
+	jsonLogger := NewStructuredLogger(INFO, "test", true)
+	jsonEntry := jsonLogger.newEntry(INFO, "json")
+	if jsonEntry.Caller == "" {
+		t.Fatalf("json logger should populate caller")
+	}
+}
+
 func TestStructuredLogger_WithModule(t *testing.T) {
 	original := NewStructuredLogger(DEBUG, "original", true)
 
@@ -320,6 +334,17 @@ func TestSetLevel(t *testing.T) {
 
 	// 恢复
 	SetLevel(originalLevel)
+}
+
+func TestStructuredLogger_Enabled(t *testing.T) {
+	logger := NewStructuredLogger(INFO, "test", false)
+
+	if !logger.Enabled(INFO) {
+		t.Fatalf("expected info level to be enabled")
+	}
+	if logger.Enabled(DEBUG) {
+		t.Fatalf("expected debug level to be disabled")
+	}
 }
 
 func TestSetJSONOutput(t *testing.T) {

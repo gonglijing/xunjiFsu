@@ -431,6 +431,68 @@ func TestSyncDeviceProductKey_FixedByDriverID(t *testing.T) {
 	}
 }
 
+func TestRemoveTaskLocked_PrunesUnusedDriverProductKeyCache(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	driverID := int64(77)
+	device := &models.Device{ID: 201, Enabled: 1, DriverID: &driverID, CollectInterval: 1000, StorageInterval: 60}
+
+	c.mu.Lock()
+	task := newCollectTask(device, nil)
+	c.tasks[device.ID] = task
+	heap.Push(c.taskHeap, task)
+	c.mu.Unlock()
+
+	c.driverIdentityMu.Lock()
+	c.driverProductKeys[driverID] = "prod-77"
+	c.driverIdentityMu.Unlock()
+
+	c.mu.Lock()
+	c.removeTaskLocked(device.ID)
+	c.mu.Unlock()
+
+	c.driverIdentityMu.RLock()
+	_, exists := c.driverProductKeys[driverID]
+	c.driverIdentityMu.RUnlock()
+	if exists {
+		t.Fatalf("expected unused driver product key cache to be pruned")
+	}
+}
+
+func TestRemoveTaskLocked_KeepsSharedDriverProductKeyCache(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	driverID := int64(88)
+	device1 := &models.Device{ID: 301, Enabled: 1, DriverID: &driverID, CollectInterval: 1000, StorageInterval: 60}
+	device2 := &models.Device{ID: 302, Enabled: 1, DriverID: &driverID, CollectInterval: 1000, StorageInterval: 60}
+
+	c.mu.Lock()
+	task1 := newCollectTask(device1, nil)
+	task2 := newCollectTask(device2, nil)
+	c.tasks[device1.ID] = task1
+	c.tasks[device2.ID] = task2
+	heap.Push(c.taskHeap, task1)
+	heap.Push(c.taskHeap, task2)
+	c.mu.Unlock()
+
+	c.driverIdentityMu.Lock()
+	c.driverProductKeys[driverID] = "prod-88"
+	c.driverIdentityMu.Unlock()
+
+	c.mu.Lock()
+	c.removeTaskLocked(device1.ID)
+	c.mu.Unlock()
+
+	c.driverIdentityMu.RLock()
+	value, exists := c.driverProductKeys[driverID]
+	c.driverIdentityMu.RUnlock()
+	if !exists || value != "prod-88" {
+		t.Fatalf("expected shared driver product key cache to be kept, got exists=%v value=%q", exists, value)
+	}
+}
+
 func TestDriverPointValueToString(t *testing.T) {
 	cases := []struct {
 		name  string

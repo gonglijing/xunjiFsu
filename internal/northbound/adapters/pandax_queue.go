@@ -18,7 +18,7 @@ func (a *PandaXAdapter) Send(data *models.CollectData) error {
 		a.name, data.DeviceID, data.DeviceKey, len(data.Fields))
 
 	a.dataMu.Lock()
-	a.enqueueRealtimeLocked(cloneCollectData(data))
+	a.enqueueRealtimeLocked(data)
 	queueLen := len(a.realtimeQueue)
 	a.dataMu.Unlock()
 
@@ -32,7 +32,7 @@ func (a *PandaXAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	}
 
 	a.alarmMu.Lock()
-	a.enqueueAlarmLocked(cloneAlarmPayload(alarm))
+	a.enqueueAlarmLocked(alarm)
 	queueLen := len(a.alarmQueue)
 	a.alarmMu.Unlock()
 
@@ -52,10 +52,8 @@ func (a *PandaXAdapter) flushRealtime() error {
 		a.dataMu.Unlock()
 		return nil
 	}
-	batch := make([]*models.CollectData, len(a.realtimeQueue))
-	copy(batch, a.realtimeQueue)
-	clear(a.realtimeQueue)
-	a.realtimeQueue = a.realtimeQueue[:0]
+	batch := a.realtimeQueue
+	a.realtimeQueue = nil
 	a.dataMu.Unlock()
 
 	log.Printf("[PandaX-%s] flushRealtime: 开始发送 %d 条数据", a.name, len(batch))
@@ -66,10 +64,12 @@ func (a *PandaXAdapter) flushRealtime() error {
 		a.dataMu.Lock()
 		a.prependRealtime(batch)
 		a.dataMu.Unlock()
+		clear(batch)
 		return err
 	}
 
 	log.Printf("[PandaX-%s] flushRealtime: 发送成功 %d 条数据", a.name, len(batch))
+	clear(batch)
 	return nil
 }
 
@@ -121,10 +121,9 @@ func (a *PandaXAdapter) flushAlarmBatch() error {
 	if count > len(a.alarmQueue) {
 		count = len(a.alarmQueue)
 	}
-	batch := make([]*models.AlarmPayload, count)
-	copy(batch, a.alarmQueue[:count])
-	clear(a.alarmQueue[:count])
+	batch := a.alarmQueue[:count]
 	a.alarmQueue = a.alarmQueue[count:]
+	a.alarmQueue = a.alarmQueue[:len(a.alarmQueue):len(a.alarmQueue)]
 	a.alarmMu.Unlock()
 
 	log.Printf("[PandaX-%s] flushAlarmBatch: 开始发送 %d 条报警", a.name, len(batch))
@@ -138,12 +137,14 @@ func (a *PandaXAdapter) flushAlarmBatch() error {
 			a.alarmMu.Lock()
 			a.prependAlarms(batch)
 			a.alarmMu.Unlock()
+			clear(batch)
 			return err
 		}
 		successCount++
 	}
 
 	log.Printf("[PandaX-%s] flushAlarmBatch: 发送成功 %d/%d", a.name, successCount, len(batch))
+	clear(batch)
 	return nil
 }
 

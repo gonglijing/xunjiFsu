@@ -14,7 +14,7 @@ func (a *SagooAdapter) Send(data *models.CollectData) error {
 	}
 
 	a.dataMu.Lock()
-	a.enqueueRealtimeLocked(cloneCollectData(data))
+	a.enqueueRealtimeLocked(data)
 	a.dataMu.Unlock()
 
 	return nil
@@ -27,7 +27,7 @@ func (a *SagooAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	}
 
 	a.alarmMu.Lock()
-	a.enqueueAlarmLocked(cloneAlarmPayload(alarm))
+	a.enqueueAlarmLocked(alarm)
 	needFlush := len(a.alarmQueue) >= a.alarmBatch
 	flushNow := a.flushNow
 	a.alarmMu.Unlock()
@@ -46,10 +46,8 @@ func (a *SagooAdapter) flushLatestData() error {
 		a.dataMu.Unlock()
 		return nil
 	}
-	batch := make([]*models.CollectData, len(a.latestData))
-	copy(batch, a.latestData)
-	clear(a.latestData)
-	a.latestData = a.latestData[:0]
+	batch := a.latestData
+	a.latestData = nil
 	topic := a.topic
 	a.dataMu.Unlock()
 
@@ -59,10 +57,12 @@ func (a *SagooAdapter) flushLatestData() error {
 			a.dataMu.Lock()
 			a.prependRealtime(batch)
 			a.dataMu.Unlock()
+			clear(batch)
 			return err
 		}
 	}
 
+	clear(batch)
 	return nil
 }
 
@@ -77,10 +77,9 @@ func (a *SagooAdapter) flushAlarmBatch() error {
 	if count > len(a.alarmQueue) {
 		count = len(a.alarmQueue)
 	}
-	batch := make([]*models.AlarmPayload, count)
-	copy(batch, a.alarmQueue[:count])
-	clear(a.alarmQueue[:count])
+	batch := a.alarmQueue[:count]
 	a.alarmQueue = a.alarmQueue[count:]
+	a.alarmQueue = a.alarmQueue[:len(a.alarmQueue):len(a.alarmQueue)]
 	topic := a.alarmTopic
 	a.alarmMu.Unlock()
 
@@ -90,10 +89,12 @@ func (a *SagooAdapter) flushAlarmBatch() error {
 			a.alarmMu.Lock()
 			a.prependAlarms(batch)
 			a.alarmMu.Unlock()
+			clear(batch)
 			return err
 		}
 	}
 
+	clear(batch)
 	return nil
 }
 

@@ -5,33 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gonglijing/xunjiFsu/internal/models"
 )
-
-func cloneCollectData(data *models.CollectData) *models.CollectData {
-	if data == nil {
-		return nil
-	}
-	out := *data
-	if len(data.Fields) > 0 {
-		out.Fields = make(map[string]string, len(data.Fields))
-		for key, value := range data.Fields {
-			out.Fields[key] = value
-		}
-	} else {
-		out.Fields = nil
-	}
-	return &out
-}
-
-func cloneAlarmPayload(alarm *models.AlarmPayload) *models.AlarmPayload {
-	if alarm == nil {
-		return nil
-	}
-	out := *alarm
-	return &out
-}
 
 func mapFromAnyByKey2(values map[string]interface{}, key1, key2 string) (map[string]interface{}, bool) {
 	if out, ok := mapFromAny(values[key1]); ok {

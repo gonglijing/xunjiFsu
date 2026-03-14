@@ -45,6 +45,16 @@ func hexPreview(b []byte, max int) string {
 	return fmt.Sprintf("% X", b[:max])
 }
 
+func outputPreview(b []byte, max int) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if max <= 0 || len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max])
+}
+
 // DriverResult 驱动执行结果
 type DriverResult struct {
 	Success    bool              `json:"success"`
@@ -93,6 +103,20 @@ type driverInvocationInput struct {
 	ResourceType string            `json:"resource_type"`
 	Config       map[string]string `json:"config"`
 	DeviceConfig string            `json:"device_config"`
+}
+
+func marshalDriverInvocationInput(driverCtx *DriverContext) ([]byte, error) {
+	if driverCtx == nil {
+		return nil, fmt.Errorf("driver context is nil")
+	}
+	return json.Marshal(driverInvocationInput{
+		DeviceID:     driverCtx.DeviceID,
+		DeviceName:   driverCtx.DeviceName,
+		ResourceID:   driverCtx.ResourceID,
+		ResourceType: driverCtx.ResourceType,
+		Config:       driverCtx.Config,
+		DeviceConfig: driverCtx.DeviceConfig,
+	})
 }
 
 // SerialPort 串口接口
@@ -248,6 +272,14 @@ func (m *DriverManager) ExecuteDriver(id int64, function string, driverCtx *Driv
 
 // ExecuteDriverWithContext 执行驱动（支持超时/取消）
 func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, function string, driverCtx *DriverContext) (*DriverResult, error) {
+	inputJSON, err := marshalDriverInvocationInput(driverCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal input: %w", err)
+	}
+	return m.executeDriverWithInput(ctx, id, function, driverCtx, inputJSON)
+}
+
+func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, function string, driverCtx *DriverContext, inputJSON []byte) (*DriverResult, error) {
 	m.mu.RLock()
 	driver, exists := m.drivers[id]
 	timeout := m.callTimeout
@@ -263,18 +295,6 @@ func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, 
 
 	if !driver.plugin.FunctionExists(function) {
 		return nil, fmt.Errorf("plugin function not found: %s", function)
-	}
-
-	inputJSON, err := json.Marshal(driverInvocationInput{
-		DeviceID:     driverCtx.DeviceID,
-		DeviceName:   driverCtx.DeviceName,
-		ResourceID:   driverCtx.ResourceID,
-		ResourceType: driverCtx.ResourceType,
-		Config:       driverCtx.Config,
-		DeviceConfig: driverCtx.DeviceConfig,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal input: %w", err)
 	}
 
 	if ctx == nil {
@@ -305,15 +325,16 @@ func (m *DriverManager) ExecuteDriverWithContext(ctx context.Context, id int64, 
 		logger.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "rc", rc)
 	}
 
-	if isReadFunction(function, driverCtx) {
-		logger.Info(
-			"Driver read full output",
+	if isReadFunction(function, driverCtx) && logger.Enabled(logger.DEBUG) {
+		logger.Debug(
+			"Driver read output preview",
 			"driver_id", id,
 			"device_id", driverCtx.DeviceID,
 			"device_name", driverCtx.DeviceName,
 			"resource_id", driverCtx.ResourceID,
 			"function", function,
-			"output", string(output),
+			"output_len", len(output),
+			"output_preview", outputPreview(output, 512),
 		)
 	}
 

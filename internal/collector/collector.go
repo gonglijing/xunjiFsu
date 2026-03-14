@@ -10,6 +10,7 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
@@ -250,7 +251,9 @@ func (c *Collector) collectOnce(task *collectTask) {
 	}
 
 	device := task.device
-	log.Printf("Collecting device %s (ID:%d)...", device.Name, device.ID)
+	if logger.Enabled(logger.DEBUG) {
+		logger.Debug("Collecting device", "device_id", device.ID, "device_name", device.Name)
+	}
 
 	collect, err := c.collectDataFromDriver(task)
 	if err != nil {
@@ -423,7 +426,11 @@ func (c *Collector) upsertTaskLocked(device *models.Device) deviceSyncAction {
 	}
 
 	if exists {
+		oldDriverID := current.deviceDriverID()
 		c.refreshTaskLocked(current, device)
+		if oldDriverID != current.deviceDriverID() {
+			c.pruneUnusedDriverProductKeysLocked()
+		}
 		return deviceSyncActionUpdated
 	}
 
@@ -516,6 +523,7 @@ func (c *Collector) removeTaskLocked(deviceID int64) {
 	}
 	delete(c.tasks, deviceID)
 	clearAlarmStateForDevice(deviceID)
+	c.pruneUnusedDriverProductKeysLocked()
 }
 
 func (c *Collector) pruneMissingTasksLocked(seenDeviceIDs map[int64]struct{}) int {
@@ -599,6 +607,41 @@ func (c *Collector) refreshTaskLocked(task *collectTask, device *models.Device) 
 	if task.index >= 0 {
 		heap.Fix(c.taskHeap, task.index)
 	}
+}
+
+func (t *collectTask) deviceDriverID() int64 {
+	if t == nil || t.device == nil || t.device.DriverID == nil {
+		return 0
+	}
+	return *t.device.DriverID
+}
+
+func (c *Collector) pruneUnusedDriverProductKeysLocked() {
+	if len(c.tasks) == 0 {
+		c.driverIdentityMu.Lock()
+		if len(c.driverProductKeys) > 0 {
+			clear(c.driverProductKeys)
+		}
+		c.driverIdentityMu.Unlock()
+		return
+	}
+
+	active := make(map[int64]struct{}, len(c.tasks))
+	for _, task := range c.tasks {
+		driverID := task.deviceDriverID()
+		if driverID > 0 {
+			active[driverID] = struct{}{}
+		}
+	}
+
+	c.driverIdentityMu.Lock()
+	for driverID := range c.driverProductKeys {
+		if _, ok := active[driverID]; ok {
+			continue
+		}
+		delete(c.driverProductKeys, driverID)
+	}
+	c.driverIdentityMu.Unlock()
 }
 
 func (c *Collector) isTaskCurrentLocked(task *collectTask) bool {

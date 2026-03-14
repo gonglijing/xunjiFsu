@@ -125,6 +125,7 @@ type PreparedExecution struct {
 	ResourceType  string
 	Config        map[string]string
 	DriverContext *DriverContext
+	InputJSON     []byte
 }
 
 func NewPreparedExecution(device *models.Device) *PreparedExecution {
@@ -134,11 +135,14 @@ func NewPreparedExecution(device *models.Device) *PreparedExecution {
 
 	resourceID, resourceType := resolveResource(device)
 	deviceConfig := buildDeviceConfig(device)
+	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
+	inputJSON, _ := marshalDriverInvocationInput(driverCtx)
 	return &PreparedExecution{
 		ResourceID:    resourceID,
 		ResourceType:  resourceType,
 		Config:        deviceConfig,
-		DriverContext: buildDriverContext(device, resourceID, resourceType, deviceConfig),
+		DriverContext: driverCtx,
+		InputJSON:     inputJSON,
 	}
 }
 

@@ -44,13 +44,13 @@ func TestListDeviceRuntimeStatus(t *testing.T) {
 	if status.StorageIntervalSec != 30 {
 		t.Fatalf("storage interval mismatch: got %d want 30", status.StorageIntervalSec)
 	}
-	if status.NextRunAt == nil || !status.NextRunAt.Equal(task.nextRun) {
+	if status.NextRunAt.IsZero() || !status.NextRunAt.Equal(task.nextRun) {
 		t.Fatalf("next run mismatch")
 	}
-	if status.LastRunAt == nil || !status.LastRunAt.Equal(task.lastRun) {
+	if status.LastRunAt.IsZero() || !status.LastRunAt.Equal(task.lastRun) {
 		t.Fatalf("last run mismatch")
 	}
-	if status.LastStoredAt == nil || !status.LastStoredAt.Equal(task.lastStored) {
+	if status.LastStoredAt.IsZero() || !status.LastStoredAt.Equal(task.lastStored) {
 		t.Fatalf("last stored mismatch")
 	}
 	if status.ConsecutiveFailures != 2 {
@@ -62,7 +62,7 @@ func TestListDeviceRuntimeStatus(t *testing.T) {
 	if status.LastErrorKind != "timeout" {
 		t.Fatalf("last error kind mismatch: got %q", status.LastErrorKind)
 	}
-	if status.LastErrorAt == nil || !status.LastErrorAt.Equal(task.lastErrorAt) {
+	if status.LastErrorAt.IsZero() || !status.LastErrorAt.Equal(task.lastErrorAt) {
 		t.Fatalf("last error at mismatch")
 	}
 }

@@ -16,7 +16,7 @@ func (a *XunjiAdapter) Send(data *models.CollectData) error {
 	}
 
 	a.pendingMu.Lock()
-	a.pendingData = appendQueueItemWithCap(a.pendingData, cloneCollectData(data), xunjiPendingDataCap)
+	a.pendingData = appendQueueItemWithCap(a.pendingData, data, xunjiPendingDataCap)
 	a.pendingMu.Unlock()
 
 	signalStructChan(a.dataChan)
@@ -30,7 +30,7 @@ func (a *XunjiAdapter) SendAlarm(alarm *models.AlarmPayload) error {
 	}
 
 	a.alarmMu.Lock()
-	a.pendingAlarms = appendQueueItemWithCap(a.pendingAlarms, cloneAlarmPayload(alarm), xunjiPendingAlarmCap)
+	a.pendingAlarms = appendQueueItemWithCap(a.pendingAlarms, alarm, xunjiPendingAlarmCap)
 	a.alarmMu.Unlock()
 
 	signalStructChan(a.dataChan)
@@ -45,7 +45,7 @@ func (a *XunjiAdapter) flushPendingData() {
 		return
 	}
 	batch := a.pendingData
-	a.pendingData = a.pendingData[:0]
+	a.pendingData = nil
 	a.pendingMu.Unlock()
 
 	body := a.buildBatchRealtimePayload(batch)
@@ -58,6 +58,7 @@ func (a *XunjiAdapter) flushPendingData() {
 		if !a.IsConnected() {
 			a.signalReconnect()
 		}
+		clear(batch)
 		return
 	}
 
@@ -71,7 +72,7 @@ func (a *XunjiAdapter) flushAlarms() error {
 		return nil
 	}
 	batch := a.pendingAlarms
-	a.pendingAlarms = a.pendingAlarms[:0]
+	a.pendingAlarms = nil
 	a.alarmMu.Unlock()
 
 	topic := a.currentAlarmTopic()
@@ -86,6 +87,7 @@ func (a *XunjiAdapter) flushAlarms() error {
 			if !a.IsConnected() {
 				a.signalReconnect()
 			}
+			clear(batch)
 			return err
 		}
 	}

@@ -38,13 +38,18 @@ type NorthboundManager struct {
 	breakers map[string]*circuit.CircuitBreaker
 }
 
+type adapterRuntimeRef struct {
+	name    string
+	adapter adapters.NorthboundAdapter
+}
+
 // DefaultBreakerConfig 默认熔断器配置
 var DefaultBreakerConfig = circuit.Config{
-	FailureThreshold:  5,                // 5次失败后打开熔断
-	FailureWindow:     time.Minute,       // 1分钟窗口
-	SuccessThreshold:  3,                  // 半开状态下需要3次成功
-	RecoveryTimeout:   30 * time.Second,  // 30秒后尝试恢复
-	RequestTimeout:   10 * time.Second,  // 单次请求超时
+	FailureThreshold: 5,                // 5次失败后打开熔断
+	FailureWindow:    time.Minute,      // 1分钟窗口
+	SuccessThreshold: 3,                // 半开状态下需要3次成功
+	RecoveryTimeout:  30 * time.Second, // 30秒后尝试恢复
+	RequestTimeout:   10 * time.Second, // 单次请求超时
 }
 
 // NewNorthboundManager 创建北向管理器（简化版，不再需要 pluginDir）
@@ -238,32 +243,50 @@ func (m *NorthboundManager) HasPending(name string) bool {
 	return false
 }
 
+func appendUniqueMapKeys[T any](dst []string, src map[string]T) []string {
+	for name := range src {
+		exists := false
+		for _, existing := range dst {
+			if existing == name {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			dst = append(dst, name)
+		}
+	}
+	return dst
+}
+
+func (m *NorthboundManager) enabledAdapterRefs() []adapterRuntimeRef {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	refs := make([]adapterRuntimeRef, 0, len(m.adapters))
+	for name, adapter := range m.adapters {
+		if !m.enabled[name] {
+			continue
+		}
+		refs = append(refs, adapterRuntimeRef{
+			name:    name,
+			adapter: adapter,
+		})
+	}
+	return refs
+}
+
 // ListRuntimeNames 返回当前北向运行时所有名称
 func (m *NorthboundManager) ListRuntimeNames() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	seen := make(map[string]struct{})
-	for name := range m.adapters {
-		seen[name] = struct{}{}
-	}
-	for name := range m.intervals {
-		seen[name] = struct{}{}
-	}
-	for name := range m.enabled {
-		seen[name] = struct{}{}
-	}
-	for name := range m.breakers {
-		seen[name] = struct{}{}
-	}
-	for name := range m.selfManaged {
-		seen[name] = struct{}{}
-	}
-
-	names := make([]string, 0, len(seen))
-	for name := range seen {
-		names = append(names, name)
-	}
+	names := make([]string, 0, len(m.adapters)+len(m.intervals)+len(m.enabled)+len(m.breakers)+len(m.selfManaged))
+	names = appendUniqueMapKeys(names, m.adapters)
+	names = appendUniqueMapKeys(names, m.intervals)
+	names = appendUniqueMapKeys(names, m.enabled)
+	names = appendUniqueMapKeys(names, m.breakers)
+	names = appendUniqueMapKeys(names, m.selfManaged)
 	return names
 }
 
@@ -274,56 +297,19 @@ func (m *NorthboundManager) RemoveAdapter(name string) {
 
 // SendData 发送数据到所有启用的北向
 func (m *NorthboundManager) SendData(data *models.CollectData) {
-	m.mu.RLock()
-	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
-	names := make([]string, 0, len(m.adapters))
-	enabled := make(map[string]bool, len(m.adapters))
-
-	for name, adapter := range m.adapters {
-		adapters = append(adapters, adapter)
-		names = append(names, name)
-		enabled[name] = m.enabled[name]
-	}
-	m.mu.RUnlock()
-
-	log.Printf("NorthboundManager.SendData: adapterCount=%d, dataDeviceId=%d, dataDeviceKey=%s",
-		len(adapters), data.DeviceID, data.DeviceKey)
-
-	for i, adapter := range adapters {
-		name := names[i]
-		isEnabled := enabled[name]
-		log.Printf("NorthboundManager.SendData: checking adapter %s, enabled=%v", name, isEnabled)
-		if !isEnabled {
-			continue
-		}
+	for _, ref := range m.enabledAdapterRefs() {
 		// 内置适配器自己管理发送，不需要通过熔断器
-		if err := adapter.Send(data); err != nil {
-			log.Printf("Failed to send data to %s: %v", name, err)
+		if err := ref.adapter.Send(data); err != nil {
+			log.Printf("Failed to send data to %s: %v", ref.name, err)
 		}
 	}
 }
 
 // SendAlarm 发送报警到所有启用的北向
 func (m *NorthboundManager) SendAlarm(alarm *models.AlarmPayload) {
-	m.mu.RLock()
-	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
-	names := make([]string, 0, len(m.adapters))
-	enabled := make(map[string]bool, len(m.adapters))
-
-	for name, adapter := range m.adapters {
-		adapters = append(adapters, adapter)
-		names = append(names, name)
-		enabled[name] = m.enabled[name]
-	}
-	m.mu.RUnlock()
-
-	for i, adapter := range adapters {
-		name := names[i]
-		if !enabled[name] {
-			continue
-		}
-		if err := adapter.SendAlarm(alarm); err != nil {
-			log.Printf("Failed to send alarm to %s: %v", name, err)
+	for _, ref := range m.enabledAdapterRefs() {
+		if err := ref.adapter.SendAlarm(alarm); err != nil {
+			log.Printf("Failed to send alarm to %s: %v", ref.name, err)
 		}
 	}
 }
@@ -334,28 +320,12 @@ func (m *NorthboundManager) PullCommands(limit int) ([]*models.NorthboundCommand
 		limit = 50
 	}
 
-	m.mu.RLock()
-	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
-	names := make([]string, 0, len(m.adapters))
-	enabled := make(map[string]bool, len(m.adapters))
-
-	for name, adapter := range m.adapters {
-		adapters = append(adapters, adapter)
-		names = append(names, name)
-		enabled[name] = m.enabled[name]
-	}
-	m.mu.RUnlock()
-
+	refs := m.enabledAdapterRefs()
 	commands := make([]*models.NorthboundCommand, 0, limit)
 
-	for idx, adapter := range adapters {
-		name := names[idx]
-		if !enabled[name] {
-			continue
-		}
-
+	for _, ref := range refs {
 		// 检查适配器是否支持命令下发
-		cmdAdapter, ok := adapter.(interface{ PullCommands(int) ([]*models.NorthboundCommand, error) })
+		cmdAdapter, ok := ref.adapter.(adapters.NorthboundAdapterWithCommands)
 		if !ok {
 			continue
 		}
@@ -367,7 +337,7 @@ func (m *NorthboundManager) PullCommands(limit int) ([]*models.NorthboundCommand
 
 		pulled, err := cmdAdapter.PullCommands(remaining)
 		if err != nil {
-			log.Printf("Failed to pull commands from %s: %v", name, err)
+			log.Printf("Failed to pull commands from %s: %v", ref.name, err)
 			continue
 		}
 		if len(pulled) == 0 {
@@ -385,32 +355,15 @@ func (m *NorthboundManager) ReportCommandResult(result *models.NorthboundCommand
 		return
 	}
 
-	m.mu.RLock()
-	adapters := make([]adapters.NorthboundAdapter, 0, len(m.adapters))
-	names := make([]string, 0, len(m.adapters))
-	enabled := make(map[string]bool, len(m.adapters))
-
-	for name, adapter := range m.adapters {
-		adapters = append(adapters, adapter)
-		names = append(names, name)
-		enabled[name] = m.enabled[name]
-	}
-	m.mu.RUnlock()
-
-	for idx, adapter := range adapters {
-		name := names[idx]
-		if !enabled[name] {
-			continue
-		}
-
+	for _, ref := range m.enabledAdapterRefs() {
 		// 检查适配器是否支持命令下发
-		cmdAdapter, ok := adapter.(interface{ ReportCommandResult(*models.NorthboundCommandResult) error })
+		cmdAdapter, ok := ref.adapter.(adapters.NorthboundAdapterWithCommands)
 		if !ok {
 			continue
 		}
 
 		if err := cmdAdapter.ReportCommandResult(result); err != nil {
-			log.Printf("Failed to report command result to %s: %v", name, err)
+			log.Printf("Failed to report command result to %s: %v", ref.name, err)
 		}
 	}
 }
