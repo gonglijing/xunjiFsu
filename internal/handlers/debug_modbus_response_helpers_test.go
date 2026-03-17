@@ -2,6 +2,25 @@ package handlers
 
 import "testing"
 
+func TestParseModbusException(t *testing.T) {
+	exceptionCode, ok := parseModbusException(0x83, []byte{0x83, 0x02})
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+	if exceptionCode == nil || *exceptionCode != 0x02 {
+		t.Fatalf("exceptionCode = %v, want 2", exceptionCode)
+	}
+}
+
+func TestValidateModbusFunctionCode(t *testing.T) {
+	if err := validateModbusFunctionCode(0x03, 0x03); err != nil {
+		t.Fatalf("validateModbusFunctionCode() error = %v", err)
+	}
+	if err := validateModbusFunctionCode(0x06, 0x03); err == nil {
+		t.Fatal("validateModbusFunctionCode() expected error")
+	}
+}
+
 func TestParseModbusRegisterPayload(t *testing.T) {
 	quantity, registers, err := parseModbusRegisterPayload([]byte{0x03, 0x04, 0x00, 0x11, 0x00, 0x22}, 1, 2)
 	if err != nil {
@@ -32,5 +51,27 @@ func TestParseModbusWritePayload(t *testing.T) {
 	}
 	if value == nil || *value != 0x64 {
 		t.Fatalf("value = %v, want 100", value)
+	}
+}
+
+func TestResolveModbusRegisterValueRange(t *testing.T) {
+	byteCount, valuesEnd, err := resolveModbusRegisterValueRange([]byte{0x03, 0x04, 0x00, 0x11, 0x00, 0x22}, 1, 2)
+	if err != nil {
+		t.Fatalf("resolveModbusRegisterValueRange() error = %v", err)
+	}
+	if byteCount != 4 {
+		t.Fatalf("byteCount = %d, want 4", byteCount)
+	}
+	if valuesEnd != 6 {
+		t.Fatalf("valuesEnd = %d, want 6", valuesEnd)
+	}
+}
+
+func TestHasModbusWritePayload(t *testing.T) {
+	if !hasModbusWritePayload([]byte{0x06, 0x00, 0x10, 0x00, 0x64}, 1) {
+		t.Fatal("hasModbusWritePayload() = false, want true")
+	}
+	if hasModbusWritePayload([]byte{0x06, 0x00, 0x10}, 1) {
+		t.Fatal("hasModbusWritePayload() = true, want false")
 	}
 }

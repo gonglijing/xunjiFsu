@@ -21,22 +21,14 @@ func validateModbusFunctionCode(functionCode, expected int) error {
 }
 
 func parseModbusRegisterPayload(payload []byte, byteCountOffset, valuesOffset int) (*int, []int, error) {
-	if len(payload) <= byteCountOffset {
-		return nil, nil, fmt.Errorf("invalid byte count: 0")
-	}
-
-	byteCount := int(payload[byteCountOffset])
-	expectedLen := valuesOffset + byteCount
-	if expectedLen > len(payload) {
-		return nil, nil, fmt.Errorf("invalid byte count: %d", byteCount)
-	}
-	if byteCount%2 != 0 {
-		return nil, nil, fmt.Errorf("invalid register byte count: %d", byteCount)
+	byteCount, valuesEnd, err := resolveModbusRegisterValueRange(payload, byteCountOffset, valuesOffset)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	quantity := byteCount / 2
 	registers := make([]int, 0, quantity)
-	for i := valuesOffset; i < expectedLen; i += 2 {
+	for i := valuesOffset; i < valuesEnd; i += 2 {
 		value := int(binary.BigEndian.Uint16(payload[i : i+2]))
 		registers = append(registers, value)
 	}
@@ -45,11 +37,32 @@ func parseModbusRegisterPayload(payload []byte, byteCountOffset, valuesOffset in
 }
 
 func parseModbusWritePayload(payload []byte, offset, reportedLen int) (*int, *int, error) {
-	if len(payload) < offset+4 {
+	if !hasModbusWritePayload(payload, offset) {
 		return nil, nil, fmt.Errorf("write response too short: %d", reportedLen)
 	}
 
 	address := int(binary.BigEndian.Uint16(payload[offset : offset+2]))
 	value := int(binary.BigEndian.Uint16(payload[offset+2 : offset+4]))
 	return &address, &value, nil
+}
+
+func resolveModbusRegisterValueRange(payload []byte, byteCountOffset, valuesOffset int) (int, int, error) {
+	if len(payload) <= byteCountOffset {
+		return 0, 0, fmt.Errorf("invalid byte count: 0")
+	}
+
+	byteCount := int(payload[byteCountOffset])
+	valuesEnd := valuesOffset + byteCount
+	if valuesEnd > len(payload) {
+		return 0, 0, fmt.Errorf("invalid byte count: %d", byteCount)
+	}
+	if byteCount%2 != 0 {
+		return 0, 0, fmt.Errorf("invalid register byte count: %d", byteCount)
+	}
+
+	return byteCount, valuesEnd, nil
+}
+
+func hasModbusWritePayload(payload []byte, offset int) bool {
+	return len(payload) >= offset+4
 }
