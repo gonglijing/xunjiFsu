@@ -1,8 +1,12 @@
 package database
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func setupDeviceTestDB(t *testing.T) {
@@ -141,5 +145,93 @@ func TestInitDeviceTable_CleansLegacyColumns(t *testing.T) {
 	}
 	if device.Parity != "E" || device.DeviceAddress != "2" {
 		t.Fatalf("unexpected device protocol fields: %+v", device)
+	}
+}
+
+type stubDeviceScanner struct {
+	values []any
+	err    error
+}
+
+func (s stubDeviceScanner) Scan(dest ...any) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	for i := range dest {
+		switch out := dest[i].(type) {
+		case *int64:
+			*out = s.values[i].(int64)
+		case *string:
+			*out = s.values[i].(string)
+		case *int:
+			*out = s.values[i].(int)
+		case **int64:
+			if s.values[i] == nil {
+				*out = nil
+				continue
+			}
+			value := s.values[i].(int64)
+			*out = &value
+		case *time.Time:
+			*out = s.values[i].(time.Time)
+		}
+	}
+
+	return nil
+}
+
+func TestScanDevice(t *testing.T) {
+	now := time.Now()
+	driverID := int64(8)
+	resourceID := int64(5)
+	device := &models.Device{}
+	scanner := stubDeviceScanner{
+		values: []any{
+			int64(1), "d1", "desc", "pk", "dk", "modbus_tcp", "/dev/ttyUSB0",
+			9600, 8, 1, "N", "127.0.0.1", 502, "2", 5000, 300, 1000,
+			driverID, 1, resourceID, now, now,
+		},
+	}
+
+	err := scanDevice(scanner, device)
+	if err != nil {
+		t.Fatalf("scanDevice returned error: %v", err)
+	}
+	if device.ID != 1 || device.Name != "d1" || device.DriverType != "modbus_tcp" {
+		t.Fatalf("unexpected device core fields: %+v", device)
+	}
+	if device.DriverID == nil || *device.DriverID != driverID {
+		t.Fatalf("unexpected driver id: %+v", device.DriverID)
+	}
+	if device.ResourceID == nil || *device.ResourceID != resourceID {
+		t.Fatalf("unexpected resource id: %+v", device.ResourceID)
+	}
+}
+
+func TestScanDevice_AllowsNilBindings(t *testing.T) {
+	now := time.Now()
+	device := &models.Device{}
+	scanner := stubDeviceScanner{
+		values: []any{
+			int64(2), "d2", "", "", "", "modbus_rtu", "/dev/ttyUSB1",
+			19200, 7, 2, "E", "", 0, "", 2000, 600, 1500,
+			nil, 0, nil, now, now,
+		},
+	}
+
+	err := scanDevice(scanner, device)
+	if err != nil {
+		t.Fatalf("scanDevice returned error: %v", err)
+	}
+	if device.DriverID != nil || device.ResourceID != nil {
+		t.Fatalf("expected nil bindings, got driver_id=%v resource_id=%v", device.DriverID, device.ResourceID)
+	}
+}
+
+func TestScanDevice_Error(t *testing.T) {
+	err := scanDevice(stubDeviceScanner{err: errors.New("scan failed")}, &models.Device{})
+	if err == nil {
+		t.Fatal("expected scanDevice error")
 	}
 }

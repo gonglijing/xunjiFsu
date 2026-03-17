@@ -7,6 +7,9 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+const selectDeviceFields = `SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity,
+	ip_address, port_num, device_address, collect_interval, storage_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at FROM devices`
+
 // InitDeviceTable 初始化设备表
 func InitDeviceTable() error {
 	// 只添加缺失的列
@@ -150,53 +153,39 @@ func CreateDevice(device *models.Device) (int64, error) {
 
 // GetDeviceByID 根据ID获取设备
 func GetDeviceByID(id int64) (*models.Device, error) {
-	device := &models.Device{}
-	err := ParamDB.QueryRow(
-		`SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
-			ip_address, port_num, device_address, collect_interval, storage_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at 
-		FROM devices WHERE id = ?`,
-		id,
-	).Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort, &device.BaudRate,
-		&device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
-		&device.DeviceAddress, &device.CollectInterval, &device.StorageInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
-		&device.CreatedAt, &device.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return device, nil
+	return loadDevice(selectDeviceFields+" WHERE id = ?", id)
 }
 
 // GetDeviceByIdentity 按 product_key/device_key 获取设备
 func GetDeviceByIdentity(productKey, deviceKey string) (*models.Device, error) {
+	return loadDevice(selectDeviceFields+" WHERE product_key = ? AND device_key = ? LIMIT 1", productKey, deviceKey)
+}
+
+// GetAllDevices 获取所有设备
+func GetAllDevices() ([]*models.Device, error) {
+	return listDevices(selectDeviceFields+" ORDER BY id", nil)
+}
+
+type deviceScanner interface {
+	Scan(dest ...any) error
+}
+
+func loadDevice(query string, args ...any) (*models.Device, error) {
 	device := &models.Device{}
-	err := ParamDB.QueryRow(
-		`SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
-			ip_address, port_num, device_address, collect_interval, storage_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at 
-		FROM devices WHERE product_key = ? AND device_key = ? LIMIT 1`,
-		productKey, deviceKey,
-	).Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort, &device.BaudRate,
-		&device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
-		&device.DeviceAddress, &device.CollectInterval, &device.StorageInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
-		&device.CreatedAt, &device.UpdatedAt)
+	err := scanDevice(ParamDB.QueryRow(query, args...), device)
 	if err != nil {
 		return nil, err
 	}
 	return device, nil
 }
 
-// GetAllDevices 获取所有设备
-func GetAllDevices() ([]*models.Device, error) {
+func listDevices(query string, args []any) ([]*models.Device, error) {
 	return queryList[*models.Device](ParamDB,
-		`SELECT id, name, description, product_key, device_key, driver_type, serial_port, baud_rate, data_bits, stop_bits, parity, 
-			ip_address, port_num, device_address, collect_interval, storage_interval, timeout, driver_id, enabled, resource_id, created_at, updated_at 
-		FROM devices ORDER BY id`,
-		nil,
+		query,
+		args,
 		func(rows *sql.Rows) (*models.Device, error) {
 			device := &models.Device{}
-			if err := rows.Scan(&device.ID, &device.Name, &device.Description, &device.ProductKey, &device.DeviceKey, &device.DriverType, &device.SerialPort,
-				&device.BaudRate, &device.DataBits, &device.StopBits, &device.Parity, &device.IPAddress, &device.PortNum,
-				&device.DeviceAddress, &device.CollectInterval, &device.StorageInterval, &device.Timeout, &device.DriverID, &device.Enabled, &device.ResourceID,
-				&device.CreatedAt, &device.UpdatedAt); err != nil {
+			if err := scanDevice(rows, device); err != nil {
 				return nil, err
 			}
 			return device, nil
@@ -204,8 +193,39 @@ func GetAllDevices() ([]*models.Device, error) {
 	)
 }
 
+func scanDevice(scanner deviceScanner, device *models.Device) error {
+	return scanner.Scan(
+		&device.ID,
+		&device.Name,
+		&device.Description,
+		&device.ProductKey,
+		&device.DeviceKey,
+		&device.DriverType,
+		&device.SerialPort,
+		&device.BaudRate,
+		&device.DataBits,
+		&device.StopBits,
+		&device.Parity,
+		&device.IPAddress,
+		&device.PortNum,
+		&device.DeviceAddress,
+		&device.CollectInterval,
+		&device.StorageInterval,
+		&device.Timeout,
+		&device.DriverID,
+		&device.Enabled,
+		&device.ResourceID,
+		&device.CreatedAt,
+		&device.UpdatedAt,
+	)
+}
+
 // UpdateDevice 更新设备
 func UpdateDevice(device *models.Device) error {
+	return updateDeviceByID(device.ID, device)
+}
+
+func updateDeviceByID(id int64, device *models.Device) error {
 	_, err := ParamDB.Exec(
 		`UPDATE devices SET name = ?, description = ?, product_key = ?, device_key = ?, driver_type = ?, serial_port = ?, baud_rate = ?, 
 			data_bits = ?, stop_bits = ?, parity = ?, ip_address = ?, port_num = ?, 
@@ -214,7 +234,7 @@ func UpdateDevice(device *models.Device) error {
 		device.Name, device.Description, device.ProductKey, device.DeviceKey, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
 		device.StopBits, device.Parity, device.IPAddress, device.PortNum,
 		device.DeviceAddress, device.CollectInterval, device.StorageInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID,
-		device.ID,
+		id,
 	)
 	return err
 }
@@ -245,17 +265,7 @@ func UpdateDeviceProductKey(id int64, productKey string) error {
 
 // UpdateDeviceWithID 根据ID更新设备信息（用于API）
 func UpdateDeviceWithID(id int64, device *models.Device) error {
-	_, err := ParamDB.Exec(
-		`UPDATE devices SET name = ?, description = ?, product_key = ?, device_key = ?, driver_type = ?, serial_port = ?, baud_rate = ?, 
-			data_bits = ?, stop_bits = ?, parity = ?, ip_address = ?, port_num = ?, 
-			device_address = ?, collect_interval = ?, storage_interval = ?, timeout = ?, driver_id = ?, enabled = ?, resource_id = ?, 
-			updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		device.Name, device.Description, device.ProductKey, device.DeviceKey, device.DriverType, device.SerialPort, device.BaudRate, device.DataBits,
-		device.StopBits, device.Parity, device.IPAddress, device.PortNum,
-		device.DeviceAddress, device.CollectInterval, device.StorageInterval, device.Timeout, device.DriverID, device.Enabled, device.ResourceID,
-		id,
-	)
-	return err
+	return updateDeviceByID(id, device)
 }
 
 // UpdateDeviceDriverID 更新设备驱动ID
