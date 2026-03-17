@@ -20,6 +20,8 @@ var (
 	dataCacheCleanupMinInterval time.Duration = 2 * time.Second
 )
 
+const selectDataCacheFields = `SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache`
+
 // SaveDataCache 保存实时数据缓存（内存）
 func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType string) error {
 	_, err := DataDB.Exec(
@@ -121,30 +123,35 @@ func enforceDataCacheLimit() {
 
 // GetDataCacheByDeviceID 根据设备ID获取数据缓存（从内存）
 func GetDataCacheByDeviceID(deviceID int64) ([]*models.DataCache, error) {
-	return queryList[*models.DataCache](DataDB,
-		"SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache WHERE device_id = ?",
-		[]any{deviceID},
-		func(rows *sql.Rows) (*models.DataCache, error) {
-			item := &models.DataCache{}
-			if err := rows.Scan(&item.ID, &item.DeviceID, &item.FieldName, &item.Value, &item.ValueType, &item.CollectedAt); err != nil {
-				return nil, err
-			}
-			return item, nil
-		},
-	)
+	return listDataCache(selectDataCacheFields+" WHERE device_id = ?", []any{deviceID})
 }
 
 // GetAllDataCache 获取所有数据缓存（从内存）
 func GetAllDataCache() ([]*models.DataCache, error) {
-	return queryList[*models.DataCache](DataDB,
-		"SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache",
-		nil,
-		func(rows *sql.Rows) (*models.DataCache, error) {
-			item := &models.DataCache{}
-			if err := rows.Scan(&item.ID, &item.DeviceID, &item.FieldName, &item.Value, &item.ValueType, &item.CollectedAt); err != nil {
-				return nil, err
-			}
-			return item, nil
-		},
+	return listDataCache(selectDataCacheFields, nil)
+}
+
+type dataCacheScanner interface {
+	Scan(dest ...any) error
+}
+
+func listDataCache(query string, args []any) ([]*models.DataCache, error) {
+	return queryList[*models.DataCache](DataDB, query, args, func(rows *sql.Rows) (*models.DataCache, error) {
+		item := &models.DataCache{}
+		if err := scanDataCache(rows, item); err != nil {
+			return nil, err
+		}
+		return item, nil
+	})
+}
+
+func scanDataCache(scanner dataCacheScanner, item *models.DataCache) error {
+	return scanner.Scan(
+		&item.ID,
+		&item.DeviceID,
+		&item.FieldName,
+		&item.Value,
+		&item.ValueType,
+		&item.CollectedAt,
 	)
 }
