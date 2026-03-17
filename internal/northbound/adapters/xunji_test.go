@@ -34,7 +34,7 @@ func TestRenderXunjiTopic(t *testing.T) {
 	}
 }
 
-func TestResolveXunjiSubTokenModes(t *testing.T) {
+func TestBuildXunjiSubTokenModes(t *testing.T) {
 	data := &models.CollectData{
 		DeviceID:   1,
 		DeviceName: "dev-name",
@@ -42,13 +42,13 @@ func TestResolveXunjiSubTokenModes(t *testing.T) {
 		DeviceKey:  "dev-key",
 	}
 
-	if got := resolveXunjiSubToken(data, ""); got != "dev-name" {
+	if got := buildXunjiSubToken(data, ""); got != "dev-name" {
 		t.Fatalf("default token=%q, want=dev-name", got)
 	}
-	if got := resolveXunjiSubToken(data, "device_key"); got != "dev-key" {
+	if got := buildXunjiSubToken(data, "device_key"); got != "dev-key" {
 		t.Fatalf("device_key token=%q, want=dev-key", got)
 	}
-	if got := resolveXunjiSubToken(data, "product_devicekey"); got != "prod-a_dev-key" {
+	if got := buildXunjiSubToken(data, "product_devicekey"); got != "prod-a_dev-key" {
 		t.Fatalf("product_devicekey token=%q, want=prod-a_dev-key", got)
 	}
 }

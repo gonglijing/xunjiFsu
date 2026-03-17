@@ -139,7 +139,7 @@ func (a *XunjiAdapter) buildBatchRealtimePayload(batch []*models.CollectData) []
 		if data == nil {
 			continue
 		}
-		token := resolveXunjiSubToken(data, mode)
+		token := buildXunjiSubToken(data, mode)
 		ts := data.Timestamp.UnixMilli()
 		if ts <= 0 {
 			ts = time.Now().UnixMilli()

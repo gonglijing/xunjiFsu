@@ -56,7 +56,7 @@ func sanitizeXunjiTopicSegment(raw string) string {
 	return name
 }
 
-func resolveXunjiSubToken(data *models.CollectData, mode string) string {
+func buildXunjiSubToken(data *models.CollectData, mode string) string {
 	if data == nil {
 		return defaultDeviceToken(0)
 	}
