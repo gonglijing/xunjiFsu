@@ -2,8 +2,12 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func setupAlarmLogsTestDB(t *testing.T) {
@@ -154,5 +158,100 @@ func TestClearAlarmLogs(t *testing.T) {
 	}
 	if got := countAlarmLogs(t); got != 0 {
 		t.Fatalf("expected 0 logs after clear, got %d", got)
+	}
+}
+
+type stubAlarmLogScanner struct {
+	values []any
+	err    error
+}
+
+func (s stubAlarmLogScanner) Scan(dest ...any) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	for i := range dest {
+		switch out := dest[i].(type) {
+		case *int64:
+			*out = s.values[i].(int64)
+		case **int64:
+			if s.values[i] == nil {
+				*out = nil
+				continue
+			}
+			value := s.values[i].(int64)
+			*out = &value
+		case *string:
+			*out = s.values[i].(string)
+		case *float64:
+			*out = s.values[i].(float64)
+		case *int:
+			*out = s.values[i].(int)
+		case *time.Time:
+			*out = s.values[i].(time.Time)
+		case **time.Time:
+			if s.values[i] == nil {
+				*out = nil
+				continue
+			}
+			value := s.values[i].(time.Time)
+			*out = &value
+		}
+	}
+
+	return nil
+}
+
+func TestScanAlarmLog(t *testing.T) {
+	now := time.Now()
+	thresholdID := int64(7)
+	acknowledgedAt := now.Add(time.Minute)
+	log := &models.AlarmLog{}
+	scanner := stubAlarmLogScanner{
+		values: []any{
+			int64(1), int64(2), thresholdID, "temperature", 101.1, 99.9, ">", "high", "too hot",
+			now, 1, "admin", acknowledgedAt,
+		},
+	}
+
+	err := scanAlarmLog(scanner, log)
+	if err != nil {
+		t.Fatalf("scanAlarmLog returned error: %v", err)
+	}
+	if log.ID != 1 || log.DeviceID != 2 || log.FieldName != "temperature" {
+		t.Fatalf("unexpected alarm log core fields: %+v", log)
+	}
+	if log.ThresholdID == nil || *log.ThresholdID != thresholdID {
+		t.Fatalf("unexpected threshold id: %+v", log.ThresholdID)
+	}
+	if log.AcknowledgedAt == nil || !log.AcknowledgedAt.Equal(acknowledgedAt) {
+		t.Fatalf("unexpected acknowledged_at: %+v", log.AcknowledgedAt)
+	}
+}
+
+func TestScanAlarmLog_AllowsNilOptionalFields(t *testing.T) {
+	now := time.Now()
+	log := &models.AlarmLog{}
+	scanner := stubAlarmLogScanner{
+		values: []any{
+			int64(1), int64(2), nil, "temperature", 101.1, 99.9, ">", "high", "too hot",
+			now, 0, "", nil,
+		},
+	}
+
+	err := scanAlarmLog(scanner, log)
+	if err != nil {
+		t.Fatalf("scanAlarmLog returned error: %v", err)
+	}
+	if log.ThresholdID != nil || log.AcknowledgedAt != nil {
+		t.Fatalf("expected nil optional fields, got threshold_id=%v acknowledged_at=%v", log.ThresholdID, log.AcknowledgedAt)
+	}
+}
+
+func TestScanAlarmLog_Error(t *testing.T) {
+	err := scanAlarmLog(stubAlarmLogScanner{err: errors.New("scan failed")}, &models.AlarmLog{})
+	if err == nil {
+		t.Fatal("expected scanAlarmLog error")
 	}
 }
