@@ -185,7 +185,7 @@ type DriverRuntime struct {
 	ExportedFunctions []string  `json:"exported_functions,omitempty"`
 }
 
-func runtimeFromDriver(driver *WasmDriver) *DriverRuntime {
+func buildDriverRuntime(driver *WasmDriver) *DriverRuntime {
 	if driver == nil {
 		return nil
 	}
@@ -203,13 +203,13 @@ func (m *DriverManager) GetRuntime(id int64) (*DriverRuntime, error) {
 	if !ok {
 		return nil, ErrDriverNotLoaded
 	}
-	return runtimeFromDriver(d), nil
+	return buildDriverRuntime(d), nil
 }
 
 func (m *DriverManager) ListRuntimes() []*DriverRuntime {
 	runtimes := make([]*DriverRuntime, 0, len(m.drivers))
 	for _, d := range m.drivers {
-		if rt := runtimeFromDriver(d); rt != nil {
+		if rt := buildDriverRuntime(d); rt != nil {
 			runtimes = append(runtimes, rt)
 		}
 	}
