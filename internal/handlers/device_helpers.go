@@ -232,14 +232,14 @@ func resolveSingleWriteCandidate(params map[string]interface{}) (field string, v
 		return "", "", nil
 	}
 
-	if props, ok := extractWriteProperties(params); ok {
+	if props, ok := resolveWriteProperties(params); ok {
 		return pickSingleWriteValue(props)
 	}
 
 	return pickSingleWriteValue(params)
 }
 
-func extractWriteProperties(params map[string]interface{}) (map[string]interface{}, bool) {
+func resolveWriteProperties(params map[string]interface{}) (map[string]interface{}, bool) {
 	if properties, ok := resolveMapValue(params["properties"]); ok {
 		return properties, true
 	}

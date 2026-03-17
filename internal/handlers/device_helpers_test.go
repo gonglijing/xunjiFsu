@@ -88,6 +88,26 @@ func TestNormalizeWriteParams_Ambiguous(t *testing.T) {
 	}
 }
 
+func TestResolveWriteProperties_FromSubDeviceList(t *testing.T) {
+	params := map[string]interface{}{
+		"subDevices": []interface{}{
+			map[string]interface{}{
+				"properties": map[string]interface{}{
+					"temperature": 25,
+				},
+			},
+		},
+	}
+
+	properties, ok := resolveWriteProperties(params)
+	if !ok {
+		t.Fatal("resolveWriteProperties() ok=false, want=true")
+	}
+	if got := properties["temperature"]; got != 25 {
+		t.Fatalf("temperature = %#v, want 25", got)
+	}
+}
+
 func TestEnrichExecuteIdentity_UsesDeviceIdentity(t *testing.T) {
 	config := map[string]string{}
 	device := &models.Device{ProductKey: "dev-pk", DeviceKey: "dev-dk"}
