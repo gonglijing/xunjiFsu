@@ -8,6 +8,8 @@ import (
 	"strconv"
 )
 
+const jsonMediaType = "application/json"
+
 var stringOnlyFormFields = map[string]struct{}{
 	"device_address": {},
 	"name":           {},
@@ -58,15 +60,16 @@ func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 
 // WriteSuccess 成功响应
 func WriteSuccess(w http.ResponseWriter, data interface{}) {
-	WriteJSON(w, http.StatusOK, APIResponse{
-		Success: true,
-		Data:    data,
-	})
+	writeSuccessStatus(w, http.StatusOK, data)
 }
 
 // WriteCreated 创建成功响应
 func WriteCreated(w http.ResponseWriter, data interface{}) {
-	WriteJSON(w, http.StatusCreated, APIResponse{
+	writeSuccessStatus(w, http.StatusCreated, data)
+}
+
+func writeSuccessStatus(w http.ResponseWriter, status int, data interface{}) {
+	WriteJSON(w, status, APIResponse{
 		Success: true,
 		Data:    data,
 	})
@@ -138,29 +141,58 @@ func WriteServerErrorCode(w http.ResponseWriter, code, message string) {
 
 // ParseRequest 解析请求 JSON 或表单数据
 func ParseRequest(r *http.Request, v interface{}) error {
-	contentType := r.Header.Get("Content-Type")
-	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil && mediaType == "application/json" {
-		return json.NewDecoder(r.Body).Decode(v)
+	if isJSONRequest(r.Header.Get("Content-Type")) {
+		return decodeJSONRequest(r, v)
 	}
 
-	if err := r.ParseForm(); err != nil {
+	return decodeFormRequest(r, v)
+}
+
+func isJSONRequest(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	return err == nil && mediaType == jsonMediaType
+}
+
+func decodeJSONRequest(r *http.Request, v interface{}) error {
+	return json.NewDecoder(r.Body).Decode(v)
+}
+
+func decodeFormRequest(r *http.Request, v interface{}) error {
+	formData, err := formRequestData(r)
+	if err != nil {
 		return err
 	}
-
-	formData := make(map[string]interface{})
-	for key, values := range r.Form {
-		if len(values) > 0 {
-			formData[key] = parseFormValue(key, values[0])
-		}
-	}
-
-	applyFormDefaults(formData)
 
 	jsonData, err := json.Marshal(formData)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(jsonData, v)
+}
+
+func formRequestData(r *http.Request) (map[string]interface{}, error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, err
+	}
+
+	formData := make(map[string]interface{}, len(r.Form))
+	for key, values := range r.Form {
+		value, ok := firstFormValue(values)
+		if !ok {
+			continue
+		}
+		formData[key] = parseFormValue(key, value)
+	}
+
+	applyFormDefaults(formData)
+	return formData, nil
+}
+
+func firstFormValue(values []string) (string, bool) {
+	if len(values) == 0 {
+		return "", false
+	}
+	return values[0], true
 }
 
 // ParseID 从 URL 参数解析 ID
@@ -215,16 +247,20 @@ func parseFormValue(key, value string) interface{} {
 		return value
 	}
 
+	return parseTypedFormValue(value)
+}
+
+func parseTypedFormValue(value string) interface{} {
 	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
 		return intVal
 	}
 	if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
 		return floatVal
 	}
-	if value == "1" || value == "true" {
+	switch value {
+	case "true":
 		return true
-	}
-	if value == "0" || value == "false" {
+	case "false":
 		return false
 	}
 

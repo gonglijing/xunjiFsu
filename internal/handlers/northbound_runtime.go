@@ -8,6 +8,7 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/northbound"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 )
 
@@ -29,14 +30,8 @@ type northboundStatusItem struct {
 
 // ToggleNorthboundEnable 切换北向使能状态
 func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	config, ok := loadNorthboundConfigOrWriteNotFound(w, r)
 	if !ok {
-		return
-	}
-
-	config, err := database.GetNorthboundConfigByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 
@@ -46,14 +41,14 @@ func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request)
 		nextState = 1
 	}
 
-	if err := database.UpdateNorthboundEnabled(id, nextState); err != nil {
+	if err := database.UpdateNorthboundEnabled(config.ID, nextState); err != nil {
 		writeServerErrorWithLog(w, apiErrToggleNorthboundFailed, err)
 		return
 	}
 
 	config.Enabled = nextState
 	if err := h.rebuildNorthboundRuntime(config); err != nil {
-		_ = database.UpdateNorthboundEnabled(id, prevState)
+		_ = database.UpdateNorthboundEnabled(config.ID, prevState)
 		config.Enabled = prevState
 		_ = h.rebuildNorthboundRuntime(config)
 		WriteBadRequestCode(w, apiErrNorthboundInitializeFailed.Code, apiErrNorthboundInitializeFailed.Message+": "+err.Error())
@@ -67,14 +62,8 @@ func (h *Handler) ToggleNorthboundEnable(w http.ResponseWriter, r *http.Request)
 
 // ReloadNorthboundConfig 重载单个北向运行时
 func (h *Handler) ReloadNorthboundConfig(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	config, ok := loadNorthboundConfigOrWriteNotFound(w, r)
 	if !ok {
-		return
-	}
-
-	config, err := database.GetNorthboundConfigByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 
@@ -88,14 +77,8 @@ func (h *Handler) ReloadNorthboundConfig(w http.ResponseWriter, r *http.Request)
 
 // SyncNorthboundDevices 触发北向设备同步（PandaX）
 func (h *Handler) SyncNorthboundDevices(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	config, ok := loadNorthboundConfigOrWriteNotFound(w, r)
 	if !ok {
-		return
-	}
-
-	config, err := database.GetNorthboundConfigByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
 		return
 	}
 
@@ -120,15 +103,9 @@ func (h *Handler) syncNorthboundDevices(config *models.NorthboundConfig) error {
 		return fmt.Errorf("northbound is disabled")
 	}
 
-	adapter, err := h.northboundMgr.GetAdapter(config.Name)
+	adapter, err := h.runtimeAdapterForConfig(config)
 	if err != nil {
-		if err := h.rebuildNorthboundRuntime(config); err != nil {
-			return fmt.Errorf("rebuild runtime failed: %w", err)
-		}
-		adapter, err = h.northboundMgr.GetAdapter(config.Name)
-		if err != nil {
-			return fmt.Errorf("get adapter failed: %w", err)
-		}
+		return err
 	}
 
 	deviceSyncAdapter, ok := adapter.(adapters.NorthboundAdapterWithDeviceSync)
@@ -150,6 +127,45 @@ func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	configByName := northboundConfigsByName(configs)
+	names := listNorthboundStatusNames(configByName, h.northboundMgr.ListRuntimeNames())
+	items := buildNorthboundStatusItems(configByName, names, h.northboundMgr)
+
+	WriteSuccess(w, items)
+}
+
+func loadNorthboundConfigOrWriteNotFound(w http.ResponseWriter, r *http.Request) (*models.NorthboundConfig, bool) {
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
+		return nil, false
+	}
+
+	config, err := database.GetNorthboundConfigByID(id)
+	if err != nil {
+		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
+		return nil, false
+	}
+	return config, true
+}
+
+func (h *Handler) runtimeAdapterForConfig(config *models.NorthboundConfig) (adapters.NorthboundAdapter, error) {
+	adapter, err := h.northboundMgr.GetAdapter(config.Name)
+	if err == nil {
+		return adapter, nil
+	}
+
+	if rebuildErr := h.rebuildNorthboundRuntime(config); rebuildErr != nil {
+		return nil, fmt.Errorf("rebuild runtime failed: %w", rebuildErr)
+	}
+
+	adapter, err = h.northboundMgr.GetAdapter(config.Name)
+	if err != nil {
+		return nil, fmt.Errorf("get adapter failed: %w", err)
+	}
+	return adapter, nil
+}
+
+func northboundConfigsByName(configs []*models.NorthboundConfig) map[string]*models.NorthboundConfig {
 	configByName := make(map[string]*models.NorthboundConfig, len(configs))
 	for _, cfg := range configs {
 		if cfg == nil {
@@ -161,12 +177,15 @@ func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		configByName[name] = cfg
 	}
+	return configByName
+}
 
-	names := make([]string, 0, len(configByName)+8)
+func listNorthboundStatusNames(configByName map[string]*models.NorthboundConfig, runtimeNames []string) []string {
+	names := make([]string, 0, len(configByName)+len(runtimeNames))
 	for name := range configByName {
 		names = append(names, name)
 	}
-	for _, runtimeName := range h.northboundMgr.ListRuntimeNames() {
+	for _, runtimeName := range runtimeNames {
 		name := normalizeNorthboundName(runtimeName)
 		if name == "" {
 			continue
@@ -174,38 +193,41 @@ func (h *Handler) GetNorthboundStatus(w http.ResponseWriter, r *http.Request) {
 		if _, exists := configByName[name]; exists {
 			continue
 		}
-		configByName[name] = nil
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	return names
+}
 
+func buildNorthboundStatusItems(configByName map[string]*models.NorthboundConfig, names []string, mgr *northbound.NorthboundManager) []northboundStatusItem {
 	items := make([]northboundStatusItem, 0, len(names))
 	for _, name := range names {
-		cfg := configByName[name]
-		runtimeStatus := h.northboundMgr.RuntimeStatus(name)
-		item := northboundStatusItem{
-			Name:           name,
-			Configured:     cfg != nil,
-			Registered:     runtimeStatus.Registered,
-			Enabled:        runtimeStatus.Enabled,
-			Connected:      runtimeStatus.Connected,
-			UploadInterval: runtimeStatus.UploadIntervalMS,
-			Pending:        runtimeStatus.Pending,
-			BreakerState:   runtimeStatus.BreakerState,
-		}
-		if cfg != nil {
-			item.ID = cfg.ID
-			item.Type = normalizeNorthboundType(cfg.Type)
-			item.DBEnabled = cfg.Enabled == 1
-			item.DBUploadInterval = cfg.UploadInterval
-		}
-		if !runtimeStatus.LastSentAt.IsZero() {
-			item.LastSentAt = runtimeStatus.LastSentAt.Format("2006-01-02T15:04:05Z07:00")
-		}
-		items = append(items, item)
+		items = append(items, buildNorthboundStatusItem(name, configByName[name], mgr.RuntimeStatus(name)))
 	}
+	return items
+}
 
-	WriteSuccess(w, items)
+func buildNorthboundStatusItem(name string, cfg *models.NorthboundConfig, runtimeStatus northbound.RuntimeStatus) northboundStatusItem {
+	item := northboundStatusItem{
+		Name:           name,
+		Configured:     cfg != nil,
+		Registered:     runtimeStatus.Registered,
+		Enabled:        runtimeStatus.Enabled,
+		Connected:      runtimeStatus.Connected,
+		UploadInterval: runtimeStatus.UploadIntervalMS,
+		Pending:        runtimeStatus.Pending,
+		BreakerState:   runtimeStatus.BreakerState,
+	}
+	if cfg != nil {
+		item.ID = cfg.ID
+		item.Type = normalizeNorthboundType(cfg.Type)
+		item.DBEnabled = cfg.Enabled == 1
+		item.DBUploadInterval = cfg.UploadInterval
+	}
+	if !runtimeStatus.LastSentAt.IsZero() {
+		item.LastSentAt = runtimeStatus.LastSentAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	return item
 }
 
 func normalizeNorthboundName(name string) string {

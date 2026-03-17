@@ -113,6 +113,41 @@ func TestParseRequest_FormDefaultsAndTypes(t *testing.T) {
 	}
 }
 
+func TestParseRequest_JSONContentTypeWithCharset(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"name":"demo"}`))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	var payload struct {
+		Name string `json:"name"`
+	}
+
+	if err := ParseRequest(req, &payload); err != nil {
+		t.Fatalf("ParseRequest returned error: %v", err)
+	}
+	if payload.Name != "demo" {
+		t.Fatalf("payload.Name = %q, want demo", payload.Name)
+	}
+}
+
+func TestFormRequestData_SkipsEmptyValueList(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/devices", nil)
+	req.Form = map[string][]string{
+		"name":   {"demo"},
+		"unused": {},
+	}
+
+	formData, err := formRequestData(req)
+	if err != nil {
+		t.Fatalf("formRequestData returned error: %v", err)
+	}
+	if formData["name"] != "demo" {
+		t.Fatalf("formData[name] = %#v, want demo", formData["name"])
+	}
+	if _, exists := formData["unused"]; exists {
+		t.Fatalf("unexpected key in formData: %#v", formData)
+	}
+}
+
 func TestParseIDOrWriteBadRequest(t *testing.T) {
 	tests := []struct {
 		name       string

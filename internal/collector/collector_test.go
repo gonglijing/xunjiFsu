@@ -599,6 +599,28 @@ func TestBuildNorthboundCommandResult(t *testing.T) {
 	}
 }
 
+func TestValidateNorthboundCommandExecutionResult(t *testing.T) {
+	if err := validateNorthboundCommandExecutionResult(nil); err != nil {
+		t.Fatalf("nil result returned error: %v", err)
+	}
+	if err := validateNorthboundCommandExecutionResult(&driver.DriverResult{Success: true}); err != nil {
+		t.Fatalf("successful result returned error: %v", err)
+	}
+
+	err := validateNorthboundCommandExecutionResult(&driver.DriverResult{
+		Success: false,
+		Error:   " write failed ",
+	})
+	if err == nil || err.Error() != "write failed" {
+		t.Fatalf("error = %v, want trimmed write failed", err)
+	}
+
+	err = validateNorthboundCommandExecutionResult(&driver.DriverResult{Success: false})
+	if err == nil || err.Error() != "driver write returned success=false" {
+		t.Fatalf("error = %v, want default failure message", err)
+	}
+}
+
 func TestSyncDeviceTaskLocked(t *testing.T) {
 	mgr := northbound.NewNorthboundManager()
 	c := NewCollector(nil, mgr)

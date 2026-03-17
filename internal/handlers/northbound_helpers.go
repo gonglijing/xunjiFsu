@@ -14,6 +14,13 @@ import (
 	northboundschema "github.com/gonglijing/xunjiFsu/internal/northbound/schema"
 )
 
+const (
+	defaultNorthboundUploadInterval = 5000
+	defaultNorthboundKeepAlive      = 60
+	defaultNorthboundTimeout        = 30
+	defaultMQTTPort                 = 1883
+)
+
 type requiredFieldRule struct {
 	fieldName string
 	present   func(*models.NorthboundConfig) bool
@@ -94,6 +101,12 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 	if config == nil {
 		return
 	}
+
+	trimNorthboundConfigFields(config)
+	applyNorthboundConfigDefaults(config)
+}
+
+func trimNorthboundConfigFields(config *models.NorthboundConfig) {
 	config.Name = strings.TrimSpace(config.Name)
 	config.Type = normalizeNorthboundType(config.Type)
 	config.ServerURL = strings.TrimSpace(config.ServerURL)
@@ -105,29 +118,39 @@ func normalizeNorthboundConfig(config *models.NorthboundConfig) {
 	config.AlarmTopic = strings.TrimSpace(config.AlarmTopic)
 	config.ProductKey = strings.TrimSpace(config.ProductKey)
 	config.DeviceKey = strings.TrimSpace(config.DeviceKey)
+}
 
+func applyNorthboundConfigDefaults(config *models.NorthboundConfig) {
 	if config.Enabled != 1 {
 		config.Enabled = 0
 	}
 	if config.UploadInterval <= 0 {
-		config.UploadInterval = 5000
+		config.UploadInterval = defaultNorthboundUploadInterval
 	}
 	if config.Port <= 0 {
-		switch config.Type {
-		case "http":
-			config.Port = 80
-		case nbtype.TypeMQTT, nbtype.TypeXunji, nbtype.TypeSagoo, nbtype.TypePandaX, nbtype.TypeIThings:
-			config.Port = 1883
+		if defaultPort := defaultNorthboundPort(config.Type); defaultPort > 0 {
+			config.Port = defaultPort
 		}
 	}
 	if config.QOS < 0 || config.QOS > 2 {
 		config.QOS = 0
 	}
 	if config.KeepAlive <= 0 {
-		config.KeepAlive = 60
+		config.KeepAlive = defaultNorthboundKeepAlive
 	}
 	if config.Timeout <= 0 {
-		config.Timeout = 30
+		config.Timeout = defaultNorthboundTimeout
+	}
+}
+
+func defaultNorthboundPort(nbType string) int {
+	switch nbType {
+	case "http":
+		return 80
+	case nbtype.TypeMQTT, nbtype.TypeXunji, nbtype.TypeSagoo, nbtype.TypePandaX, nbtype.TypeIThings:
+		return defaultMQTTPort
+	default:
+		return 0
 	}
 }
 
@@ -230,6 +253,16 @@ func (h *Handler) buildNorthboundConfigView(config *models.NorthboundConfig) *no
 
 	config.Type = normalizeNorthboundType(config.Type)
 
+	return &northboundConfigView{
+		NorthboundConfig: config,
+		Runtime:          h.buildNorthboundRuntimeView(config),
+		Connection:       buildNorthboundConnectionView(config),
+		SupportedTypes:   adapters.SupportedTypes(),
+		SchemaFields:     buildSchemaFieldViews(config.Type),
+	}
+}
+
+func (h *Handler) buildNorthboundRuntimeView(config *models.NorthboundConfig) northboundRuntimeView {
 	runtime := northboundRuntimeView{
 		Registered:     h.northboundMgr.HasAdapter(config.Name),
 		Enabled:        h.northboundMgr.IsEnabled(config.Name),
@@ -242,13 +275,15 @@ func (h *Handler) buildNorthboundConfigView(config *models.NorthboundConfig) *no
 	if runtime.UploadInterval <= 0 {
 		runtime.UploadInterval = int64(config.UploadInterval)
 	}
-
 	if ts := h.northboundMgr.GetLastUploadTime(config.Name); !ts.IsZero() {
 		runtime.LastSentAt = ts.Format(time.RFC3339)
 	}
 
-	// 构建连接信息视图（不返回密码）
-	connView := &ConnectionView{
+	return runtime
+}
+
+func buildNorthboundConnectionView(config *models.NorthboundConfig) *ConnectionView {
+	return &ConnectionView{
 		Type:       config.Type,
 		ServerURL:  config.ServerURL,
 		Port:       config.Port,
@@ -265,33 +300,28 @@ func (h *Handler) buildNorthboundConfigView(config *models.NorthboundConfig) *no
 		Timeout:    config.Timeout,
 		Connected:  config.Connected,
 	}
+}
 
-	// 获取 schema 字段
-	var schemaFields []SchemaFieldView
-	if fields, ok := northboundschema.FieldsByType(config.Type); ok {
-		for _, f := range fields {
-			schemaFields = append(schemaFields, SchemaFieldView{
-				Key:         f.Key,
-				Label:       f.Label,
-				Type:        string(f.Type),
-				Required:    f.Required,
-				Optional:    f.Optional,
-				Default:     f.Default,
-				Description: f.Description,
-			})
-		}
+func buildSchemaFieldViews(nbType string) []SchemaFieldView {
+	fields, ok := northboundschema.FieldsByType(nbType)
+	if !ok {
+		return nil
 	}
 
-	// 获取支持的类型列表
-	supportedTypes := adapters.SupportedTypes()
-
-	return &northboundConfigView{
-		NorthboundConfig: config,
-		Runtime:          runtime,
-		Connection:       connView,
-		SupportedTypes:   supportedTypes,
-		SchemaFields:     schemaFields,
+	schemaFields := make([]SchemaFieldView, 0, len(fields))
+	for _, field := range fields {
+		schemaFields = append(schemaFields, SchemaFieldView{
+			Key:         field.Key,
+			Label:       field.Label,
+			Type:        string(field.Type),
+			Required:    field.Required,
+			Optional:    field.Optional,
+			Default:     field.Default,
+			Description: field.Description,
+		})
 	}
+
+	return schemaFields
 }
 
 func (h *Handler) rebuildNorthboundRuntime(cfg *models.NorthboundConfig) error {
@@ -317,21 +347,13 @@ func (h *Handler) rebuildNorthboundRuntime(cfg *models.NorthboundConfig) error {
 }
 
 func (h *Handler) registerNorthboundAdapter(config *models.NorthboundConfig) error {
-	// 从模型字段生成配置JSON
-	configJSON := adapters.BuildConfigFromModel(config)
-
-	// 如果已经有 config 字段，优先使用它（支持前端 schema 方式）
-	if config.Config != "" && config.Config != "{}" {
-		configJSON = config.Config
-	}
-
 	// 使用内置适配器
 	adapter := adapters.NewAdapter(config.Type, config.Name)
 	if adapter == nil {
 		return fmt.Errorf("unsupported northbound type: %s", config.Type)
 	}
 
-	if err := adapter.Initialize(configJSON); err != nil {
+	if err := adapter.Initialize(northboundAdapterConfig(config)); err != nil {
 		return fmt.Errorf("initialize northbound adapter %s: %w", config.Name, err)
 	}
 
@@ -341,6 +363,13 @@ func (h *Handler) registerNorthboundAdapter(config *models.NorthboundConfig) err
 	// 注册到管理器
 	h.northboundMgr.RegisterAdapter(config.Name, adapter)
 	return nil
+}
+
+func northboundAdapterConfig(config *models.NorthboundConfig) string {
+	if hasSchemaConfig(config) {
+		return config.Config
+	}
+	return adapters.BuildConfigFromModel(config)
 }
 
 // GetNorthboundSupportedTypes 获取支持的北向类型

@@ -6,10 +6,15 @@ import (
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 const commandDriverFunction = "handle"
+const (
+	commandResultCodeSuccess = 200
+	commandResultCodeFailure = 500
+)
 
 func (c *Collector) processNorthboundCommands() {
 	if c.northboundMgr == nil {
@@ -60,10 +65,10 @@ func buildNorthboundCommandResult(command *models.NorthboundCommand, execErr err
 		Value:      command.Value,
 		Source:     command.Source,
 		Success:    execErr == nil,
-		Code:       200,
+		Code:       commandResultCodeSuccess,
 	}
 	if execErr != nil {
-		result.Code = 500
+		result.Code = commandResultCodeFailure
 		result.Message = execErr.Error()
 	}
 
@@ -80,12 +85,9 @@ func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) 
 		return err
 	}
 
-	device, err := database.GetDeviceByIdentity(normalizedCommand.ProductKey, normalizedCommand.DeviceKey)
-	if err != nil || device == nil {
-		return fmt.Errorf("device not found by identity")
-	}
-	if device.DriverID == nil {
-		return fmt.Errorf("device has no driver")
+	device, err := loadNorthboundCommandDevice(normalizedCommand)
+	if err != nil {
+		return err
 	}
 
 	config := buildNorthboundCommandConfig(normalizedCommand, device)
@@ -94,16 +96,34 @@ func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) 
 	if err != nil {
 		return err
 	}
-	if result != nil && !result.Success {
-		if strings.TrimSpace(result.Error) != "" {
-			return fmt.Errorf("%s", result.Error)
-		}
-		return fmt.Errorf("driver write returned success=false")
+	if err := validateNorthboundCommandExecutionResult(result); err != nil {
+		return err
 	}
 
 	log.Printf("northbound command executed: source=%s request_id=%s device_id=%d field=%s value=%s",
 		normalizedCommand.Source, normalizedCommand.RequestID, device.ID, normalizedCommand.FieldName, normalizedCommand.Value)
 	return nil
+}
+
+func loadNorthboundCommandDevice(command *models.NorthboundCommand) (*models.Device, error) {
+	device, err := database.GetDeviceByIdentity(command.ProductKey, command.DeviceKey)
+	if err != nil || device == nil {
+		return nil, fmt.Errorf("device not found by identity")
+	}
+	if device.DriverID == nil {
+		return nil, fmt.Errorf("device has no driver")
+	}
+	return device, nil
+}
+
+func validateNorthboundCommandExecutionResult(result *driver.DriverResult) error {
+	if result == nil || result.Success {
+		return nil
+	}
+	if errText := strings.TrimSpace(result.Error); errText != "" {
+		return fmt.Errorf("%s", errText)
+	}
+	return fmt.Errorf("driver write returned success=false")
 }
 
 func normalizeNorthboundCommand(command *models.NorthboundCommand) (*models.NorthboundCommand, error) {

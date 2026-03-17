@@ -10,6 +10,46 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+func TestNormalizeNorthboundConfig_AppliesDefaults(t *testing.T) {
+	config := &models.NorthboundConfig{
+		Name:           " demo ",
+		Type:           " MQTT ",
+		ServerURL:      " tcp://127.0.0.1:1883 ",
+		UploadInterval: 0,
+		Port:           0,
+		QOS:            3,
+		KeepAlive:      0,
+		Timeout:        0,
+	}
+
+	normalizeNorthboundConfig(config)
+
+	if config.Name != "demo" {
+		t.Fatalf("config.Name = %q, want %q", config.Name, "demo")
+	}
+	if config.Type != "mqtt" {
+		t.Fatalf("config.Type = %q, want %q", config.Type, "mqtt")
+	}
+	if config.ServerURL != "tcp://127.0.0.1:1883" {
+		t.Fatalf("config.ServerURL = %q, want trimmed value", config.ServerURL)
+	}
+	if config.UploadInterval != defaultNorthboundUploadInterval {
+		t.Fatalf("config.UploadInterval = %d, want %d", config.UploadInterval, defaultNorthboundUploadInterval)
+	}
+	if config.Port != defaultMQTTPort {
+		t.Fatalf("config.Port = %d, want %d", config.Port, defaultMQTTPort)
+	}
+	if config.QOS != 0 {
+		t.Fatalf("config.QOS = %d, want 0", config.QOS)
+	}
+	if config.KeepAlive != defaultNorthboundKeepAlive {
+		t.Fatalf("config.KeepAlive = %d, want %d", config.KeepAlive, defaultNorthboundKeepAlive)
+	}
+	if config.Timeout != defaultNorthboundTimeout {
+		t.Fatalf("config.Timeout = %d, want %d", config.Timeout, defaultNorthboundTimeout)
+	}
+}
+
 func TestHasSchemaConfig(t *testing.T) {
 	tests := []struct {
 		name string
@@ -153,6 +193,33 @@ func TestParseAndPrepareNorthboundConfig_InvalidConfig(t *testing.T) {
 	}
 }
 
+func TestParseAndPrepareNorthboundConfig_ValidConfig(t *testing.T) {
+	body := `{"name":" demo ","type":"MQTT","server_url":" tcp://127.0.0.1:1883 ","topic":" test "}`
+	req := httptest.NewRequest(http.MethodPost, "/northbound", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	config, ok := parseAndPrepareNorthboundConfig(w, req)
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+	if config == nil {
+		t.Fatal("expected config, got nil")
+	}
+	if config.Name != "demo" {
+		t.Fatalf("config.Name = %q, want demo", config.Name)
+	}
+	if config.Type != "mqtt" {
+		t.Fatalf("config.Type = %q, want mqtt", config.Type)
+	}
+	if config.ServerURL != "tcp://127.0.0.1:1883" {
+		t.Fatalf("config.ServerURL = %q, want trimmed value", config.ServerURL)
+	}
+	if config.Topic != "test" {
+		t.Fatalf("config.Topic = %q, want test", config.Topic)
+	}
+}
+
 func TestValidateConfigBySchema_TrimmedRequiredString(t *testing.T) {
 	err := validateConfigBySchema("pandax", `{"serverUrl":"   ","username":"token"}`)
 	if err == nil {
@@ -167,5 +234,34 @@ func TestValidateConfigBySchema_RequiredStringPass(t *testing.T) {
 	err := validateConfigBySchema("pandax", `{"serverUrl":"tcp://127.0.0.1:1883","username":"token"}`)
 	if err != nil {
 		t.Fatalf("validateConfigBySchema returned error: %v", err)
+	}
+}
+
+func TestNorthboundAdapterConfig_PrefersSchemaConfig(t *testing.T) {
+	config := &models.NorthboundConfig{
+		Type:   "mqtt",
+		Config: `{"server":"tcp://127.0.0.1:1883","topic":"demo"}`,
+		Topic:  "fallback",
+	}
+
+	got := northboundAdapterConfig(config)
+	if got != config.Config {
+		t.Fatalf("northboundAdapterConfig() = %q, want schema config", got)
+	}
+}
+
+func TestPrepareNorthboundConfig_ValidatesAfterNormalize(t *testing.T) {
+	config := &models.NorthboundConfig{
+		Name:      " demo ",
+		Type:      " MQTT ",
+		ServerURL: " tcp://127.0.0.1:1883 ",
+		Topic:     " topic ",
+	}
+
+	if err := prepareNorthboundConfig(config); err != nil {
+		t.Fatalf("prepareNorthboundConfig returned error: %v", err)
+	}
+	if config.Name != "demo" || config.Type != "mqtt" {
+		t.Fatalf("unexpected normalized config: %#v", config)
 	}
 }

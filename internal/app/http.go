@@ -13,6 +13,26 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
+const (
+	corsAllowMethods = "GET, POST, PUT, DELETE, OPTIONS"
+	corsAllowHeaders = "Content-Type, Authorization"
+)
+
+var spaBlockedPrefixes = []string{
+	"/api",
+	"/static/",
+	"/ui/static/",
+}
+
+var spaBlockedPaths = map[string]struct{}{
+	"/health":  {},
+	"/ready":   {},
+	"/live":    {},
+	"/metrics": {},
+	"/login":   {},
+	"/logout":  {},
+}
+
 func buildRouter(h *handlers.Handler, authManager *auth.JWTManager) *http.ServeMux {
 	r := http.NewServeMux()
 
@@ -49,22 +69,7 @@ func requestLoggingMiddleware(next http.Handler) http.Handler {
 }
 
 func corsMiddleware(origins []string) func(http.Handler) http.Handler {
-	allowSet := make(map[string]struct{}, len(origins))
-	allowAll := false
-	for _, origin := range origins {
-		trimmed := strings.TrimSpace(origin)
-		if trimmed == "" {
-			continue
-		}
-		if trimmed == "*" {
-			allowAll = true
-			continue
-		}
-		allowSet[trimmed] = struct{}{}
-	}
-
-	allowMethods := "GET, POST, PUT, DELETE, OPTIONS"
-	allowHeaders := "Content-Type, Authorization"
+	allowSet, allowAll := buildAllowedOriginSet(origins)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +77,8 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 			if allowedOrigin(origin, allowSet, allowAll) {
 				header := w.Header()
 				header.Set("Access-Control-Allow-Origin", origin)
-				header.Set("Access-Control-Allow-Methods", allowMethods)
-				header.Set("Access-Control-Allow-Headers", allowHeaders)
+				header.Set("Access-Control-Allow-Methods", corsAllowMethods)
+				header.Set("Access-Control-Allow-Headers", corsAllowHeaders)
 				header.Set("Access-Control-Allow-Credentials", "true")
 				header.Set("Vary", appendVaryHeader(header.Get("Vary"), "Origin"))
 			}
@@ -86,6 +91,25 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func buildAllowedOriginSet(origins []string) (map[string]struct{}, bool) {
+	allowSet := make(map[string]struct{}, len(origins))
+	allowAll := false
+
+	for _, origin := range origins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "*" {
+			allowAll = true
+			continue
+		}
+		allowSet[trimmed] = struct{}{}
+	}
+
+	return allowSet, allowAll
 }
 
 func allowedOrigin(origin string, allowSet map[string]struct{}, allowAll bool) bool {
@@ -155,25 +179,27 @@ func registerPageRoutes(r *http.ServeMux, h *handlers.Handler, authManager *auth
 	r.HandleFunc("GET /logout", h.Logout)
 
 	r.Handle("/", authManager.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		path := req.URL.Path
-		if strings.HasPrefix(path, "/api") ||
-			strings.HasPrefix(path, "/static/") ||
-			strings.HasPrefix(path, "/ui/static/") ||
-			path == "/health" ||
-			path == "/ready" ||
-			path == "/live" ||
-			path == "/metrics" ||
-			path == "/login" ||
-			path == "/logout" {
-			http.NotFound(w, req)
-			return
-		}
-		if req.Method != http.MethodGet {
+		if !shouldServeSPA(req) {
 			http.NotFound(w, req)
 			return
 		}
 		h.SPA(w, req)
 	})))
+}
+
+func shouldServeSPA(req *http.Request) bool {
+	if req == nil || req.Method != http.MethodGet {
+		return false
+	}
+
+	path := req.URL.Path
+	for _, prefix := range spaBlockedPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return false
+		}
+	}
+	_, blocked := spaBlockedPaths[path]
+	return !blocked
 }
 
 func registerHealthRoutes(r *http.ServeMux) {
