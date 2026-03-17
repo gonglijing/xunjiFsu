@@ -464,12 +464,12 @@ func (s stubSystemStatsProvider) CollectSystemStatsOnce() *models.SystemStats {
 	return s.stats
 }
 
-func TestFormatMetricFloat2(t *testing.T) {
-	if got := formatMetricFloat2(1.234); got != "1.23" {
-		t.Fatalf("formatMetricFloat2()=%q, want=1.23", got)
+func TestFormatMetricFloat(t *testing.T) {
+	if got := formatMetricFloat(1.234); got != "1.23" {
+		t.Fatalf("formatMetricFloat()=%q, want=1.23", got)
 	}
-	if got := formatMetricFloat2(1); got != "1.00" {
-		t.Fatalf("formatMetricFloat2()=%q, want=1.00", got)
+	if got := formatMetricFloat(1); got != "1.00" {
+		t.Fatalf("formatMetricFloat()=%q, want=1.00", got)
 	}
 }
 

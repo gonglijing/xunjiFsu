@@ -73,6 +73,6 @@ func (a *PandaXAdapter) nextID(prefix string) string {
 	return nextPrefixedID(prefix, &a.seq)
 }
 
-func formatMetricFloat2(value float64) string {
+func formatMetricFloat(value float64) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
