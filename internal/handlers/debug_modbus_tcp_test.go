@@ -60,3 +60,27 @@ func TestParseModbusTCPRawResponse_Exception(t *testing.T) {
 		t.Fatalf("ExceptionCode = %v, want 2", parsed.ExceptionCode)
 	}
 }
+
+func TestParseModbusTCPResponseHeader(t *testing.T) {
+	response := []byte{0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x01, 0x03, 0x06, 0x00, 0x11, 0x00, 0x22, 0x00, 0x33}
+
+	slaveID, pdu, err := parseModbusTCPResponseHeader(response, 1)
+	if err != nil {
+		t.Fatalf("parseModbusTCPResponseHeader err = %v", err)
+	}
+	if slaveID != 1 {
+		t.Fatalf("slaveID = %d, want 1", slaveID)
+	}
+	if len(pdu) != 8 {
+		t.Fatalf("len(pdu) = %d, want 8", len(pdu))
+	}
+}
+
+func TestParseModbusTCPResponseHeader_BadTransactionID(t *testing.T) {
+	response := []byte{0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x83, 0x02}
+
+	_, _, err := parseModbusTCPResponseHeader(response, 2)
+	if err == nil {
+		t.Fatal("expected transaction id mismatch error")
+	}
+}

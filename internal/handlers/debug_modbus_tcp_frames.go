@@ -74,33 +74,12 @@ func buildModbusTCPRequest(req *modbusTCPDebugRequest) ([]byte, int) {
 }
 
 func parseModbusTCPResponse(req *modbusTCPDebugRequest, endpoint string, request []byte, response []byte, txID int) (*modbusTCPDebugResponse, error) {
-	if len(response) < 9 {
-		return nil, fmt.Errorf("response too short: %d", len(response))
+	slaveID, pdu, err := parseModbusTCPResponseHeader(response, txID)
+	if err != nil {
+		return nil, err
 	}
-
-	respTxID := int(binary.BigEndian.Uint16(response[0:2]))
-	if respTxID != txID {
-		return nil, fmt.Errorf("transaction id mismatch: got %d expect %d", respTxID, txID)
-	}
-
-	protocolID := int(binary.BigEndian.Uint16(response[2:4]))
-	if protocolID != 0 {
-		return nil, fmt.Errorf("protocol id must be 0, got %d", protocolID)
-	}
-
-	length := int(binary.BigEndian.Uint16(response[4:6]))
-	if length != len(response)-6 {
-		return nil, fmt.Errorf("invalid length field: %d", length)
-	}
-
-	slaveID := int(response[6])
 	if slaveID != req.SlaveID {
 		return nil, fmt.Errorf("slave id mismatch: got %d expect %d", slaveID, req.SlaveID)
-	}
-
-	pdu := response[7:]
-	if len(pdu) < 2 {
-		return nil, fmt.Errorf("pdu too short: %d", len(pdu))
 	}
 
 	result := &modbusTCPDebugResponse{
@@ -147,29 +126,9 @@ func parseModbusTCPRawResponse(endpoint string, request []byte, response []byte,
 	if len(request) < 8 {
 		return nil, fmt.Errorf("raw request too short: %d", len(request))
 	}
-	if len(response) < 9 {
-		return nil, fmt.Errorf("response too short: %d", len(response))
-	}
-
-	respTxID := int(binary.BigEndian.Uint16(response[0:2]))
-	if respTxID != txID {
-		return nil, fmt.Errorf("transaction id mismatch: got %d expect %d", respTxID, txID)
-	}
-
-	protocolID := int(binary.BigEndian.Uint16(response[2:4]))
-	if protocolID != 0 {
-		return nil, fmt.Errorf("protocol id must be 0, got %d", protocolID)
-	}
-
-	length := int(binary.BigEndian.Uint16(response[4:6]))
-	if length != len(response)-6 {
-		return nil, fmt.Errorf("invalid length field: %d", length)
-	}
-
-	slaveID := int(response[6])
-	pdu := response[7:]
-	if len(pdu) < 2 {
-		return nil, fmt.Errorf("pdu too short: %d", len(pdu))
+	slaveID, pdu, err := parseModbusTCPResponseHeader(response, txID)
+	if err != nil {
+		return nil, err
 	}
 
 	functionCode := int(pdu[0])
@@ -209,4 +168,32 @@ func parseModbusTCPRawResponse(endpoint string, request []byte, response []byte,
 	}
 
 	return result, nil
+}
+
+func parseModbusTCPResponseHeader(response []byte, txID int) (int, []byte, error) {
+	if len(response) < 9 {
+		return 0, nil, fmt.Errorf("response too short: %d", len(response))
+	}
+
+	respTxID := int(binary.BigEndian.Uint16(response[0:2]))
+	if respTxID != txID {
+		return 0, nil, fmt.Errorf("transaction id mismatch: got %d expect %d", respTxID, txID)
+	}
+
+	protocolID := int(binary.BigEndian.Uint16(response[2:4]))
+	if protocolID != 0 {
+		return 0, nil, fmt.Errorf("protocol id must be 0, got %d", protocolID)
+	}
+
+	length := int(binary.BigEndian.Uint16(response[4:6]))
+	if length != len(response)-6 {
+		return 0, nil, fmt.Errorf("invalid length field: %d", length)
+	}
+
+	pdu := response[7:]
+	if len(pdu) < 2 {
+		return 0, nil, fmt.Errorf("pdu too short: %d", len(pdu))
+	}
+
+	return int(response[6]), pdu, nil
 }
