@@ -121,13 +121,13 @@ func TestNormalizeDriverResultIdentity_FromRawOutput(t *testing.T) {
 	}
 }
 
-func TestPickDriverProductKeyFromRawOutput_PrefersTopLevel(t *testing.T) {
+func TestResolveDriverProductKeyFromRawOutput_PrefersTopLevel(t *testing.T) {
 	raw := []byte(`{"productKey":" top ","product_key":"alt","data":{"productKey":"nested"}}`)
 
-	got := pickDriverProductKeyFromRawOutput(raw)
+	got := resolveDriverProductKeyFromRawOutput(raw)
 
 	if got != "top" {
-		t.Fatalf("got = %q, want top", got)
+		t.Fatalf("resolveDriverProductKeyFromRawOutput() = %q, want top", got)
 	}
 }
 
