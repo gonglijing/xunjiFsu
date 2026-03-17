@@ -17,30 +17,24 @@ func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 清除敏感信息
-	for i := range users {
-		users[i].Password = ""
-	}
-
-	WriteSuccess(w, users)
+	WriteSuccess(w, sanitizeUsers(users))
 }
 
 // CreateUser 创建用户
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var user models.User
-	if !parseRequestOrWriteBadRequestDefault(w, r, &user) {
+	user, ok := parseUserPayload(w, r)
+	if !ok {
 		return
 	}
 
-	id, err := database.CreateUser(&user)
+	id, err := database.CreateUser(user)
 	if err != nil {
 		writeServerErrorWithLog(w, apiErrCreateUserFailed, err)
 		return
 	}
 
 	user.ID = id
-	user.Password = ""
-	WriteCreated(w, user)
+	WriteCreated(w, sanitizeUser(user))
 }
 
 // UpdateUser 更新用户
@@ -50,19 +44,18 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user models.User
-	if !parseRequestOrWriteBadRequestDefault(w, r, &user) {
+	user, ok := parseUserPayload(w, r)
+	if !ok {
 		return
 	}
 
 	user.ID = id
-	if err := database.UpdateUser(&user); err != nil {
+	if err := database.UpdateUser(user); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateUserFailed, err)
 		return
 	}
 
-	user.Password = ""
-	WriteSuccess(w, user)
+	WriteSuccess(w, sanitizeUser(user))
 }
 
 // DeleteUser 删除用户
@@ -78,4 +71,26 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteDeleted(w)
+}
+
+func parseUserPayload(w http.ResponseWriter, r *http.Request) (*models.User, bool) {
+	var user models.User
+	if !parseRequestOrWriteBadRequestDefault(w, r, &user) {
+		return nil, false
+	}
+	return &user, true
+}
+
+func sanitizeUsers(users []*models.User) []*models.User {
+	for _, user := range users {
+		sanitizeUser(user)
+	}
+	return users
+}
+
+func sanitizeUser(user *models.User) *models.User {
+	if user != nil {
+		user.Password = ""
+	}
+	return user
 }

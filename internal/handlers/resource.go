@@ -19,11 +19,11 @@ func (h *Handler) GetResources(w http.ResponseWriter, r *http.Request) {
 
 // CreateResource 新建资源
 func (h *Handler) CreateResource(w http.ResponseWriter, r *http.Request) {
-	var resource models.Resource
-	if !parseRequestOrWriteBadRequestDefault(w, r, &resource) {
+	resource, ok := parseResourcePayload(w, r)
+	if !ok {
 		return
 	}
-	id, err := database.AddResource(&resource)
+	id, err := database.AddResource(resource)
 	if err != nil {
 		writeServerErrorWithLog(w, apiErrCreateResourceFailed, err)
 		return
@@ -38,12 +38,13 @@ func (h *Handler) UpdateResource(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var resource models.Resource
-	if !parseRequestOrWriteBadRequestDefault(w, r, &resource) {
+
+	resource, ok := parseResourcePayload(w, r)
+	if !ok {
 		return
 	}
 	resource.ID = id
-	if err := database.UpdateResource(&resource); err != nil {
+	if err := database.UpdateResource(resource); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateResourceFailed, err)
 		return
 	}
@@ -65,23 +66,46 @@ func (h *Handler) DeleteResource(w http.ResponseWriter, r *http.Request) {
 
 // ToggleResource 启停资源
 func (h *Handler) ToggleResource(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	resource, ok := loadResourceOrWriteNotFound(w, r)
 	if !ok {
 		return
 	}
-	res, err := database.GetResourceByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrResourceNotFound)
-		return
-	}
-	newState := 0
-	if res.Enabled == 0 {
-		newState = 1
-	}
-	if err := database.ToggleResource(id, newState); err != nil {
+
+	newState := nextResourceEnabledState(resource.Enabled)
+	if err := database.ToggleResource(resource.ID, newState); err != nil {
 		writeServerErrorWithLog(w, apiErrToggleResourceFailed, err)
 		return
 	}
-	res.Enabled = newState
-	WriteSuccess(w, res)
+	resource.Enabled = newState
+	WriteSuccess(w, resource)
+}
+
+func parseResourcePayload(w http.ResponseWriter, r *http.Request) (*models.Resource, bool) {
+	var resource models.Resource
+	if !parseRequestOrWriteBadRequestDefault(w, r, &resource) {
+		return nil, false
+	}
+	return &resource, true
+}
+
+func loadResourceOrWriteNotFound(w http.ResponseWriter, r *http.Request) (*models.Resource, bool) {
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
+		return nil, false
+	}
+
+	resource, err := database.GetResourceByID(id)
+	if err != nil {
+		WriteNotFoundDef(w, apiErrResourceNotFound)
+		return nil, false
+	}
+
+	return resource, true
+}
+
+func nextResourceEnabledState(enabled int) int {
+	if enabled == 0 {
+		return 1
+	}
+	return 0
 }
