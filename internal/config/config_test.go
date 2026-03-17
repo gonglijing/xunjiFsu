@@ -258,6 +258,27 @@ func TestLoadFromEnv_TLS_AutoTrueWithSpaces(t *testing.T) {
 	}
 }
 
+func TestParseBoolAcceptingOne_TrueInputs(t *testing.T) {
+	testCases := []string{"1", "true", " TRUE "}
+	for _, input := range testCases {
+		if !parseBoolAcceptingOne(input) {
+			t.Fatalf("parseBoolAcceptingOne(%q) = false, want true", input)
+		}
+	}
+}
+
+func TestApplyEnvDurationWithFallback_RequiresPositiveDuration(t *testing.T) {
+	os.Setenv("COLLECTOR_DEVICE_SYNC_INTERVAL", "0s")
+	defer os.Unsetenv("COLLECTOR_DEVICE_SYNC_INTERVAL")
+
+	var got time.Duration
+	applyEnvDurationWithFallback(&got, "COLLECTOR_DEVICE_SYNC_INTERVAL", 10*time.Second, true)
+
+	if got != 10*time.Second {
+		t.Fatalf("applyEnvDurationWithFallback() = %v, want 10s", got)
+	}
+}
+
 func TestLoadFromEnv_Collector(t *testing.T) {
 	os.Setenv("COLLECTOR_ENABLED", "false")
 	os.Setenv("COLLECTOR_WORKERS", "20")
