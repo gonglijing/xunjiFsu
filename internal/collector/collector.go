@@ -159,7 +159,7 @@ func (c *Collector) Start() error {
 
 	// 主循环
 	c.wg.Add(1)
-	go c.runLoop()
+	go c.executeLoop()
 
 	log.Println("Collector started")
 	return nil
@@ -193,8 +193,8 @@ func (c *Collector) loadEnabledDevices() error {
 	return nil
 }
 
-// runLoop 主采集循环（资源串行）
-func (c *Collector) runLoop() {
+// executeLoop 主采集循环（资源串行）
+func (c *Collector) executeLoop() {
 	defer c.wg.Done()
 	for {
 		c.mu.Lock()
