@@ -267,6 +267,49 @@ func TestSessionFromContext(t *testing.T) {
 	}
 }
 
+func TestIsAuthorizedSession(t *testing.T) {
+	if isAuthorizedSession(nil, false) {
+		t.Fatal("nil session should not be authorized")
+	}
+	if !isAuthorizedSession(&SessionInfo{Role: "user"}, false) {
+		t.Fatal("user session should pass non-admin check")
+	}
+	if isAuthorizedSession(&SessionInfo{Role: "user"}, true) {
+		t.Fatal("user session should fail admin check")
+	}
+	if !isAuthorizedSession(&SessionInfo{Role: "admin"}, true) {
+		t.Fatal("admin session should pass admin check")
+	}
+}
+
+func TestBuildSessionCookie(t *testing.T) {
+	cookie := buildSessionCookie("demo", "token", 60)
+
+	if cookie.Name != "demo" || cookie.Value != "token" {
+		t.Fatalf("unexpected cookie identity: %#v", cookie)
+	}
+	if cookie.Path != "/" || !cookie.HttpOnly {
+		t.Fatalf("unexpected cookie defaults: %#v", cookie)
+	}
+	if cookie.MaxAge != 60 {
+		t.Fatalf("cookie.MaxAge = %d, want 60", cookie.MaxAge)
+	}
+}
+
+func TestWriteSessionFailure_PageRedirect(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	rr := httptest.NewRecorder()
+
+	writeSessionFailure(rr, req, false)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusSeeOther)
+	}
+	if location := rr.Header().Get("Location"); location != "/login" {
+		t.Fatalf("redirect location = %q, want /login", location)
+	}
+}
+
 func buildTokenForTest(header jwtHeader, claims jwtClaims, secret []byte) string {
 	headerJSON, _ := json.Marshal(header)
 	claimsJSON, _ := json.Marshal(claims)

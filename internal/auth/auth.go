@@ -82,14 +82,7 @@ func (m *JWTManager) Login(w http.ResponseWriter, r *http.Request, username, pas
 
 // Logout 用户登出
 func (m *JWTManager) Logout(w http.ResponseWriter, r *http.Request) error {
-	http.SetCookie(w, &http.Cookie{
-		Name:     m.cookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, buildSessionCookie(m.cookieName, "", -1))
 	return nil
 }
 
@@ -104,38 +97,23 @@ func (m *JWTManager) GetSession(r *http.Request) (*SessionInfo, error) {
 
 // RequireAuth 需要认证中间件
 func (m *JWTManager) RequireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info, err := m.GetSession(r)
-		if err != nil || info == nil {
-			// API 请求返回 401，页面请求跳转登录
-			if strings.HasPrefix(r.URL.Path, "/api") {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-			} else {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
-			}
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), sessionInfoContextKey{}, info)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	return m.requireSession(next, false)
 }
 
 // RequireAdmin 需要管理员权限中间件
 func (m *JWTManager) RequireAdmin(next http.Handler) http.Handler {
+	return m.requireSession(next, true)
+}
+
+func (m *JWTManager) requireSession(next http.Handler, adminOnly bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, err := m.GetSession(r)
-		if err != nil || info == nil || info.Role != "admin" {
-			if strings.HasPrefix(r.URL.Path, "/api") {
-				http.Error(w, "forbidden", http.StatusForbidden)
-			} else {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
-			}
+		if err != nil || !isAuthorizedSession(info, adminOnly) {
+			writeSessionFailure(w, r, adminOnly)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), sessionInfoContextKey{}, info)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, withSessionInfo(r, info))
 	})
 }
 
@@ -257,14 +235,7 @@ func extractToken(r *http.Request, cookieName string) string {
 }
 
 func (m *JWTManager) setCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     m.cookieName,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(tokenTTL.Seconds()),
-	})
+	http.SetCookie(w, buildSessionCookie(m.cookieName, token, int(tokenTTL.Seconds())))
 }
 
 // ChangePassword 修改密码
@@ -301,4 +272,48 @@ func SessionFromContext(ctx context.Context) *SessionInfo {
 	}
 	info, _ := ctx.Value(sessionInfoContextKey{}).(*SessionInfo)
 	return info
+}
+
+func isAuthorizedSession(info *SessionInfo, adminOnly bool) bool {
+	if info == nil {
+		return false
+	}
+	if adminOnly && info.Role != "admin" {
+		return false
+	}
+	return true
+}
+
+func writeSessionFailure(w http.ResponseWriter, r *http.Request, adminOnly bool) {
+	if isAPIPath(r) {
+		status := http.StatusUnauthorized
+		message := "unauthorized"
+		if adminOnly {
+			status = http.StatusForbidden
+			message = "forbidden"
+		}
+		http.Error(w, message, status)
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+func isAPIPath(r *http.Request) bool {
+	return r != nil && strings.HasPrefix(r.URL.Path, "/api")
+}
+
+func withSessionInfo(r *http.Request, info *SessionInfo) *http.Request {
+	ctx := context.WithValue(r.Context(), sessionInfoContextKey{}, info)
+	return r.WithContext(ctx)
+}
+
+func buildSessionCookie(name, value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   maxAge,
+	}
 }
