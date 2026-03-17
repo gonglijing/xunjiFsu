@@ -391,6 +391,6 @@ func (h *Handler) GetNorthboundConnectionInfo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	connInfo := adapters.ParseConnectionInfoFromModel(config)
+	connInfo := adapters.BuildConnectionInfoFromModel(config)
 	WriteSuccess(w, connInfo)
 }

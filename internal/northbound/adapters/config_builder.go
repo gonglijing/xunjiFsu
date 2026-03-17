@@ -213,8 +213,8 @@ type ConnectionInfo struct {
 	Connected  bool   `json:"connected"`
 }
 
-// ParseConnectionInfoFromModel 从模型解析连接信息
-func ParseConnectionInfoFromModel(cfg *models.NorthboundConfig) *ConnectionInfo {
+// BuildConnectionInfoFromModel 从模型构建连接信息
+func BuildConnectionInfoFromModel(cfg *models.NorthboundConfig) *ConnectionInfo {
 	info := &ConnectionInfo{
 		Type:       cfg.Type,
 		Server:     cfg.ServerURL,

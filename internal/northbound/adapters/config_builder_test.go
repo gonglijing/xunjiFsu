@@ -142,6 +142,34 @@ func TestValidateConfig_UnknownType(t *testing.T) {
 	}
 }
 
+func TestBuildConnectionInfoFromModel(t *testing.T) {
+	cfg := &models.NorthboundConfig{
+		Type:       nbtype.TypeMQTT,
+		ServerURL:  "tcp://broker.example.com:1883",
+		Port:       1883,
+		Path:       "/mqtt",
+		Username:   "demo",
+		ClientID:   "client-1",
+		Topic:      "telemetry/demo",
+		AlarmTopic: "alarm/demo",
+		Connected:  true,
+	}
+
+	info := BuildConnectionInfoFromModel(cfg)
+	if info == nil {
+		t.Fatal("BuildConnectionInfoFromModel() returned nil")
+	}
+	if info.Type != nbtype.TypeMQTT || info.Server != cfg.ServerURL || info.Port != cfg.Port {
+		t.Fatalf("connection info mismatch: %#v", info)
+	}
+	if info.Path != cfg.Path || info.Username != cfg.Username || info.ClientID != cfg.ClientID {
+		t.Fatalf("connection auth mismatch: %#v", info)
+	}
+	if info.Topic != cfg.Topic || info.AlarmTopic != cfg.AlarmTopic || !info.Connected {
+		t.Fatalf("connection topics mismatch: %#v", info)
+	}
+}
+
 func decodeConfigJSON(t *testing.T, raw string) map[string]interface{} {
 	t.Helper()
 
