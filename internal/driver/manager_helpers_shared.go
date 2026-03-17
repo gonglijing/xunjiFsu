@@ -26,7 +26,7 @@ const (
 
 func resolveResource(device *models.Device) (int64, string) {
 	resourceID := resolveDeviceResourceID(device)
-	resourceType := loadResolvedResourceType(device, resourceID)
+	resourceType := loadResourceTypeFromDeviceOrDB(device, resourceID)
 	if resourceType == "" {
 		resourceType = inferResourceType(device)
 	}
@@ -41,7 +41,7 @@ func resolveDeviceResourceID(device *models.Device) int64 {
 	return *device.ResourceID
 }
 
-func loadResolvedResourceType(device *models.Device, resourceID int64) string {
+func loadResourceTypeFromDeviceOrDB(device *models.Device, resourceID int64) string {
 	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
 	if resourceType != "" || resourceID <= 0 || database.ParamDB == nil {
 		return resourceType
