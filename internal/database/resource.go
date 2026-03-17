@@ -8,6 +8,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+const selectResourceFields = `SELECT id, name, type, COALESCE(path, '') as path, enabled, created_at, updated_at FROM resources`
+
 // InitResourceTable 创建资源表
 func InitResourceTable() error {
 	_, err := ParamDB.Exec(`CREATE TABLE IF NOT EXISTS resources (
@@ -40,17 +42,7 @@ func AddResource(r *models.Resource) (int64, error) {
 }
 
 func ListResources() ([]*models.Resource, error) {
-	return queryList[*models.Resource](ParamDB,
-		`SELECT id, name, type, COALESCE(path, '') as path, enabled, created_at, updated_at FROM resources ORDER BY id`,
-		nil,
-		func(rows *sql.Rows) (*models.Resource, error) {
-			r := &models.Resource{}
-			if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Path, &r.Enabled, &r.CreatedAt, &r.UpdatedAt); err != nil {
-				return nil, err
-			}
-			return r, nil
-		},
-	)
+	return listResources(selectResourceFields+" ORDER BY id", nil)
 }
 
 func UpdateResource(r *models.Resource) error {
@@ -80,13 +72,41 @@ func BindDeviceResource(deviceID, resourceID int64) error {
 
 // GetResourceByID returns resource
 func GetResourceByID(id int64) (*models.Resource, error) {
-	r := &models.Resource{}
-	err := ParamDB.QueryRow(`SELECT id,name,type,COALESCE(path, ''),enabled,created_at,updated_at FROM resources WHERE id=?`, id).
-		Scan(&r.ID, &r.Name, &r.Type, &r.Path, &r.Enabled, &r.CreatedAt, &r.UpdatedAt)
+	resource := &models.Resource{}
+	err := scanResource(
+		ParamDB.QueryRow(selectResourceFields+" WHERE id = ?", id),
+		resource,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return r, nil
+	return resource, nil
+}
+
+type resourceScanner interface {
+	Scan(dest ...any) error
+}
+
+func listResources(query string, args []any) ([]*models.Resource, error) {
+	return queryList[*models.Resource](ParamDB, query, args, func(rows *sql.Rows) (*models.Resource, error) {
+		resource := &models.Resource{}
+		if err := scanResource(rows, resource); err != nil {
+			return nil, err
+		}
+		return resource, nil
+	})
+}
+
+func scanResource(scanner resourceScanner, resource *models.Resource) error {
+	return scanner.Scan(
+		&resource.ID,
+		&resource.Name,
+		&resource.Type,
+		&resource.Path,
+		&resource.Enabled,
+		&resource.CreatedAt,
+		&resource.UpdatedAt,
+	)
 }
 
 // ensureResourcePathColumn adds path column if older schema is missing it,

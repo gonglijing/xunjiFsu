@@ -18,13 +18,12 @@ func (h *Handler) GetGatewayConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateGatewayConfig 更新网关配置
 func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
-	var cfg models.GatewayConfig
-	if !parseRequestOrWriteBadRequestDefault(w, r, &cfg) {
+	cfg, ok := parseGatewayConfigPayload(w, r)
+	if !ok {
 		return
 	}
-	normalizeGatewayConfigInput(&cfg)
 
-	if err := database.UpdateGatewayConfig(toDatabaseGatewayConfig(&cfg)); err != nil {
+	if err := database.UpdateGatewayConfig(toDatabaseGatewayConfig(cfg)); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateGatewayConfigFailed, err)
 		return
 	}
@@ -35,4 +34,14 @@ func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteSuccess(w, updatedCfg)
+}
+
+func parseGatewayConfigPayload(w http.ResponseWriter, r *http.Request) (*models.GatewayConfig, bool) {
+	var cfg models.GatewayConfig
+	if !parseRequestOrWriteBadRequestDefault(w, r, &cfg) {
+		return nil, false
+	}
+
+	normalizeGatewayConfigInput(&cfg)
+	return &cfg, true
 }

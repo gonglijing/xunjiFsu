@@ -1,8 +1,12 @@
 package database
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
 func setupResourceTestDB(t *testing.T, createSQL string) {
@@ -115,5 +119,52 @@ func TestInitResourceTable_NormalizesLegacyTypeWhenCleaning(t *testing.T) {
 	}
 	if gotType != "net" {
 		t.Fatalf("type=%q, want %q", gotType, "net")
+	}
+}
+
+type stubResourceScanner struct {
+	values []any
+	err    error
+}
+
+func (s stubResourceScanner) Scan(dest ...any) error {
+	if s.err != nil {
+		return s.err
+	}
+	for i := range dest {
+		switch out := dest[i].(type) {
+		case *int64:
+			*out = s.values[i].(int64)
+		case *string:
+			*out = s.values[i].(string)
+		case *int:
+			*out = s.values[i].(int)
+		case *time.Time:
+			*out = s.values[i].(time.Time)
+		}
+	}
+	return nil
+}
+
+func TestScanResource(t *testing.T) {
+	now := time.Now()
+	resource := &models.Resource{}
+	scanner := stubResourceScanner{
+		values: []any{int64(1), "r1", "serial", "/dev/ttyUSB0", 1, now, now},
+	}
+
+	err := scanResource(scanner, resource)
+	if err != nil {
+		t.Fatalf("scanResource returned error: %v", err)
+	}
+	if resource.ID != 1 || resource.Name != "r1" || resource.Type != "serial" || resource.Path != "/dev/ttyUSB0" || resource.Enabled != 1 {
+		t.Fatalf("unexpected resource: %#v", resource)
+	}
+}
+
+func TestScanResource_Error(t *testing.T) {
+	err := scanResource(stubResourceScanner{err: errors.New("scan failed")}, &models.Resource{})
+	if err == nil {
+		t.Fatal("expected scanResource error")
 	}
 }

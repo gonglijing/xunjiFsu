@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,5 +118,25 @@ func TestBuildRuntimeAuditViews(t *testing.T) {
 	}
 	if views[1].ChangesRaw == "" {
 		t.Fatalf("expected raw changes fallback for invalid json")
+	}
+}
+
+func TestParseGatewayConfigPayload(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/gateway/config", strings.NewReader(`{"gateway_name":" ","data_retention_days":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	cfg, ok := parseGatewayConfigPayload(w, req)
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+	if cfg == nil {
+		t.Fatal("expected config, got nil")
+	}
+	if cfg.GatewayName != defaultGatewayName {
+		t.Fatalf("cfg.GatewayName = %q, want %q", cfg.GatewayName, defaultGatewayName)
+	}
+	if cfg.DataRetentionDays != database.DefaultRetentionDays {
+		t.Fatalf("cfg.DataRetentionDays = %d, want %d", cfg.DataRetentionDays, database.DefaultRetentionDays)
 	}
 }
