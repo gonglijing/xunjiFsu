@@ -374,8 +374,8 @@ func applyEnvConfig(cfg *Config) {
 
 func applyServerEnvConfig(cfg, defaults *Config) {
 	applyEnvString(&cfg.ListenAddr, "LISTEN_ADDR")
-	applyEnvDurationWithFallback(&cfg.HTTPReadTimeout, "HTTP_READ_TIMEOUT", defaults.HTTPReadTimeout, false)
-	applyEnvDurationWithFallback(&cfg.HTTPWriteTimeout, "HTTP_WRITE_TIMEOUT", defaults.HTTPWriteTimeout, false)
+	applyEnvDurationOrFallback(&cfg.HTTPReadTimeout, "HTTP_READ_TIMEOUT", defaults.HTTPReadTimeout, false)
+	applyEnvDurationOrFallback(&cfg.HTTPWriteTimeout, "HTTP_WRITE_TIMEOUT", defaults.HTTPWriteTimeout, false)
 	applyEnvDuration(&cfg.HTTPIdleTimeout, "HTTP_IDLE_TIMEOUT")
 }
 
@@ -388,7 +388,7 @@ func applyDatabaseEnvConfig(cfg *Config) {
 func applyTLSEnvConfig(cfg *Config) {
 	applyEnvString(&cfg.TLSCertFile, "TLS_CERT_FILE")
 	applyEnvString(&cfg.TLSKeyFile, "TLS_KEY_FILE")
-	applyEnvBoolAllowOne(&cfg.TLSAuto, "TLS_AUTO")
+	applyEnvBoolAllowTrueOrOne(&cfg.TLSAuto, "TLS_AUTO")
 	applyEnvString(&cfg.TLSDomain, "TLS_DOMAIN")
 	applyEnvString(&cfg.TLSCacheDir, "TLS_CACHE_DIR")
 }
@@ -405,10 +405,10 @@ func applyLogEnvConfig(cfg *Config) {
 
 func applyCollectorEnvConfig(cfg, defaults *Config) {
 	applyEnvBool(&cfg.CollectorEnabled, "COLLECTOR_ENABLED")
-	applyEnvIntWithFallback(&cfg.CollectorWorkers, "COLLECTOR_WORKERS", defaults.CollectorWorkers)
-	applyEnvDurationWithFallback(&cfg.SyncInterval, "SYNC_INTERVAL", defaults.SyncInterval, false)
-	applyEnvDurationWithFallback(&cfg.CollectorDeviceSyncInterval, "COLLECTOR_DEVICE_SYNC_INTERVAL", defaults.CollectorDeviceSyncInterval, true)
-	applyEnvDurationWithFallback(&cfg.CollectorCommandPollInterval, "COLLECTOR_COMMAND_POLL_INTERVAL", defaults.CollectorCommandPollInterval, true)
+	applyEnvIntOrFallback(&cfg.CollectorWorkers, "COLLECTOR_WORKERS", defaults.CollectorWorkers)
+	applyEnvDurationOrFallback(&cfg.SyncInterval, "SYNC_INTERVAL", defaults.SyncInterval, false)
+	applyEnvDurationOrFallback(&cfg.CollectorDeviceSyncInterval, "COLLECTOR_DEVICE_SYNC_INTERVAL", defaults.CollectorDeviceSyncInterval, true)
+	applyEnvDurationOrFallback(&cfg.CollectorCommandPollInterval, "COLLECTOR_COMMAND_POLL_INTERVAL", defaults.CollectorCommandPollInterval, true)
 }
 
 func applyDriverEnvConfig(cfg *Config) {
@@ -425,7 +425,7 @@ func applyDriverEnvConfig(cfg *Config) {
 
 func applyNorthboundEnvConfig(cfg, defaults *Config) {
 	applyEnvString(&cfg.NorthboundPluginsDir, "NORTHBOUND_PLUGINS_DIR")
-	applyEnvDurationWithFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
+	applyEnvDurationOrFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
 }
 
 func applyThresholdEnvConfig(cfg *Config) {
@@ -456,7 +456,7 @@ func applyEnvBool(dst *bool, key string) {
 	}
 }
 
-func applyEnvBoolAllowOne(dst *bool, key string) {
+func applyEnvBoolAllowTrueOrOne(dst *bool, key string) {
 	if dst == nil {
 		return
 	}
@@ -478,7 +478,7 @@ func applyEnvInt(dst *int, key string) {
 	}
 }
 
-func applyEnvIntWithFallback(dst *int, key string, fallback int) {
+func applyEnvIntOrFallback(dst *int, key string, fallback int) {
 	if dst == nil {
 		return
 	}
@@ -508,7 +508,7 @@ func applyEnvDuration(dst *time.Duration, key string) {
 	}
 }
 
-func applyEnvDurationWithFallback(dst *time.Duration, key string, fallback time.Duration, mustPositive bool) {
+func applyEnvDurationOrFallback(dst *time.Duration, key string, fallback time.Duration, requirePositive bool) {
 	if dst == nil {
 		return
 	}
@@ -517,7 +517,7 @@ func applyEnvDurationWithFallback(dst *time.Duration, key string, fallback time.
 		return
 	}
 	if parsed, err := time.ParseDuration(value); err == nil {
-		if !mustPositive || parsed > 0 {
+		if !requirePositive || parsed > 0 {
 			*dst = parsed
 			return
 		}
