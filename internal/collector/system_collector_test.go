@@ -123,3 +123,12 @@ func TestStatsToCollectData_FormatAndFieldCount(t *testing.T) {
 		t.Fatalf("uptime = %q, want 12345", got)
 	}
 }
+
+func TestFormatSystemMetricValue_TwoDecimalPlaces(t *testing.T) {
+	if got := formatSystemMetricValue(1.234); got != "1.23" {
+		t.Fatalf("formatSystemMetricValue() = %q, want 1.23", got)
+	}
+	if got := formatSystemMetricValue(1); got != "1.00" {
+		t.Fatalf("formatSystemMetricValue() = %q, want 1.00", got)
+	}
+}

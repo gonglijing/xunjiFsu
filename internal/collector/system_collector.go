@@ -414,25 +414,25 @@ func (c *SystemStatsCollector) getLoadAverage(stats *models.SystemStats) {
 }
 
 // statsToCollectData 将系统属性转换为采集数据
-func formatFixed2(value float64) string {
+func formatSystemMetricValue(value float64) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
 func (c *SystemStatsCollector) statsToCollectData(stats *models.SystemStats) *models.CollectData {
 	fields := make(map[string]string, 13)
-	fields["cpu_usage"] = formatFixed2(stats.CpuUsage)
-	fields["mem_total"] = formatFixed2(stats.MemTotal)
-	fields["mem_used"] = formatFixed2(stats.MemUsed)
-	fields["mem_usage"] = formatFixed2(stats.MemUsage)
-	fields["mem_available"] = formatFixed2(stats.MemAvailable)
-	fields["disk_total"] = formatFixed2(stats.DiskTotal)
-	fields["disk_used"] = formatFixed2(stats.DiskUsed)
-	fields["disk_usage"] = formatFixed2(stats.DiskUsage)
-	fields["disk_free"] = formatFixed2(stats.DiskFree)
+	fields["cpu_usage"] = formatSystemMetricValue(stats.CpuUsage)
+	fields["mem_total"] = formatSystemMetricValue(stats.MemTotal)
+	fields["mem_used"] = formatSystemMetricValue(stats.MemUsed)
+	fields["mem_usage"] = formatSystemMetricValue(stats.MemUsage)
+	fields["mem_available"] = formatSystemMetricValue(stats.MemAvailable)
+	fields["disk_total"] = formatSystemMetricValue(stats.DiskTotal)
+	fields["disk_used"] = formatSystemMetricValue(stats.DiskUsed)
+	fields["disk_usage"] = formatSystemMetricValue(stats.DiskUsage)
+	fields["disk_free"] = formatSystemMetricValue(stats.DiskFree)
 	fields["uptime"] = strconv.FormatInt(stats.Uptime, 10)
-	fields["load_1"] = formatFixed2(stats.Load1)
-	fields["load_5"] = formatFixed2(stats.Load5)
-	fields["load_15"] = formatFixed2(stats.Load15)
+	fields["load_1"] = formatSystemMetricValue(stats.Load1)
+	fields["load_5"] = formatSystemMetricValue(stats.Load5)
+	fields["load_15"] = formatSystemMetricValue(stats.Load15)
 
 	return &models.CollectData{
 		DeviceID:   models.SystemStatsDeviceID,
