@@ -49,6 +49,27 @@ func TestResolveResourceExplicitType(t *testing.T) {
 	}
 }
 
+func TestBuildRecoverableDriverNames(t *testing.T) {
+	got := buildRecoverableDriverNames(" modbus_tcp ")
+	want := []string{"modbus_tcp", "th_modbustcp"}
+
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestBuildRecoverableDriverNames_EmptyType(t *testing.T) {
+	got := buildRecoverableDriverNames(" ")
+	if got != nil {
+		t.Fatalf("expected nil candidate names, got %#v", got)
+	}
+}
+
 func TestBuildDeviceConfigModbusRTU(t *testing.T) {
 	device := &models.Device{
 		DriverType:    "modbus_rtu",

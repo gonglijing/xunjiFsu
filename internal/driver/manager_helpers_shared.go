@@ -25,24 +25,33 @@ const (
 )
 
 func resolveResource(device *models.Device) (int64, string) {
-	resourceID := int64(0)
-	if device.ResourceID != nil {
-		resourceID = *device.ResourceID
-	}
-
-	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
-	if resourceID > 0 && database.ParamDB != nil {
-		if res, err := database.GetResourceByID(resourceID); err == nil && res != nil {
-			if rt := strings.ToLower(strings.TrimSpace(res.Type)); rt != "" {
-				resourceType = rt
-			}
-		}
-	}
+	resourceID := resolveDeviceResourceID(device)
+	resourceType := loadResolvedResourceType(device, resourceID)
 	if resourceType == "" {
 		resourceType = inferResourceType(device)
 	}
 
 	return resourceID, resourceType
+}
+
+func resolveDeviceResourceID(device *models.Device) int64 {
+	if device == nil || device.ResourceID == nil {
+		return 0
+	}
+	return *device.ResourceID
+}
+
+func loadResolvedResourceType(device *models.Device, resourceID int64) string {
+	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
+	if resourceType != "" || resourceID <= 0 || database.ParamDB == nil {
+		return resourceType
+	}
+
+	resource, err := database.GetResourceByID(resourceID)
+	if err != nil || resource == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(resource.Type))
 }
 
 func inferResourceType(device *models.Device) string {
@@ -79,20 +88,28 @@ func buildDeviceConfig(device *models.Device) map[string]string {
 	}
 	deviceConfig := make(map[string]string, capHint)
 	if resourceType == "serial" {
-		deviceConfig["serial_port"] = device.SerialPort
-		deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
-		deviceConfig["data_bits"] = fmt.Sprintf("%d", device.DataBits)
-		deviceConfig["stop_bits"] = fmt.Sprintf("%d", device.StopBits)
-		deviceConfig["parity"] = device.Parity
+		appendSerialDeviceConfig(deviceConfig, device)
 	} else {
-		deviceConfig["ip_address"] = device.IPAddress
-		deviceConfig["port_num"] = fmt.Sprintf("%d", device.PortNum)
+		appendNetworkDeviceConfig(deviceConfig, device)
 	}
 	if device.DeviceAddress != "" {
 		deviceConfig["device_address"] = device.DeviceAddress
 	}
 	deviceConfig["func_name"] = "read"
 	return deviceConfig
+}
+
+func appendSerialDeviceConfig(deviceConfig map[string]string, device *models.Device) {
+	deviceConfig["serial_port"] = device.SerialPort
+	deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
+	deviceConfig["data_bits"] = fmt.Sprintf("%d", device.DataBits)
+	deviceConfig["stop_bits"] = fmt.Sprintf("%d", device.StopBits)
+	deviceConfig["parity"] = device.Parity
+}
+
+func appendNetworkDeviceConfig(deviceConfig map[string]string, device *models.Device) {
+	deviceConfig["ip_address"] = device.IPAddress
+	deviceConfig["port_num"] = fmt.Sprintf("%d", device.PortNum)
 }
 
 func parseDriverResourceID(configSchema string) int64 {
@@ -318,33 +335,42 @@ func (e *DriverExecutor) recoverMissingDriverBinding(device *models.Device) (*mo
 		return nil, fmt.Errorf("device is nil")
 	}
 
-	candidateNames := make([]string, 0, 3)
-	driverType := strings.ToLower(strings.TrimSpace(device.DriverType))
-	if driverType != "" {
-		candidateNames = append(candidateNames, driverType)
-		switch driverType {
-		case "modbus_rtu":
-			candidateNames = append(candidateNames, "th_modbusrtu")
-		case "modbus_tcp":
-			candidateNames = append(candidateNames, "th_modbustcp")
-		}
-	}
-
-	for _, name := range candidateNames {
+	for _, name := range buildRecoverableDriverNames(device.DriverType) {
 		drv, err := database.GetDriverByName(name)
 		if err != nil || drv == nil {
 			continue
 		}
-		if err := database.UpdateDeviceDriverID(device.ID, drv.ID); err != nil {
-			logger.Warn("Recover device driver binding failed", "device_id", device.ID, "driver_id", drv.ID, "error", err)
-		} else {
-			device.DriverID = &drv.ID
-			logger.Warn("Recovered missing driver binding", "device_id", device.ID, "driver_id", drv.ID, "driver_name", drv.Name, "driver_type", device.DriverType)
-		}
+		syncRecoveredDriverBinding(device, drv)
 		return drv, nil
 	}
 
 	return nil, fmt.Errorf("no recoverable driver by type=%s", device.DriverType)
+}
+
+func buildRecoverableDriverNames(driverType string) []string {
+	normalizedDriverType := strings.ToLower(strings.TrimSpace(driverType))
+	if normalizedDriverType == "" {
+		return nil
+	}
+
+	candidateNames := []string{normalizedDriverType}
+	switch normalizedDriverType {
+	case "modbus_rtu":
+		candidateNames = append(candidateNames, "th_modbusrtu")
+	case "modbus_tcp":
+		candidateNames = append(candidateNames, "th_modbustcp")
+	}
+	return candidateNames
+}
+
+func syncRecoveredDriverBinding(device *models.Device, driverModel *models.Driver) {
+	if err := database.UpdateDeviceDriverID(device.ID, driverModel.ID); err != nil {
+		logger.Warn("Recover device driver binding failed", "device_id", device.ID, "driver_id", driverModel.ID, "error", err)
+		return
+	}
+
+	device.DriverID = &driverModel.ID
+	logger.Warn("Recovered missing driver binding", "device_id", device.ID, "driver_id", driverModel.ID, "driver_name", driverModel.Name, "driver_type", device.DriverType)
 }
 
 // ReloadDeviceDriver 强制重载设备对应驱动
