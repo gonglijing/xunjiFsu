@@ -120,3 +120,40 @@ func TestNormalizeDriverResultIdentity_FromRawOutput(t *testing.T) {
 		t.Fatalf("product key mismatch: %s", result.ProductKey)
 	}
 }
+
+func TestPickDriverProductKeyFromRawOutput_PrefersTopLevel(t *testing.T) {
+	raw := []byte(`{"productKey":" top ","product_key":"alt","data":{"productKey":"nested"}}`)
+
+	got := pickDriverProductKeyFromRawOutput(raw)
+
+	if got != "top" {
+		t.Fatalf("got = %q, want top", got)
+	}
+}
+
+func TestFirstNonEmptyTrimmed(t *testing.T) {
+	got := firstNonEmptyTrimmed("", "  ", " value ", "other")
+	if got != "value" {
+		t.Fatalf("got = %q, want value", got)
+	}
+}
+
+func TestRemoveDriverProductKeyFields(t *testing.T) {
+	data := map[string]string{
+		"productKey":  "a",
+		"product_key": "b",
+		"temp":        "1",
+	}
+
+	removeDriverProductKeyFields(data)
+
+	if _, ok := data["productKey"]; ok {
+		t.Fatalf("productKey still present: %#v", data)
+	}
+	if _, ok := data["product_key"]; ok {
+		t.Fatalf("product_key still present: %#v", data)
+	}
+	if data["temp"] != "1" {
+		t.Fatalf("unexpected data mutation: %#v", data)
+	}
+}

@@ -23,49 +23,51 @@ func normalizeDriverResultIdentity(result *DriverResult, rawOutput []byte) {
 
 	result.ProductKey = strings.TrimSpace(result.ProductKey)
 	if result.ProductKey == "" {
-		result.ProductKey = pickProductKeyFromMap(result.Data)
+		result.ProductKey = pickDriverProductKeyFromData(result.Data)
 	}
 	if result.ProductKey == "" && len(rawOutput) > 0 {
-		result.ProductKey = pickProductKeyFromRawOutput(rawOutput)
+		result.ProductKey = pickDriverProductKeyFromRawOutput(rawOutput)
 	}
 
-	if result.Data != nil {
-		delete(result.Data, "productKey")
-		delete(result.Data, "product_key")
-	}
+	removeDriverProductKeyFields(result.Data)
 }
 
-func pickProductKeyFromMap(data map[string]string) string {
+func pickDriverProductKeyFromData(data map[string]string) string {
 	if len(data) == 0 {
 		return ""
 	}
-	if value := strings.TrimSpace(data["productKey"]); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(data["product_key"]); value != "" {
-		return value
-	}
-	return ""
+	return firstNonEmptyTrimmed(data["productKey"], data["product_key"])
 }
 
-func pickProductKeyFromRawOutput(rawOutput []byte) string {
+func pickDriverProductKeyFromRawOutput(rawOutput []byte) string {
 	var probe driverIdentityProbe
 	if err := json.Unmarshal(rawOutput, &probe); err != nil {
 		return ""
 	}
-	if value := strings.TrimSpace(probe.ProductKey); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(probe.ProductKeyAlt); value != "" {
+	if value := firstNonEmptyTrimmed(probe.ProductKey, probe.ProductKeyAlt); value != "" {
 		return value
 	}
 	if probe.Data == nil {
 		return ""
 	}
-	if value := strings.TrimSpace(probe.Data.ProductKey); value != "" {
-		return value
+	return firstNonEmptyTrimmed(probe.Data.ProductKey, probe.Data.ProductKeyAlt)
+}
+
+func removeDriverProductKeyFields(data map[string]string) {
+	if data == nil {
+		return
 	}
-	return strings.TrimSpace(probe.Data.ProductKeyAlt)
+	delete(data, "productKey")
+	delete(data, "product_key")
+}
+
+func firstNonEmptyTrimmed(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func isDriverIdentityField(field string) bool {
