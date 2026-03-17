@@ -10,44 +10,29 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+type executeDriverPayload struct {
+	Function string                 `json:"function"`
+	Params   map[string]interface{} `json:"params"`
+}
+
 func (h *Handler) ExecuteDriverFunction(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseIDOrWriteBadRequestDefault(w, r)
 	if !ok {
 		return
 	}
 
-	var req struct {
-		Function string                 `json:"function"`
-		Params   map[string]interface{} `json:"params"`
-	}
-	if !parseRequestOrWriteBadRequestDefault(w, r, &req) {
+	payload, ok := parseExecuteDriverPayload(w, r)
+	if !ok {
 		return
 	}
-
-	_, pluginFunc, configFunc := normalizeExecuteFunction(req.Function)
-
-	device, err := database.GetDeviceByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrDeviceNotFound)
-		return
-	}
-	if device.DriverID == nil {
-		WriteBadRequestDef(w, apiErrDeviceHasNoDriver)
+	device, _, ok := h.loadDeviceDriverForExecution(w, id)
+	if !ok {
 		return
 	}
 	driverID := *device.DriverID
+	_, pluginFunc, configFunc := normalizeExecuteFunction(payload.Function)
 
-	driverModel, err := database.GetDriverByID(driverID)
-	if err != nil {
-		WriteServerErrorDef(w, apiErrDriverLookupFailed)
-		return
-	}
-	if err := h.ensureDriverLoaded(driverID, driverModel); err != nil {
-		writeServerErrorWithLog(w, apiErrLoadDriverFailed, err)
-		return
-	}
-
-	config, err := buildExecuteDriverConfig(req.Params, device, configFunc)
+	config, err := buildExecuteDriverConfig(payload.Params, device, configFunc)
 	if err != nil {
 		WriteBadRequestCode(w, apiErrExecuteDriverParamInvalid.Code, apiErrExecuteDriverParamInvalid.Message+": "+err.Error())
 		return
@@ -82,9 +67,8 @@ func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	device, err := database.GetDeviceByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrDeviceNotFound)
+	device, driverModel, ok := h.loadDeviceDriverForLookup(w, id)
+	if !ok {
 		return
 	}
 	if device.DriverID == nil {
@@ -92,21 +76,90 @@ func (h *Handler) GetDeviceWritables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	driverModel, err := database.GetDriverByID(*device.DriverID)
+	writables, err := parseDriverWritables(driverModel.ConfigSchema)
+	if err != nil {
+		WriteBadRequestDef(w, apiErrDriverConfigSchemaInvalid)
+		return
+	}
+
+	WriteSuccess(w, writables)
+}
+
+func parseExecuteDriverPayload(w http.ResponseWriter, r *http.Request) (*executeDriverPayload, bool) {
+	var payload executeDriverPayload
+	if !parseRequestOrWriteBadRequestDefault(w, r, &payload) {
+		return nil, false
+	}
+	return &payload, true
+}
+
+func (h *Handler) loadDeviceDriverForExecution(w http.ResponseWriter, id int64) (*models.Device, *models.Driver, bool) {
+	device, ok := loadDeviceByIDOrWriteNotFound(w, id)
+	if !ok {
+		return nil, nil, false
+	}
+	if device.DriverID == nil {
+		WriteBadRequestDef(w, apiErrDeviceHasNoDriver)
+		return nil, nil, false
+	}
+
+	driverModel, ok := loadDriverByIDOrWriteLookupError(w, *device.DriverID)
+	if !ok {
+		return nil, nil, false
+	}
+	if err := h.ensureDriverLoaded(*device.DriverID, driverModel); err != nil {
+		writeServerErrorWithLog(w, apiErrLoadDriverFailed, err)
+		return nil, nil, false
+	}
+
+	return device, driverModel, true
+}
+
+func (h *Handler) loadDeviceDriverForLookup(w http.ResponseWriter, id int64) (*models.Device, *models.Driver, bool) {
+	device, ok := loadDeviceByIDOrWriteNotFound(w, id)
+	if !ok {
+		return nil, nil, false
+	}
+	if device.DriverID == nil {
+		return device, nil, true
+	}
+
+	driverModel, ok := loadDriverByIDOrWriteLookupError(w, *device.DriverID)
+	if !ok {
+		return nil, nil, false
+	}
+
+	return device, driverModel, true
+}
+
+func loadDeviceByIDOrWriteNotFound(w http.ResponseWriter, id int64) (*models.Device, bool) {
+	device, err := database.GetDeviceByID(id)
+	if err != nil {
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
+		return nil, false
+	}
+	return device, true
+}
+
+func loadDriverByIDOrWriteLookupError(w http.ResponseWriter, driverID int64) (*models.Driver, bool) {
+	driverModel, err := database.GetDriverByID(driverID)
 	if err != nil {
 		WriteServerErrorDef(w, apiErrDriverLookupFailed)
-		return
+		return nil, false
+	}
+	return driverModel, true
+}
+
+func parseDriverWritables(configSchema string) ([]interface{}, error) {
+	if configSchema == "" {
+		return nil, nil
 	}
 
 	var cfg struct {
 		Writable []interface{} `json:"writable"`
 	}
-	if driverModel.ConfigSchema != "" {
-		if err := json.Unmarshal([]byte(driverModel.ConfigSchema), &cfg); err != nil {
-			WriteBadRequestDef(w, apiErrDriverConfigSchemaInvalid)
-			return
-		}
+	if err := json.Unmarshal([]byte(configSchema), &cfg); err != nil {
+		return nil, err
 	}
-
-	WriteSuccess(w, cfg.Writable)
+	return cfg.Writable, nil
 }
