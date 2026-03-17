@@ -510,7 +510,7 @@ func TestFetchCurrentSystemStats_FormatValues(t *testing.T) {
 	}
 }
 
-func TestRequestIDFromPandaXRPCTopic(t *testing.T) {
+func TestParsePandaXRPCRequestID(t *testing.T) {
 	cases := []struct {
 		name  string
 		topic string
@@ -526,9 +526,9 @@ func TestRequestIDFromPandaXRPCTopic(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := requestIDFromPandaXRPCTopic(tc.topic)
+			got := parsePandaXRPCRequestID(tc.topic)
 			if got != tc.want {
-				t.Fatalf("requestIDFromPandaXRPCTopic()=%q, want=%q", got, tc.want)
+				t.Fatalf("parsePandaXRPCRequestID()=%q, want=%q", got, tc.want)
 			}
 		})
 	}

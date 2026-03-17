@@ -55,7 +55,7 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 	}
 
 	if strings.TrimSpace(req.RequestID) == "" {
-		req.RequestID = requestIDFromPandaXRPCTopic(message.Topic())
+		req.RequestID = parsePandaXRPCRequestID(message.Topic())
 	}
 
 	log.Printf("[PandaX-%s] handleRPCRequest: requestId=%s, method=%s", a.name, req.RequestID, req.Method)
@@ -216,7 +216,7 @@ func isPandaXReservedRPCKey(key string) bool {
 	}
 }
 
-func requestIDFromPandaXRPCTopic(topic string) string {
+func parsePandaXRPCRequestID(topic string) string {
 	trimmed := strings.Trim(strings.TrimSpace(topic), "/")
 	const prefix = "v1/devices/me/rpc/request/"
 	if !strings.HasPrefix(trimmed, prefix) {
