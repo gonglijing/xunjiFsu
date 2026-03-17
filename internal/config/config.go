@@ -134,23 +134,9 @@ func Load() (*Config, error) {
 
 // loadFromFile 从 YAML 文件加载配置（仅解析本项目使用的简单层级键值）
 func loadFromFile(cfg *Config) error {
-	// 查找配置文件路径
-	configPaths := []string{
-		"config/config.yaml",
-		"../config/config.yaml",
-		"./config.yaml",
-	}
-
-	var configFile string
-	for _, path := range configPaths {
-		if _, err := os.Stat(path); err == nil {
-			configFile = path
-			break
-		}
-	}
-
-	if configFile == "" {
-		return fmt.Errorf("config file not found")
+	configFile, err := findConfigFile()
+	if err != nil {
+		return err
 	}
 
 	data, err := os.ReadFile(configFile)
@@ -163,15 +149,46 @@ func loadFromFile(cfg *Config) error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// 应用服务器配置
+	applyServerFileConfig(cfg, flatCfg)
+	applyDriverFileConfig(cfg, flatCfg)
+	applyNorthboundFileConfig(cfg, flatCfg)
+	applyCollectorFileConfig(cfg, flatCfg)
+
+	return nil
+}
+
+func findConfigFile() (string, error) {
+	configPaths := []string{
+		"config/config.yaml",
+		"../config/config.yaml",
+		"./config.yaml",
+	}
+
+	for _, path := range configPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+	}
+
+	return "", fmt.Errorf("config file not found")
+}
+
+func applyServerFileConfig(cfg *Config, flatCfg map[string]string) {
+	if cfg == nil {
+		return
+	}
+
 	setStringIfNotEmpty(&cfg.ListenAddr, flatCfg["server.addr"])
 	setDurationFromText(&cfg.HTTPReadTimeout, flatCfg["server.read_timeout"])
 	setDurationFromText(&cfg.HTTPWriteTimeout, flatCfg["server.write_timeout"])
+}
+
+func applyDriverFileConfig(cfg *Config, flatCfg map[string]string) {
+	if cfg == nil {
+		return
+	}
 
 	setStringIfNotEmpty(&cfg.DriversDir, flatCfg["drivers.dir"])
-	setStringIfNotEmpty(&cfg.NorthboundPluginsDir, flatCfg["northbound.plugins_dir"])
-	setDurationFromText(&cfg.NorthboundMQTTReconnectInterval, flatCfg["northbound.mqtt_reconnect_interval"])
-
 	setDurationFromText(&cfg.DriverCallTimeout, flatCfg["drivers.call_timeout"])
 	setDurationFromText(&cfg.DriverSerialReadTimeout, flatCfg["drivers.serial_read_timeout"])
 	setPositiveIntFromText(&cfg.DriverSerialOpenRetries, flatCfg["drivers.serial_open_retries"])
@@ -180,11 +197,24 @@ func loadFromFile(cfg *Config) error {
 	setPositiveIntFromText(&cfg.DriverTCPDialRetries, flatCfg["drivers.tcp_dial_retries"])
 	setDurationFromText(&cfg.DriverTCPDialBackoff, flatCfg["drivers.tcp_dial_backoff"])
 	setDurationFromText(&cfg.DriverTCPReadTimeout, flatCfg["drivers.tcp_read_timeout"])
+}
+
+func applyNorthboundFileConfig(cfg *Config, flatCfg map[string]string) {
+	if cfg == nil {
+		return
+	}
+
+	setStringIfNotEmpty(&cfg.NorthboundPluginsDir, flatCfg["northbound.plugins_dir"])
+	setDurationFromText(&cfg.NorthboundMQTTReconnectInterval, flatCfg["northbound.mqtt_reconnect_interval"])
+}
+
+func applyCollectorFileConfig(cfg *Config, flatCfg map[string]string) {
+	if cfg == nil {
+		return
+	}
 
 	setDurationFromText(&cfg.CollectorDeviceSyncInterval, flatCfg["collector.device_sync_interval"])
 	setDurationFromText(&cfg.CollectorCommandPollInterval, flatCfg["collector.command_poll_interval"])
-
-	return nil
 }
 
 func parseFlatYAML(data []byte) (map[string]string, error) {
@@ -330,38 +360,59 @@ func loadFromEnv(cfg *Config) {
 
 	defaults := defaultEnvConfig
 
-	setStringFromEnv(&cfg.ListenAddr, "LISTEN_ADDR")
+	applyServerEnvConfig(cfg, defaults)
+	applyDatabaseEnvConfig(cfg)
+	applyTLSEnvConfig(cfg)
+	applySessionEnvConfig(cfg)
+	applyLogEnvConfig(cfg)
+	applyCollectorEnvConfig(cfg, defaults)
+	applyDriverEnvConfig(cfg)
+	applyNorthboundEnvConfig(cfg, defaults)
+	applyThresholdEnvConfig(cfg)
+	applyDataLimitEnvConfig(cfg)
+}
 
+func applyServerEnvConfig(cfg, defaults *Config) {
+	setStringFromEnv(&cfg.ListenAddr, "LISTEN_ADDR")
 	setDurationFromEnvWithFallback(&cfg.HTTPReadTimeout, "HTTP_READ_TIMEOUT", defaults.HTTPReadTimeout, false)
 	setDurationFromEnvWithFallback(&cfg.HTTPWriteTimeout, "HTTP_WRITE_TIMEOUT", defaults.HTTPWriteTimeout, false)
 	setDurationFromEnv(&cfg.HTTPIdleTimeout, "HTTP_IDLE_TIMEOUT")
+}
 
+func applyDatabaseEnvConfig(cfg *Config) {
 	setStringFromEnv(&cfg.DBPath, "DB_PATH")
 	setStringFromEnv(&cfg.ParamDBPath, "PARAM_DB_PATH")
 	setStringFromEnv(&cfg.DataDBPath, "DATA_DB_PATH")
+}
 
+func applyTLSEnvConfig(cfg *Config) {
 	setStringFromEnv(&cfg.TLSCertFile, "TLS_CERT_FILE")
 	setStringFromEnv(&cfg.TLSKeyFile, "TLS_KEY_FILE")
 	setBoolFromEnvAllowOne(&cfg.TLSAuto, "TLS_AUTO")
 	setStringFromEnv(&cfg.TLSDomain, "TLS_DOMAIN")
 	setStringFromEnv(&cfg.TLSCacheDir, "TLS_CACHE_DIR")
+}
 
+func applySessionEnvConfig(cfg *Config) {
 	setStringFromEnv(&cfg.SessionSecret, "SESSION_SECRET")
 	setStringFromEnv(&cfg.AllowedOrigins, "ALLOWED_ORIGINS")
+}
 
+func applyLogEnvConfig(cfg *Config) {
 	setStringFromEnv(&cfg.LogLevel, "LOG_LEVEL")
 	setBoolFromEnv(&cfg.LogJSON, "LOG_JSON")
+}
 
+func applyCollectorEnvConfig(cfg, defaults *Config) {
 	setBoolFromEnv(&cfg.CollectorEnabled, "COLLECTOR_ENABLED")
 	setIntFromEnvWithFallback(&cfg.CollectorWorkers, "COLLECTOR_WORKERS", defaults.CollectorWorkers)
 	setDurationFromEnvWithFallback(&cfg.SyncInterval, "SYNC_INTERVAL", defaults.SyncInterval, false)
 	setDurationFromEnvWithFallback(&cfg.CollectorDeviceSyncInterval, "COLLECTOR_DEVICE_SYNC_INTERVAL", defaults.CollectorDeviceSyncInterval, true)
 	setDurationFromEnvWithFallback(&cfg.CollectorCommandPollInterval, "COLLECTOR_COMMAND_POLL_INTERVAL", defaults.CollectorCommandPollInterval, true)
+}
 
+func applyDriverEnvConfig(cfg *Config) {
 	setStringFromEnv(&cfg.DriversDir, "DRIVERS_DIR")
-	setStringFromEnv(&cfg.NorthboundPluginsDir, "NORTHBOUND_PLUGINS_DIR")
-	setDurationFromEnvWithFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
-
 	setDurationFromEnv(&cfg.DriverCallTimeout, "DRIVER_CALL_TIMEOUT")
 	setDurationFromEnv(&cfg.DriverSerialReadTimeout, "DRIVER_SERIAL_READ_TIMEOUT")
 	setIntFromEnv(&cfg.DriverSerialOpenRetries, "DRIVER_SERIAL_OPEN_RETRIES")
@@ -370,10 +421,19 @@ func loadFromEnv(cfg *Config) {
 	setIntFromEnv(&cfg.DriverTCPDialRetries, "DRIVER_TCP_DIAL_RETRIES")
 	setDurationFromEnv(&cfg.DriverTCPDialBackoff, "DRIVER_TCP_DIAL_BACKOFF")
 	setDurationFromEnv(&cfg.DriverTCPReadTimeout, "DRIVER_TCP_READ_TIMEOUT")
+}
 
+func applyNorthboundEnvConfig(cfg, defaults *Config) {
+	setStringFromEnv(&cfg.NorthboundPluginsDir, "NORTHBOUND_PLUGINS_DIR")
+	setDurationFromEnvWithFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
+}
+
+func applyThresholdEnvConfig(cfg *Config) {
 	setBoolFromEnv(&cfg.ThresholdCacheEnabled, "THRESHOLD_CACHE_ENABLED")
 	setDurationFromEnv(&cfg.ThresholdCacheTTL, "THRESHOLD_CACHE_TTL")
+}
 
+func applyDataLimitEnvConfig(cfg *Config) {
 	setIntFromEnv(&cfg.MaxDataPoints, "MAX_DATA_POINTS")
 	setIntFromEnv(&cfg.MaxDataCache, "MAX_DATA_CACHE")
 }
