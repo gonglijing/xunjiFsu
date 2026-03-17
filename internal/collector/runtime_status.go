@@ -28,7 +28,7 @@ func (c *Collector) ListDeviceRuntimeStatus() map[int64]DeviceRuntimeStatus {
 		if task == nil {
 			continue
 		}
-		out[deviceID] = runtimeStatusFromTask(task)
+		out[deviceID] = buildDeviceRuntimeStatus(task)
 	}
 	return out
 }
@@ -42,10 +42,10 @@ func (c *Collector) GetDeviceRuntimeStatus(deviceID int64) (DeviceRuntimeStatus,
 	if !ok || task == nil {
 		return DeviceRuntimeStatus{}, false
 	}
-	return runtimeStatusFromTask(task), true
+	return buildDeviceRuntimeStatus(task), true
 }
 
-func runtimeStatusFromTask(task *collectTask) DeviceRuntimeStatus {
+func buildDeviceRuntimeStatus(task *collectTask) DeviceRuntimeStatus {
 	status := DeviceRuntimeStatus{
 		Registered: true,
 	}

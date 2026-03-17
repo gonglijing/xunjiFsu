@@ -75,3 +75,17 @@ func TestGetDeviceRuntimeStatus_NotFound(t *testing.T) {
 		t.Fatalf("expected not found status")
 	}
 }
+
+func TestBuildDeviceRuntimeStatus_NilTask(t *testing.T) {
+	status := buildDeviceRuntimeStatus(nil)
+
+	if !status.Registered {
+		t.Fatalf("expected registered=true")
+	}
+	if status.DeviceID != 0 {
+		t.Fatalf("device id mismatch: got %d want 0", status.DeviceID)
+	}
+	if status.LastError != "" {
+		t.Fatalf("last error mismatch: got %q want empty", status.LastError)
+	}
+}
