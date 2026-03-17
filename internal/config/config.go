@@ -121,19 +121,19 @@ func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
 	// 1. 先从 YAML 文件加载配置
-	if err := loadFromFile(cfg); err != nil {
+	if err := loadConfigFromFile(cfg); err != nil {
 		// 配置文件不存在或解析失败，使用默认配置（不报错）
 		// fmt.Fprintf(os.Stderr, "Warning: Failed to load config file: %v\n", err)
 	}
 
 	// 2. 环境变量覆盖配置
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	return cfg, nil
 }
 
-// loadFromFile 从 YAML 文件加载配置（仅解析本项目使用的简单层级键值）
-func loadFromFile(cfg *Config) error {
+// loadConfigFromFile 从 YAML 文件加载配置（仅解析本项目使用的简单层级键值）
+func loadConfigFromFile(cfg *Config) error {
 	configFile, err := findConfigFile()
 	if err != nil {
 		return err
@@ -352,8 +352,8 @@ func setPositiveIntFromText(dst *int, value string) {
 	*dst = parsed
 }
 
-// loadFromEnv 从环境变量加载配置（会覆盖文件配置）
-func loadFromEnv(cfg *Config) {
+// applyEnvConfig 从环境变量加载配置（会覆盖文件配置）
+func applyEnvConfig(cfg *Config) {
 	if cfg == nil {
 		return
 	}

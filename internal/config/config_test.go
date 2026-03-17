@@ -175,7 +175,7 @@ func TestLoadFromEnv_ListenAddr(t *testing.T) {
 	defer os.Unsetenv("LISTEN_ADDR")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.ListenAddr != ":9090" {
 		t.Errorf("ListenAddr = %s, want :9090", cfg.ListenAddr)
@@ -190,7 +190,7 @@ func TestLoadFromEnv_HTTPTimeout(t *testing.T) {
 	defer os.Unsetenv("HTTP_WRITE_TIMEOUT")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.HTTPReadTimeout != 60*time.Second {
 		t.Errorf("HTTPReadTimeout = %v, want 60s", cfg.HTTPReadTimeout)
@@ -205,7 +205,7 @@ func TestLoadFromEnv_DBPath(t *testing.T) {
 	defer os.Unsetenv("DB_PATH")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.DBPath != "/custom/path/db.sqlite" {
 		t.Errorf("DBPath = %s, want /custom/path/db.sqlite", cfg.DBPath)
@@ -221,7 +221,7 @@ func TestLoadFromEnv_TLS(t *testing.T) {
 	defer os.Unsetenv("TLS_CACHE_DIR")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.TLSAuto != true {
 		t.Errorf("TLSAuto = %v, want true", cfg.TLSAuto)
@@ -239,7 +239,7 @@ func TestLoadFromEnv_TLS_AutoNumber(t *testing.T) {
 	defer os.Unsetenv("TLS_AUTO")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.TLSAuto != true {
 		t.Errorf("TLSAuto = %v, want true", cfg.TLSAuto)
@@ -251,7 +251,7 @@ func TestLoadFromEnv_TLS_AutoTrueWithSpaces(t *testing.T) {
 	defer os.Unsetenv("TLS_AUTO")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.TLSAuto != true {
 		t.Errorf("TLSAuto = %v, want true", cfg.TLSAuto)
@@ -265,7 +265,7 @@ func TestLoadFromEnv_Collector(t *testing.T) {
 	defer os.Unsetenv("COLLECTOR_WORKERS")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.CollectorEnabled != false {
 		t.Errorf("CollectorEnabled = %v, want false", cfg.CollectorEnabled)
@@ -280,7 +280,7 @@ func TestLoadFromEnv_SyncInterval(t *testing.T) {
 	defer os.Unsetenv("SYNC_INTERVAL")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.SyncInterval != 10*time.Minute {
 		t.Errorf("SyncInterval = %v, want 10m", cfg.SyncInterval)
@@ -294,7 +294,7 @@ func TestLoadFromEnv_CollectorRuntimeIntervals(t *testing.T) {
 	defer os.Unsetenv("COLLECTOR_COMMAND_POLL_INTERVAL")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.CollectorDeviceSyncInterval != 15*time.Second {
 		t.Errorf("CollectorDeviceSyncInterval = %v, want 15s", cfg.CollectorDeviceSyncInterval)
@@ -309,7 +309,7 @@ func TestLoadFromEnv_NorthboundMQTTReconnectInterval(t *testing.T) {
 	defer os.Unsetenv("NORTHBOUND_MQTT_RECONNECT_INTERVAL")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.NorthboundMQTTReconnectInterval != 7*time.Second {
 		t.Errorf("NorthboundMQTTReconnectInterval = %v, want 7s", cfg.NorthboundMQTTReconnectInterval)
@@ -323,7 +323,7 @@ func TestLoadFromEnv_DriversDir(t *testing.T) {
 	defer os.Unsetenv("NORTHBOUND_PLUGINS_DIR")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.DriversDir != "/custom/drivers" {
 		t.Errorf("DriversDir = %s, want /custom/drivers", cfg.DriversDir)
@@ -351,7 +351,7 @@ func TestLoadFromEnv_LogLevel(t *testing.T) {
 			defer os.Unsetenv("LOG_LEVEL")
 
 			cfg := &Config{}
-			loadFromEnv(cfg)
+			applyEnvConfig(cfg)
 
 			if cfg.LogLevel != tt.expected {
 				t.Errorf("LogLevel = %s, want %s", cfg.LogLevel, tt.expected)
@@ -379,7 +379,7 @@ func TestLoadFromEnv_LogJSON(t *testing.T) {
 			defer os.Unsetenv("LOG_JSON")
 
 			cfg := &Config{}
-			loadFromEnv(cfg)
+			applyEnvConfig(cfg)
 
 			if cfg.LogJSON != tt.expected {
 				t.Errorf("LogJSON = %v, want %v for env=%s", cfg.LogJSON, tt.expected, tt.envValue)
@@ -395,7 +395,7 @@ func TestLoadFromEnv_ThresholdCache(t *testing.T) {
 	defer os.Unsetenv("THRESHOLD_CACHE_TTL")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.ThresholdCacheEnabled != false {
 		t.Errorf("ThresholdCacheEnabled = %v, want false", cfg.ThresholdCacheEnabled)
@@ -412,7 +412,7 @@ func TestLoadFromEnv_MaxDataLimits(t *testing.T) {
 	defer os.Unsetenv("MAX_DATA_CACHE")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.MaxDataPoints != 200000 {
 		t.Errorf("MaxDataPoints = %d, want 200000", cfg.MaxDataPoints)
@@ -431,7 +431,7 @@ func TestLoadFromEnv_DriverSerialConfig(t *testing.T) {
 	defer os.Unsetenv("DRIVER_SERIAL_OPEN_BACKOFF")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.DriverSerialReadTimeout != 5*time.Second {
 		t.Errorf("DriverSerialReadTimeout = %v, want 5s", cfg.DriverSerialReadTimeout)
@@ -455,7 +455,7 @@ func TestLoadFromEnv_DriverTCPConfig(t *testing.T) {
 	defer os.Unsetenv("DRIVER_TCP_READ_TIMEOUT")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.DriverTCPDialTimeout != 10*time.Second {
 		t.Errorf("DriverTCPDialTimeout = %v, want 10s", cfg.DriverTCPDialTimeout)
@@ -476,7 +476,7 @@ func TestLoadFromEnv_InvalidTimeout(t *testing.T) {
 	defer os.Unsetenv("HTTP_READ_TIMEOUT")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	// 应该保持默认值
 	if cfg.HTTPReadTimeout != 30*time.Second {
@@ -489,7 +489,7 @@ func TestLoadFromEnv_InvalidInt(t *testing.T) {
 	defer os.Unsetenv("COLLECTOR_WORKERS")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	// 应该保持默认值
 	if cfg.CollectorWorkers != 10 {
@@ -502,7 +502,7 @@ func TestLoadFromEnv_InvalidDuration(t *testing.T) {
 	defer os.Unsetenv("SYNC_INTERVAL")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	// 应该保持默认值
 	if cfg.SyncInterval != 5*time.Minute {
@@ -515,7 +515,7 @@ func TestLoadFromEnv_SessionSecret(t *testing.T) {
 	defer os.Unsetenv("SESSION_SECRET")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.SessionSecret != "my-secret-key" {
 		t.Errorf("SessionSecret = %s, want my-secret-key", cfg.SessionSecret)
@@ -527,7 +527,7 @@ func TestLoadFromEnv_CORS(t *testing.T) {
 	defer os.Unsetenv("ALLOWED_ORIGINS")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.AllowedOrigins != "http://a.com,http://b.com" {
 		t.Errorf("AllowedOrigins = %s, want http://a.com,http://b.com", cfg.AllowedOrigins)
@@ -541,7 +541,7 @@ func TestLoadFromEnv_DBPaths(t *testing.T) {
 	defer os.Unsetenv("DATA_DB_PATH")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.ParamDBPath != "/custom/param.db" {
 		t.Errorf("ParamDBPath = %s, want /custom/param.db", cfg.ParamDBPath)
@@ -558,7 +558,7 @@ func TestLoadFromEnv_TLSFiles(t *testing.T) {
 	defer os.Unsetenv("TLS_KEY_FILE")
 
 	cfg := &Config{}
-	loadFromEnv(cfg)
+	applyEnvConfig(cfg)
 
 	if cfg.TLSCertFile != "/certs/cert.pem" {
 		t.Errorf("TLSCertFile = %s, want /certs/cert.pem", cfg.TLSCertFile)
@@ -644,8 +644,8 @@ collector:
 	t.Cleanup(func() { _ = os.Chdir(oldWD) })
 
 	cfg := DefaultConfig()
-	if err := loadFromFile(cfg); err != nil {
-		t.Fatalf("loadFromFile: %v", err)
+	if err := loadConfigFromFile(cfg); err != nil {
+		t.Fatalf("loadConfigFromFile: %v", err)
 	}
 
 	if cfg.ListenAddr != ":7777" {
