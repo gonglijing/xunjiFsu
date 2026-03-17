@@ -19,6 +19,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
 
+const retentionCleanupInterval = 24 * time.Hour
+
 // Run boots the application and blocks until shutdown completes.
 func Run(cfg *config.Config) error {
 	secretKey := loadOrGenerateSecretKey()
@@ -33,15 +35,7 @@ func Run(cfg *config.Config) error {
 		return err
 	}
 
-	logger.Info("Starting data sync task...")
-	database.StartDataSync()
-	logger.Info("Starting retention cleanup task...")
-	database.StartRetentionCleanup(24 * time.Hour)
-
-	if cfg.ThresholdCacheEnabled {
-		logger.Info("Starting threshold cache...")
-		collector.StartThresholdCache()
-	}
+	startBackgroundTasks(cfg)
 
 	driverManager := driver.NewDriverManager()
 	driverExecutor := driver.NewDriverExecutor(driverManager)
@@ -73,28 +67,56 @@ func Run(cfg *config.Config) error {
 		logger.Warn("Failed to start collector", "error", err)
 	}
 
-	// 启动系统属性采集器
-	sysCollector := collector.GetSystemStatsCollector()
-	sysCollector.SetNorthboundManager(northboundMgr)
-	if err := sysCollector.Start(); err != nil {
-		logger.Warn("Failed to start system stats collector", "error", err)
-	}
+	sysCollector := startSystemStatsCollector(northboundMgr)
 
 	gracefulMgr := graceful.NewGracefulShutdown(30 * time.Second)
 	registerShutdown(gracefulMgr, collect, northboundMgr, sysCollector, cfg)
 	gracefulMgr.Start()
 
-	server := &http.Server{
+	server := buildHTTPServer(cfg, finalHandler)
+	gracefulMgr.SetHTTPServer(server)
+
+	if err := serveHTTPServer(server, cfg); err != nil {
+		return err
+	}
+
+	gracefulMgr.Wait()
+	return nil
+}
+
+func startBackgroundTasks(cfg *config.Config) {
+	logger.Info("Starting data sync task...")
+	database.StartDataSync()
+
+	logger.Info("Starting retention cleanup task...")
+	database.StartRetentionCleanup(retentionCleanupInterval)
+
+	if cfg != nil && cfg.ThresholdCacheEnabled {
+		logger.Info("Starting threshold cache...")
+		collector.StartThresholdCache()
+	}
+}
+
+func startSystemStatsCollector(northboundMgr *northbound.NorthboundManager) *collector.SystemStatsCollector {
+	sysCollector := collector.GetSystemStatsCollector()
+	sysCollector.SetNorthboundManager(northboundMgr)
+	if err := sysCollector.Start(); err != nil {
+		logger.Warn("Failed to start system stats collector", "error", err)
+	}
+	return sysCollector
+}
+
+func buildHTTPServer(cfg *config.Config, handler http.Handler) *http.Server {
+	return &http.Server{
 		Addr:         cfg.ListenAddr,
-		Handler:      finalHandler,
+		Handler:      handler,
 		ReadTimeout:  cfg.HTTPReadTimeout,
 		WriteTimeout: cfg.HTTPWriteTimeout,
 		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
+}
 
-	gracefulMgr.SetHTTPServer(server)
-
-	// TLS 优先级：1) 自动证书 2) 指定证书 3) HTTP
+func serveHTTPServer(server *http.Server, cfg *config.Config) error {
 	switch {
 	case cfg.TLSAuto && cfg.TLSDomain != "":
 		if err := listenAndServeWithAutoCert(server, cfg); err != nil && err != http.ErrServerClosed {
@@ -111,8 +133,6 @@ func Run(cfg *config.Config) error {
 			return fmt.Errorf("server error: %w", err)
 		}
 	}
-
-	gracefulMgr.Wait()
 	return nil
 }
 
