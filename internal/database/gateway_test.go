@@ -112,3 +112,24 @@ func TestScanGatewayConfig_Error(t *testing.T) {
 		t.Fatal("expected scanGatewayConfig error")
 	}
 }
+
+func TestResolveTargetGatewayConfigID_UsesCurrentConfigWhenEmpty(t *testing.T) {
+	setupGatewayTestDB(t)
+
+	if err := InitGatewayConfigTable(); err != nil {
+		t.Fatalf("InitGatewayConfigTable returned error: %v", err)
+	}
+
+	cfg, err := GetGatewayConfig()
+	if err != nil {
+		t.Fatalf("GetGatewayConfig returned error: %v", err)
+	}
+
+	got, err := resolveTargetGatewayConfigID(0)
+	if err != nil {
+		t.Fatalf("resolveTargetGatewayConfigID returned error: %v", err)
+	}
+	if got != cfg.ID {
+		t.Fatalf("resolveTargetGatewayConfigID() = %d, want %d", got, cfg.ID)
+	}
+}

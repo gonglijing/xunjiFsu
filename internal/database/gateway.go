@@ -111,7 +111,7 @@ func UpdateGatewayConfig(cfg *GatewayConfig) error {
 
 	normalizeGatewayConfig(cfg)
 
-	targetID, err := resolveGatewayConfigID(cfg.ID)
+	targetID, err := resolveTargetGatewayConfigID(cfg.ID)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func normalizeGatewayConfig(cfg *GatewayConfig) {
 	}
 }
 
-func resolveGatewayConfigID(id int64) (int64, error) {
+func resolveTargetGatewayConfigID(id int64) (int64, error) {
 	if id > 0 {
 		return id, nil
 	}
