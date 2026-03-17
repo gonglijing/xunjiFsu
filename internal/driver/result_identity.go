@@ -23,23 +23,23 @@ func normalizeDriverResultIdentity(result *DriverResult, rawOutput []byte) {
 
 	result.ProductKey = strings.TrimSpace(result.ProductKey)
 	if result.ProductKey == "" {
-		result.ProductKey = resolveDriverProductKeyFromData(result.Data)
+		result.ProductKey = resolveDriverProductKeyFromFields(result.Data)
 	}
 	if result.ProductKey == "" && len(rawOutput) > 0 {
-		result.ProductKey = resolveDriverProductKeyFromRawOutput(rawOutput)
+		result.ProductKey = parseDriverProductKeyFromOutput(rawOutput)
 	}
 
 	removeDriverProductKeyFields(result.Data)
 }
 
-func resolveDriverProductKeyFromData(data map[string]string) string {
+func resolveDriverProductKeyFromFields(data map[string]string) string {
 	if len(data) == 0 {
 		return ""
 	}
 	return firstNonEmptyTrimmed(data["productKey"], data["product_key"])
 }
 
-func resolveDriverProductKeyFromRawOutput(rawOutput []byte) string {
+func parseDriverProductKeyFromOutput(rawOutput []byte) string {
 	var probe driverIdentityProbe
 	if err := json.Unmarshal(rawOutput, &probe); err != nil {
 		return ""
