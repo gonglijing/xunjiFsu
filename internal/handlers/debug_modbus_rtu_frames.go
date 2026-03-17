@@ -146,17 +146,9 @@ func buildModbusRTURequest(req *modbusSerialDebugRequest) ([]byte, int) {
 }
 
 func parseModbusRTUResponse(req *modbusSerialDebugRequest, port string, request []byte, response []byte) (*modbusSerialDebugResponse, error) {
-	if len(response) < 5 {
-		return nil, fmt.Errorf("response too short: %d", len(response))
-	}
-	if response[0] != byte(req.SlaveID) {
-		return nil, fmt.Errorf("slave id mismatch: got %d expect %d", response[0], req.SlaveID)
-	}
-
-	crcRead := binary.LittleEndian.Uint16(response[len(response)-2:])
-	crcWant := crc16Modbus(response[:len(response)-2])
-	if crcRead != crcWant {
-		return nil, fmt.Errorf("crc mismatch: got 0x%04X expect 0x%04X", crcRead, crcWant)
+	functionCode, payload, err := parseModbusRTUResponseHeader(response, req.SlaveID)
+	if err != nil {
+		return nil, err
 	}
 
 	resp := &modbusSerialDebugResponse{
@@ -167,8 +159,7 @@ func parseModbusRTUResponse(req *modbusSerialDebugRequest, port string, request 
 		FunctionCode: req.FunctionCode,
 	}
 
-	functionCode := int(response[1])
-	if exceptionCode, ok := parseModbusException(functionCode, response[1:]); ok {
+	if exceptionCode, ok := parseModbusException(functionCode, payload); ok {
 		resp.ExceptionCode = exceptionCode
 		return resp, nil
 	}
@@ -181,7 +172,7 @@ func parseModbusRTUResponse(req *modbusSerialDebugRequest, port string, request 
 
 	switch req.FunctionCode {
 	case modbusFuncReadHoldingRegisters:
-		quantity, registers, err := parseModbusRegisterPayload(response[:len(response)-2], 2, 3)
+		quantity, registers, err := parseModbusRegisterPayload(payload, 1, 2)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +181,7 @@ func parseModbusRTUResponse(req *modbusSerialDebugRequest, port string, request 
 		resp.Quantity = quantity
 		resp.Registers = registers
 	case modbusFuncWriteSingleRegister:
-		address, value, err := parseModbusWritePayload(response, 2, len(response))
+		address, value, err := parseModbusWritePayload(payload, 1, len(payload))
 		if err != nil {
 			return nil, err
 		}
@@ -205,23 +196,13 @@ func parseModbusRTURawResponse(port string, request []byte, response []byte) (*m
 	if len(request) < 2 {
 		return nil, fmt.Errorf("raw request too short: %d", len(request))
 	}
-	if len(response) < 5 {
-		return nil, fmt.Errorf("response too short: %d", len(response))
-	}
-
 	reqSlaveID := int(request[0])
 	reqFuncCode := int(request[1])
-	if response[0] != byte(reqSlaveID) {
-		return nil, fmt.Errorf("slave id mismatch: got %d expect %d", response[0], reqSlaveID)
+	functionCode, payload, err := parseModbusRTUResponseHeader(response, reqSlaveID)
+	if err != nil {
+		return nil, err
 	}
 
-	crcRead := binary.LittleEndian.Uint16(response[len(response)-2:])
-	crcWant := crc16Modbus(response[:len(response)-2])
-	if crcRead != crcWant {
-		return nil, fmt.Errorf("crc mismatch: got 0x%04X expect 0x%04X", crcRead, crcWant)
-	}
-
-	functionCode := int(response[1])
 	resp := &modbusSerialDebugResponse{
 		Port:         port,
 		RequestHex:   formatHex(request),
@@ -230,14 +211,14 @@ func parseModbusRTURawResponse(port string, request []byte, response []byte) (*m
 		FunctionCode: functionCode,
 	}
 
-	if exceptionCode, ok := parseModbusException(functionCode, response[1:]); ok {
+	if exceptionCode, ok := parseModbusException(functionCode, payload); ok {
 		resp.ExceptionCode = exceptionCode
 		return resp, nil
 	}
 
 	switch functionCode {
 	case modbusFuncReadHoldingRegisters:
-		quantity, registers, err := parseModbusRegisterPayload(response[:len(response)-2], 2, 3)
+		quantity, registers, err := parseModbusRegisterPayload(payload, 1, 2)
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +229,7 @@ func parseModbusRTURawResponse(port string, request []byte, response []byte) (*m
 		resp.Quantity = quantity
 		resp.Registers = registers
 	case modbusFuncWriteSingleRegister:
-		address, value, err := parseModbusWritePayload(response, 2, len(response))
+		address, value, err := parseModbusWritePayload(payload, 1, len(payload))
 		if err != nil {
 			return nil, err
 		}
@@ -282,4 +263,21 @@ func formatHex(data []byte) string {
 		return ""
 	}
 	return fmt.Sprintf("% X", data)
+}
+
+func parseModbusRTUResponseHeader(response []byte, expectedSlaveID int) (int, []byte, error) {
+	if len(response) < 5 {
+		return 0, nil, fmt.Errorf("response too short: %d", len(response))
+	}
+	if response[0] != byte(expectedSlaveID) {
+		return 0, nil, fmt.Errorf("slave id mismatch: got %d expect %d", response[0], expectedSlaveID)
+	}
+
+	crcRead := binary.LittleEndian.Uint16(response[len(response)-2:])
+	crcWant := crc16Modbus(response[:len(response)-2])
+	if crcRead != crcWant {
+		return 0, nil, fmt.Errorf("crc mismatch: got 0x%04X expect 0x%04X", crcRead, crcWant)
+	}
+
+	return int(response[1]), response[1 : len(response)-2], nil
 }

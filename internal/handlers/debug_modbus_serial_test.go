@@ -100,3 +100,31 @@ func TestParseRawModbusRTUBytes_DecimalTokens(t *testing.T) {
 		t.Fatalf("crc = 0x%04X, want 0x%04X", crc, want)
 	}
 }
+
+func TestParseModbusRTUResponseHeader(t *testing.T) {
+	response := []byte{0x01, 0x03, 0x02, 0x00, 0x64}
+	crc := crc16Modbus(response)
+	response = append(response, byte(crc&0xFF), byte(crc>>8))
+
+	functionCode, payload, err := parseModbusRTUResponseHeader(response, 1)
+	if err != nil {
+		t.Fatalf("parseModbusRTUResponseHeader err = %v", err)
+	}
+	if functionCode != 0x03 {
+		t.Fatalf("functionCode = %d, want 3", functionCode)
+	}
+	if len(payload) != 4 {
+		t.Fatalf("len(payload) = %d, want 4", len(payload))
+	}
+}
+
+func TestParseModbusRTUResponseHeader_SlaveIDMismatch(t *testing.T) {
+	response := []byte{0x01, 0x03, 0x02, 0x00, 0x64}
+	crc := crc16Modbus(response)
+	response = append(response, byte(crc&0xFF), byte(crc>>8))
+
+	_, _, err := parseModbusRTUResponseHeader(response, 2)
+	if err == nil {
+		t.Fatal("expected slave id mismatch error")
+	}
+}
