@@ -20,11 +20,7 @@ func validateModbusSerialDebugRequest(req *modbusSerialDebugRequest) error {
 	}
 
 	req.RawRequest = strings.TrimSpace(req.RawRequest)
-	if isRawModbusRequest(req.RawRequest) {
-		return normalizeModbusRawResponseLength(&req.ExpectRespLen)
-	}
-
-	return validateModbusStructuredRequest(&req.FunctionCode, req.SlaveID, req.Address, &req.Quantity, &req.Value)
+	return validateModbusSerialOperation(req)
 }
 
 func validateModbusTCPDebugRequest(req *modbusTCPDebugRequest) error {
@@ -39,6 +35,17 @@ func validateModbusTCPDebugRequest(req *modbusTCPDebugRequest) error {
 	if err := normalizeModbusTimeout(&req.TimeoutMs, 2000); err != nil {
 		return err
 	}
+	return validateModbusTCPOperation(req)
+}
+
+func validateModbusSerialOperation(req *modbusSerialDebugRequest) error {
+	if isRawModbusRequest(req.RawRequest) {
+		return normalizeModbusRawResponseLength(&req.ExpectRespLen)
+	}
+	return validateModbusStructuredRequest(&req.FunctionCode, req.SlaveID, req.Address, &req.Quantity, &req.Value)
+}
+
+func validateModbusTCPOperation(req *modbusTCPDebugRequest) error {
 	if isRawModbusRequest(req.RawRequest) {
 		return nil
 	}

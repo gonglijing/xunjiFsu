@@ -82,3 +82,40 @@ func TestResolveModbusDirectOrResourceTarget_UsesDirectValue(t *testing.T) {
 		t.Fatalf("target = %q, want %q", got, "/dev/ttyUSB0")
 	}
 }
+
+func TestValidateModbusSerialOperation_RawRequest(t *testing.T) {
+	req := &modbusSerialDebugRequest{
+		RawRequest:    "01 03 00 00 00 01",
+		ExpectRespLen: 0,
+	}
+
+	err := validateModbusSerialOperation(req)
+	if err != nil {
+		t.Fatalf("validateModbusSerialOperation returned error: %v", err)
+	}
+	if req.ExpectRespLen != 256 {
+		t.Fatalf("req.ExpectRespLen = %d, want 256", req.ExpectRespLen)
+	}
+}
+
+func TestValidateModbusTCPOperation_StructuredRequest(t *testing.T) {
+	req := &modbusTCPDebugRequest{
+		SlaveID:       1,
+		FunctionCode:  0,
+		Address:       0,
+		Quantity:      0,
+		Value:         0,
+		TransactionID: 12,
+	}
+
+	err := validateModbusTCPOperation(req)
+	if err != nil {
+		t.Fatalf("validateModbusTCPOperation returned error: %v", err)
+	}
+	if req.FunctionCode != modbusFuncReadHoldingRegisters {
+		t.Fatalf("req.FunctionCode = %d, want %d", req.FunctionCode, modbusFuncReadHoldingRegisters)
+	}
+	if req.Quantity != 1 {
+		t.Fatalf("req.Quantity = %d, want 1", req.Quantity)
+	}
+}
