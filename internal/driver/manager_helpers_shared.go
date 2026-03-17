@@ -24,9 +24,9 @@ const (
 	defaultTCPReadTimeout    = 500 * time.Millisecond
 )
 
-func resolveResource(device *models.Device) (int64, string) {
+func resolveDeviceResource(device *models.Device) (int64, string) {
 	resourceID := resolveDeviceResourceID(device)
-	resourceType := resolveResourceTypeFromDeviceOrDB(device, resourceID)
+	resourceType := resolveResourceTypeFromDeviceOrDatabase(device, resourceID)
 	if resourceType == "" {
 		resourceType = inferResourceType(device)
 	}
@@ -41,7 +41,7 @@ func resolveDeviceResourceID(device *models.Device) int64 {
 	return *device.ResourceID
 }
 
-func resolveResourceTypeFromDeviceOrDB(device *models.Device, resourceID int64) string {
+func resolveResourceTypeFromDeviceOrDatabase(device *models.Device, resourceID int64) string {
 	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
 	if resourceType != "" || resourceID <= 0 || database.ParamDB == nil {
 		return resourceType
@@ -80,7 +80,7 @@ func buildDeviceConfig(device *models.Device) map[string]string {
 	if device != nil && device.DeviceAddress != "" {
 		capHint++
 	}
-	_, resourceType := resolveResource(device)
+	_, resourceType := resolveDeviceResource(device)
 	if resourceType == "serial" {
 		capHint += 5
 	} else {
@@ -150,7 +150,7 @@ func NewPreparedExecution(device *models.Device) *PreparedExecution {
 		return nil
 	}
 
-	resourceID, resourceType := resolveResource(device)
+	resourceID, resourceType := resolveDeviceResource(device)
 	deviceConfig := buildDeviceConfig(device)
 	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
 	inputJSON, _ := marshalDriverInvocationInput(driverCtx)
@@ -378,6 +378,6 @@ func (e *DriverExecutor) ReloadDeviceDriver(device *models.Device) error {
 	if device == nil || device.DriverID == nil {
 		return fmt.Errorf("device has no driver")
 	}
-	resourceID, _ := resolveResource(device)
+	resourceID, _ := resolveDeviceResource(device)
 	return e.ensureDriverLoaded(device, resourceID)
 }

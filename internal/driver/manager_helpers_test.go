@@ -12,9 +12,9 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func TestResolveResourceDefaults(t *testing.T) {
+func TestResolveDeviceResourceDefaults(t *testing.T) {
 	device := &models.Device{}
-	resourceID, resourceType := resolveResource(device)
+	resourceID, resourceType := resolveDeviceResource(device)
 	if resourceID != 0 {
 		t.Fatalf("expected resourceID 0, got %d", resourceID)
 	}
@@ -23,13 +23,13 @@ func TestResolveResourceDefaults(t *testing.T) {
 	}
 }
 
-func TestResolveResourceDriverTypeFallback(t *testing.T) {
+func TestResolveDeviceResourceDriverTypeFallback(t *testing.T) {
 	id := int64(9)
 	device := &models.Device{
 		ResourceID: &id,
 		DriverType: "net",
 	}
-	resourceID, resourceType := resolveResource(device)
+	resourceID, resourceType := resolveDeviceResource(device)
 	if resourceID != id {
 		t.Fatalf("expected resourceID %d, got %d", id, resourceID)
 	}
@@ -38,12 +38,12 @@ func TestResolveResourceDriverTypeFallback(t *testing.T) {
 	}
 }
 
-func TestResolveResourceExplicitType(t *testing.T) {
+func TestResolveDeviceResourceExplicitType(t *testing.T) {
 	device := &models.Device{
 		ResourceType: "serial",
 		DriverType:   "net",
 	}
-	_, resourceType := resolveResource(device)
+	_, resourceType := resolveDeviceResource(device)
 	if resourceType != "serial" {
 		t.Fatalf("expected resourceType serial, got %s", resourceType)
 	}
