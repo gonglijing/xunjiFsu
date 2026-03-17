@@ -60,7 +60,7 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 
 	log.Printf("[PandaX-%s] handleRPCRequest: requestId=%s, method=%s", a.name, req.RequestID, req.Method)
 
-	commands := a.buildCommandsFromRPC(req.RequestID, req.Method, req.Params)
+	commands := a.buildRPCCommands(req.RequestID, req.Method, req.Params)
 	if len(commands) == 0 {
 		log.Printf("[PandaX-%s] handleRPCRequest: 无有效命令", a.name)
 		return
@@ -74,9 +74,9 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 	log.Printf("[PandaX-%s] handleRPCRequest: 入队 %d 条命令, queueLen=%d", a.name, len(commands), queueLen)
 }
 
-func (a *PandaXAdapter) buildCommandsFromRPC(requestID, method string, params interface{}) []*models.NorthboundCommand {
+func (a *PandaXAdapter) buildRPCCommands(requestID, method string, params interface{}) []*models.NorthboundCommand {
 	defaultPK, defaultDK := a.defaultIdentity()
-	commands := buildPandaXCommands(requestID, method, params, defaultPK, defaultDK)
+	commands := buildPandaXRPCCommands(requestID, method, params, defaultPK, defaultDK)
 	if len(commands) == 0 {
 		return nil
 	}
@@ -91,7 +91,7 @@ func (a *PandaXAdapter) buildCommandsFromRPC(requestID, method string, params in
 	return commands
 }
 
-func buildPandaXCommands(requestID, method string, params interface{}, defaultPK, defaultDK string) []*models.NorthboundCommand {
+func buildPandaXRPCCommands(requestID, method string, params interface{}, defaultPK, defaultDK string) []*models.NorthboundCommand {
 	out := make([]*models.NorthboundCommand, 0)
 	appendProperties := func(pk, dk string, props map[string]interface{}) {
 		if len(props) == 0 {

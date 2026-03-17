@@ -440,6 +440,24 @@ func TestPandaXBuildBatchRealtimePublish(t *testing.T) {
 	}
 }
 
+func TestBuildPandaXRPCCommands_UsesDefaultIdentity(t *testing.T) {
+	commands := buildPandaXRPCCommands("req-1", "set", map[string]interface{}{
+		"properties": map[string]interface{}{
+			"temperature": 23.5,
+		},
+	}, "default-pk", "default-dk")
+
+	if len(commands) != 1 {
+		t.Fatalf("len(commands)=%d, want=1", len(commands))
+	}
+	if commands[0].ProductKey != "default-pk" || commands[0].DeviceKey != "default-dk" {
+		t.Fatalf("identity mismatch: %+v", commands[0])
+	}
+	if commands[0].FieldName != "temperature" || commands[0].Value != "23.5" {
+		t.Fatalf("command mismatch: %+v", commands[0])
+	}
+}
+
 func TestIsPandaXReservedRPCKey(t *testing.T) {
 	reserved := []string{"productKey", "device_key", "subDevices", "field_name", "value"}
 	for _, key := range reserved {
