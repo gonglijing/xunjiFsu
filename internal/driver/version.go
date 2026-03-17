@@ -31,7 +31,7 @@ func ExtractDriverMetadata(wasmData []byte) (string, string, error) {
 		_ = plugin.Close(context.Background())
 	}()
 
-	return readDriverMetadataFromPlugin(plugin)
+	return extractDriverMetadataFromPlugin(plugin)
 }
 
 // ExtractDriverVersion reads the internal driver version from a wasm binary if exported.
@@ -40,12 +40,12 @@ func ExtractDriverVersion(wasmData []byte) (string, error) {
 	return version, err
 }
 
-func readDriverVersionFromPlugin(plugin *extism.Plugin) (string, error) {
-	version, _, err := readDriverMetadataFromPlugin(plugin)
+func extractDriverVersionFromPlugin(plugin *extism.Plugin) (string, error) {
+	version, _, err := extractDriverMetadataFromPlugin(plugin)
 	return version, err
 }
 
-func readDriverMetadataFromPlugin(plugin *extism.Plugin) (string, string, error) {
+func extractDriverMetadataFromPlugin(plugin *extism.Plugin) (string, string, error) {
 	if plugin == nil {
 		return "", "", fmt.Errorf("nil plugin")
 	}
@@ -115,5 +115,5 @@ func (m *DriverManager) GetDriverVersion(id int64) (string, error) {
 		return "", ErrDriverNotFound
 	}
 
-	return readDriverVersionFromPlugin(driver.plugin)
+	return extractDriverVersionFromPlugin(driver.plugin)
 }
