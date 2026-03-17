@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	collectorpkg "github.com/gonglijing/xunjiFsu/internal/collector"
@@ -23,15 +22,8 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resources, _ := database.ListResources()
-	resourceMap := make(map[int64]*models.Resource, len(resources))
-	for _, res := range resources {
-		if res == nil {
-			continue
-		}
-		resourceMap[res.ID] = res
-	}
-
 	drivers, _ := database.GetAllDrivers()
+	resourceMap := buildResourceMap(resources)
 	driverNameMap := buildDriverNameMap(drivers)
 	runtimeStatusMap := make(map[int64]collectorpkg.DeviceRuntimeStatus)
 	if h.collector != nil {
@@ -43,21 +35,7 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 		if device == nil {
 			continue
 		}
-		if device.DriverID != nil {
-			if name, ok := driverNameMap[*device.DriverID]; ok {
-				device.DriverName = name
-			} else {
-				device.DriverName = fmt.Sprintf("驱动 #%d", *device.DriverID)
-			}
-		}
-		if device.ResourceID != nil {
-			if res, ok := resourceMap[*device.ResourceID]; ok {
-				device.ResourceName = res.Name
-				device.ResourceType = res.Type
-				device.ResourcePath = res.Path
-			}
-		}
-
+		enrichDeviceDisplay(device, driverNameMap, resourceMap)
 		deviceList = append(deviceList, buildDeviceListItem(device, runtimeStatusMap))
 	}
 
@@ -66,17 +44,12 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 
 // CreateDevice 创建设备
 func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
-	var device models.Device
-	if err := ParseRequest(r, &device); err != nil {
-		WriteBadRequest(w, errInvalidRequestBodyWithDetailPrefix+err.Error())
-		return
-	}
-	if err := normalizeDeviceInput(&device); err != nil {
-		WriteBadRequestDef(w, apiErrDeviceNameRequired)
+	device, ok := parseAndNormalizeDevice(w, r)
+	if !ok {
 		return
 	}
 
-	id, err := database.CreateDevice(&device)
+	id, err := database.CreateDevice(device)
 	if err != nil {
 		writeServerErrorWithLog(w, apiErrCreateDeviceFailed, err)
 		return
@@ -88,46 +61,33 @@ func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
 
 // UpdateDevice 更新设备
 func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	device, ok := loadDeviceOrWriteNotFound(w, r)
 	if !ok {
 		return
 	}
-	if _, err := database.GetDeviceByID(id); err != nil {
-		WriteNotFoundDef(w, apiErrDeviceNotFound)
+
+	payload, ok := parseAndNormalizeDevice(w, r)
+	if !ok {
 		return
 	}
 
-	var device models.Device
-	if err := ParseRequest(r, &device); err != nil {
-		WriteBadRequest(w, errInvalidRequestBodyWithDetailPrefix+err.Error())
-		return
-	}
-	if err := normalizeDeviceInput(&device); err != nil {
-		WriteBadRequestDef(w, apiErrDeviceNameRequired)
-		return
-	}
-
-	device.ID = id
-	if err := database.UpdateDevice(&device); err != nil {
+	payload.ID = device.ID
+	if err := database.UpdateDevice(payload); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateDeviceFailed, err)
 		return
 	}
 
-	WriteSuccess(w, device)
+	WriteSuccess(w, payload)
 }
 
 // DeleteDevice 删除设备
 func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	device, ok := loadDeviceOrWriteNotFound(w, r)
 	if !ok {
 		return
 	}
-	if _, err := database.GetDeviceByID(id); err != nil {
-		WriteNotFoundDef(w, apiErrDeviceNotFound)
-		return
-	}
 
-	if err := database.DeleteDevice(id); err != nil {
+	if err := database.DeleteDevice(device.ID); err != nil {
 		writeServerErrorWithLog(w, apiErrDeleteDeviceFailed, err)
 		return
 	}
@@ -137,23 +97,14 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 
 // ToggleDeviceEnable 切换设备使能状态
 func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	device, ok := loadDeviceOrWriteNotFound(w, r)
 	if !ok {
 		return
 	}
 
-	device, err := database.GetDeviceByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrDeviceNotFound)
-		return
-	}
+	nextState := nextDeviceEnabledState(device.Enabled)
 
-	nextState := 0
-	if device.Enabled == 0 {
-		nextState = 1
-	}
-
-	if err := database.UpdateDeviceEnabled(id, nextState); err != nil {
+	if err := database.UpdateDeviceEnabled(device.ID, nextState); err != nil {
 		writeServerErrorWithLog(w, apiErrToggleDeviceFailed, err)
 		return
 	}
@@ -161,6 +112,41 @@ func (h *Handler) ToggleDeviceEnable(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, map[string]interface{}{
 		"enabled": nextState,
 	})
+}
+
+func parseAndNormalizeDevice(w http.ResponseWriter, r *http.Request) (*models.Device, bool) {
+	var device models.Device
+	if err := ParseRequest(r, &device); err != nil {
+		WriteBadRequest(w, errInvalidRequestBodyWithDetailPrefix+err.Error())
+		return nil, false
+	}
+	if err := normalizeDeviceInput(&device); err != nil {
+		WriteBadRequestDef(w, apiErrDeviceNameRequired)
+		return nil, false
+	}
+	return &device, true
+}
+
+func loadDeviceOrWriteNotFound(w http.ResponseWriter, r *http.Request) (*models.Device, bool) {
+	id, ok := parseIDOrWriteBadRequestDefault(w, r)
+	if !ok {
+		return nil, false
+	}
+
+	device, err := database.GetDeviceByID(id)
+	if err != nil {
+		WriteNotFoundDef(w, apiErrDeviceNotFound)
+		return nil, false
+	}
+
+	return device, true
+}
+
+func nextDeviceEnabledState(enabled int) int {
+	if enabled == 0 {
+		return 1
+	}
+	return 0
 }
 
 func buildDeviceListItem(device *models.Device, runtimeStatusMap map[int64]collectorpkg.DeviceRuntimeStatus) *deviceListItem {

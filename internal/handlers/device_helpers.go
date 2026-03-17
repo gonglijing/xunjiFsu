@@ -54,6 +54,44 @@ func buildDriverNameMap(drivers []*models.Driver) map[int64]string {
 	return nameMap
 }
 
+func buildResourceMap(resources []*models.Resource) map[int64]*models.Resource {
+	resourceMap := make(map[int64]*models.Resource, len(resources))
+	for _, resource := range resources {
+		if resource == nil {
+			continue
+		}
+		resourceMap[resource.ID] = resource
+	}
+	return resourceMap
+}
+
+func enrichDeviceDisplay(device *models.Device, driverNameMap map[int64]string, resourceMap map[int64]*models.Resource) {
+	if device == nil {
+		return
+	}
+
+	if device.DriverID != nil {
+		if name, ok := driverNameMap[*device.DriverID]; ok {
+			device.DriverName = name
+		} else {
+			device.DriverName = fmt.Sprintf("驱动 #%d", *device.DriverID)
+		}
+	}
+
+	if device.ResourceID == nil {
+		return
+	}
+
+	resource, ok := resourceMap[*device.ResourceID]
+	if !ok || resource == nil {
+		return
+	}
+
+	device.ResourceName = resource.Name
+	device.ResourceType = resource.Type
+	device.ResourcePath = resource.Path
+}
+
 func stringifyParamValue(value interface{}) string {
 	switch v := value.(type) {
 	case string:

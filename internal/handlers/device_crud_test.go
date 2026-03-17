@@ -51,3 +51,12 @@ func TestBuildDeviceListItem_DefaultRuntimeStatus(t *testing.T) {
 		t.Fatalf("expected default runtime device id=22, got %d", item.CollectRuntime.DeviceID)
 	}
 }
+
+func TestNextDeviceEnabledState(t *testing.T) {
+	if nextDeviceEnabledState(0) != 1 {
+		t.Fatal("nextDeviceEnabledState(0) should return 1")
+	}
+	if nextDeviceEnabledState(1) != 0 {
+		t.Fatal("nextDeviceEnabledState(1) should return 0")
+	}
+}
