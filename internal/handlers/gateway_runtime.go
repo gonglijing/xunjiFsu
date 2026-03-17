@@ -47,24 +47,7 @@ func (h *Handler) GetGatewayRuntimeConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	collectorDeviceSyncInterval := h.appConfig.CollectorDeviceSyncInterval
-	collectorCommandPollInterval := h.appConfig.CollectorCommandPollInterval
-	if h.collector != nil {
-		collectorDeviceSyncInterval, collectorCommandPollInterval = h.collector.GetRuntimeIntervals()
-	}
-
-	WriteSuccess(w, map[string]interface{}{
-		"collector_device_sync_interval":     collectorDeviceSyncInterval.String(),
-		"collector_command_poll_interval":    collectorCommandPollInterval.String(),
-		"northbound_mqtt_reconnect_interval": h.appConfig.NorthboundMQTTReconnectInterval.String(),
-		"driver_serial_read_timeout":         h.appConfig.DriverSerialReadTimeout.String(),
-		"driver_tcp_dial_timeout":            h.appConfig.DriverTCPDialTimeout.String(),
-		"driver_tcp_read_timeout":            h.appConfig.DriverTCPReadTimeout.String(),
-		"driver_serial_open_backoff":         h.appConfig.DriverSerialOpenBackoff.String(),
-		"driver_tcp_dial_backoff":            h.appConfig.DriverTCPDialBackoff.String(),
-		"driver_serial_open_retries":         h.appConfig.DriverSerialOpenRetries,
-		"driver_tcp_dial_retries":            h.appConfig.DriverTCPDialRetries,
-	})
+	WriteSuccess(w, h.gatewayRuntimeConfigView())
 }
 
 func (h *Handler) UpdateGatewayRuntimeConfig(w http.ResponseWriter, r *http.Request) {
@@ -98,76 +81,36 @@ func (h *Handler) applyGatewayRuntimeConfig(payload *gatewayRuntimeConfig) (map[
 
 	changes := make(map[string]runtimeConfigChange)
 
-	if interval, ok, err := parseOptionalDuration(payload.CollectorDeviceSyncInterval); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "collector_device_sync_interval", payload.CollectorDeviceSyncInterval, &h.appConfig.CollectorDeviceSyncInterval); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "collector_device_sync_interval", h.appConfig.CollectorDeviceSyncInterval.String(), interval.String())
-		h.appConfig.CollectorDeviceSyncInterval = interval
 	}
-
-	if interval, ok, err := parseOptionalDuration(payload.CollectorCommandPollInterval); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "collector_command_poll_interval", payload.CollectorCommandPollInterval, &h.appConfig.CollectorCommandPollInterval); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "collector_command_poll_interval", h.appConfig.CollectorCommandPollInterval.String(), interval.String())
-		h.appConfig.CollectorCommandPollInterval = interval
 	}
-
-	if interval, ok, err := parseOptionalDuration(payload.NorthboundMQTTReconnectInterval); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "northbound_mqtt_reconnect_interval", payload.NorthboundMQTTReconnectInterval, &h.appConfig.NorthboundMQTTReconnectInterval); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "northbound_mqtt_reconnect_interval", h.appConfig.NorthboundMQTTReconnectInterval.String(), interval.String())
-		h.appConfig.NorthboundMQTTReconnectInterval = interval
 	}
-
-	if timeout, ok, err := parseOptionalDuration(payload.DriverSerialReadTimeout); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "driver_serial_read_timeout", payload.DriverSerialReadTimeout, &h.appConfig.DriverSerialReadTimeout); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "driver_serial_read_timeout", h.appConfig.DriverSerialReadTimeout.String(), timeout.String())
-		h.appConfig.DriverSerialReadTimeout = timeout
 	}
-
-	if timeout, ok, err := parseOptionalDuration(payload.DriverTCPDialTimeout); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "driver_tcp_dial_timeout", payload.DriverTCPDialTimeout, &h.appConfig.DriverTCPDialTimeout); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "driver_tcp_dial_timeout", h.appConfig.DriverTCPDialTimeout.String(), timeout.String())
-		h.appConfig.DriverTCPDialTimeout = timeout
 	}
-
-	if timeout, ok, err := parseOptionalDuration(payload.DriverTCPReadTimeout); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "driver_tcp_read_timeout", payload.DriverTCPReadTimeout, &h.appConfig.DriverTCPReadTimeout); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "driver_tcp_read_timeout", h.appConfig.DriverTCPReadTimeout.String(), timeout.String())
-		h.appConfig.DriverTCPReadTimeout = timeout
 	}
-
-	if backoff, ok, err := parseOptionalDuration(payload.DriverSerialOpenBackoff); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "driver_serial_open_backoff", payload.DriverSerialOpenBackoff, &h.appConfig.DriverSerialOpenBackoff); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "driver_serial_open_backoff", h.appConfig.DriverSerialOpenBackoff.String(), backoff.String())
-		h.appConfig.DriverSerialOpenBackoff = backoff
 	}
-
-	if backoff, ok, err := parseOptionalDuration(payload.DriverTCPDialBackoff); err != nil {
+	if err := applyGatewayDurationConfigChange(changes, "driver_tcp_dial_backoff", payload.DriverTCPDialBackoff, &h.appConfig.DriverTCPDialBackoff); err != nil {
 		return nil, err
-	} else if ok {
-		recordRuntimeConfigChange(changes, "driver_tcp_dial_backoff", h.appConfig.DriverTCPDialBackoff.String(), backoff.String())
-		h.appConfig.DriverTCPDialBackoff = backoff
 	}
 
-	if payload.DriverSerialOpenRetries != nil {
-		if *payload.DriverSerialOpenRetries < 0 {
-			return nil, fmt.Errorf("driver_serial_open_retries must be >= 0")
-		}
-		recordRuntimeConfigChange(changes, "driver_serial_open_retries", h.appConfig.DriverSerialOpenRetries, *payload.DriverSerialOpenRetries)
-		h.appConfig.DriverSerialOpenRetries = *payload.DriverSerialOpenRetries
+	if err := applyGatewayRetryConfigChange(changes, "driver_serial_open_retries", payload.DriverSerialOpenRetries, &h.appConfig.DriverSerialOpenRetries); err != nil {
+		return nil, err
 	}
-
-	if payload.DriverTCPDialRetries != nil {
-		if *payload.DriverTCPDialRetries < 0 {
-			return nil, fmt.Errorf("driver_tcp_dial_retries must be >= 0")
-		}
-		recordRuntimeConfigChange(changes, "driver_tcp_dial_retries", h.appConfig.DriverTCPDialRetries, *payload.DriverTCPDialRetries)
-		h.appConfig.DriverTCPDialRetries = *payload.DriverTCPDialRetries
+	if err := applyGatewayRetryConfigChange(changes, "driver_tcp_dial_retries", payload.DriverTCPDialRetries, &h.appConfig.DriverTCPDialRetries); err != nil {
+		return nil, err
 	}
 
 	if h.collector != nil {
@@ -269,6 +212,54 @@ func parseOptionalDuration(raw string) (time.Duration, bool, error) {
 		return 0, false, fmt.Errorf("duration must be > 0: %s", raw)
 	}
 	return value, true, nil
+}
+
+func (h *Handler) gatewayRuntimeConfigView() map[string]interface{} {
+	collectorDeviceSyncInterval, collectorCommandPollInterval := h.gatewayCollectorRuntimeIntervals()
+
+	return map[string]interface{}{
+		"collector_device_sync_interval":     collectorDeviceSyncInterval.String(),
+		"collector_command_poll_interval":    collectorCommandPollInterval.String(),
+		"northbound_mqtt_reconnect_interval": h.appConfig.NorthboundMQTTReconnectInterval.String(),
+		"driver_serial_read_timeout":         h.appConfig.DriverSerialReadTimeout.String(),
+		"driver_tcp_dial_timeout":            h.appConfig.DriverTCPDialTimeout.String(),
+		"driver_tcp_read_timeout":            h.appConfig.DriverTCPReadTimeout.String(),
+		"driver_serial_open_backoff":         h.appConfig.DriverSerialOpenBackoff.String(),
+		"driver_tcp_dial_backoff":            h.appConfig.DriverTCPDialBackoff.String(),
+		"driver_serial_open_retries":         h.appConfig.DriverSerialOpenRetries,
+		"driver_tcp_dial_retries":            h.appConfig.DriverTCPDialRetries,
+	}
+}
+
+func (h *Handler) gatewayCollectorRuntimeIntervals() (time.Duration, time.Duration) {
+	if h.collector == nil {
+		return h.appConfig.CollectorDeviceSyncInterval, h.appConfig.CollectorCommandPollInterval
+	}
+	return h.collector.GetRuntimeIntervals()
+}
+
+func applyGatewayDurationConfigChange(changes map[string]runtimeConfigChange, key, raw string, target *time.Duration) error {
+	parsed, ok, err := parseOptionalDuration(raw)
+	if err != nil || !ok {
+		return err
+	}
+
+	recordRuntimeConfigChange(changes, key, target.String(), parsed.String())
+	*target = parsed
+	return nil
+}
+
+func applyGatewayRetryConfigChange(changes map[string]runtimeConfigChange, key string, value *int, target *int) error {
+	if value == nil {
+		return nil
+	}
+	if *value < 0 {
+		return fmt.Errorf("%s must be >= 0", key)
+	}
+
+	recordRuntimeConfigChange(changes, key, *target, *value)
+	*target = *value
+	return nil
 }
 
 func recordRuntimeConfigChange(changes map[string]runtimeConfigChange, field string, from, to interface{}) {

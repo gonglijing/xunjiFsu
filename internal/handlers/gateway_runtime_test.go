@@ -43,6 +43,39 @@ func TestApplyGatewayRuntimeConfig_NegativeRetries(t *testing.T) {
 	}
 }
 
+func TestApplyGatewayDurationConfigChange(t *testing.T) {
+	changes := make(map[string]runtimeConfigChange)
+	target := 5 * time.Second
+
+	if err := applyGatewayDurationConfigChange(changes, "driver_tcp_read_timeout", "8s", &target); err != nil {
+		t.Fatalf("applyGatewayDurationConfigChange returned error: %v", err)
+	}
+	if target != 8*time.Second {
+		t.Fatalf("target = %v, want 8s", target)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("len(changes) = %d, want 1", len(changes))
+	}
+}
+
+func TestApplyGatewayRetryConfigChange(t *testing.T) {
+	changes := make(map[string]runtimeConfigChange)
+	target := 1
+	value := 3
+
+	if err := applyGatewayRetryConfigChange(changes, "driver_tcp_dial_retries", &value, &target); err != nil {
+		t.Fatalf("applyGatewayRetryConfigChange returned error: %v", err)
+	}
+	if target != 3 {
+		t.Fatalf("target = %d, want 3", target)
+	}
+
+	negative := -1
+	if err := applyGatewayRetryConfigChange(changes, "driver_tcp_dial_retries", &negative, &target); err == nil {
+		t.Fatal("expected negative retry error")
+	}
+}
+
 func TestRecordRuntimeConfigChange(t *testing.T) {
 	changes := make(map[string]runtimeConfigChange)
 
