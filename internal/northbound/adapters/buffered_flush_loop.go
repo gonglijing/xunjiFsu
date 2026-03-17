@@ -17,7 +17,7 @@ type periodicFlushLoopConfig struct {
 	alarmQueueEmpty func() bool
 }
 
-func runPeriodicFlushLoop(cfg periodicFlushLoopConfig) {
+func executePeriodicFlushLoop(cfg periodicFlushLoopConfig) {
 	reportInterval := cfg.reportInterval
 	alarmInterval := cfg.alarmInterval
 

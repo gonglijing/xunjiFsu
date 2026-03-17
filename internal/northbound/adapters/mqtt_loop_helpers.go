@@ -19,7 +19,7 @@ type mqttFlushReconnectLoopConfig struct {
 	reconnectDelay  func() time.Duration
 }
 
-func runMQTTFlushReconnectLoop(cfg mqttFlushReconnectLoopConfig) {
+func executeMQTTFlushReconnectLoop(cfg mqttFlushReconnectLoopConfig) {
 	interval := cfg.interval
 	if interval < minUploadInterval {
 		interval = minUploadInterval
