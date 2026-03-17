@@ -36,6 +36,7 @@ var (
 )
 
 const collectDataValueTypeString = "string"
+const selectDataPointFields = `SELECT id, device_id, device_name, field_name, value, value_type, collected_at FROM data_points`
 
 func normalizeDeviceName(deviceID int64, deviceName string) string {
 	if deviceID == models.SystemStatsDeviceID {
@@ -61,12 +62,86 @@ func SaveDataPoint(deviceID int64, deviceName, fieldName, value, valueType strin
 	return nil
 }
 
-func scanDataPoint(rows *sql.Rows) (*DataPoint, error) {
-	point := &DataPoint{}
-	if err := rows.Scan(&point.ID, &point.DeviceID, &point.DeviceName, &point.FieldName, &point.Value, &point.ValueType, &point.CollectedAt); err != nil {
-		return nil, err
+type dataPointScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanDataPoint(scanner dataPointScanner, point *DataPoint) error {
+	return scanner.Scan(
+		&point.ID,
+		&point.DeviceID,
+		&point.DeviceName,
+		&point.FieldName,
+		&point.Value,
+		&point.ValueType,
+		&point.CollectedAt,
+	)
+}
+
+func listDataPoints(db *sql.DB, query string, args []any) ([]*DataPoint, error) {
+	return queryList[*DataPoint](db, query, args, func(rows *sql.Rows) (*DataPoint, error) {
+		point := &DataPoint{}
+		if err := scanDataPoint(rows, point); err != nil {
+			return nil, err
+		}
+		return point, nil
+	})
+}
+
+func queryDataPointsByDevice(db *sql.DB, deviceID int64, limit int, before time.Time) ([]*DataPoint, error) {
+	query := selectDataPointFields + " WHERE device_id = ?"
+	args := []any{deviceID}
+	if !before.IsZero() {
+		query += " AND collected_at < ?"
+		args = append(args, before)
 	}
-	return point, nil
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+	return listDataPoints(db, query, args)
+}
+
+func queryLatestDataPoints(db *sql.DB, limit int, before time.Time) ([]*DataPoint, error) {
+	query := selectDataPointFields
+	args := make([]any, 0, 2)
+	if !before.IsZero() {
+		query += " WHERE collected_at < ?"
+		args = append(args, before)
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+	return listDataPoints(db, query, args)
+}
+
+func queryDataPointsByDeviceAndTime(db *sql.DB, deviceID int64, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
+	query := selectDataPointFields + " WHERE device_id = ?"
+	args := []any{deviceID}
+	if !startTime.IsZero() {
+		query += " AND collected_at >= ?"
+		args = append(args, formatSQLiteTime(startTime))
+	}
+	if !endTime.IsZero() {
+		query += " AND collected_at <= ?"
+		args = append(args, formatSQLiteTime(endTime))
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+	return listDataPoints(db, query, args)
+}
+
+func queryDataPointsByDeviceFieldAndTime(db *sql.DB, deviceID int64, fieldName string, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
+	query := selectDataPointFields + " WHERE device_id = ? AND field_name = ?"
+	args := []any{deviceID, fieldName}
+	if !startTime.IsZero() {
+		query += " AND collected_at >= ?"
+		args = append(args, formatSQLiteTime(startTime))
+	}
+	if !endTime.IsZero() {
+		query += " AND collected_at <= ?"
+		args = append(args, formatSQLiteTime(endTime))
+	}
+	query += " ORDER BY collected_at DESC LIMIT ?"
+	args = append(args, limit)
+	return listDataPoints(db, query, args)
 }
 
 // DataPointEntry 单个数据点条目
@@ -235,17 +310,7 @@ func getDiskDataPointsByDevice(deviceID int64, limit int, before time.Time) ([]*
 	}
 	defer db.Close()
 
-	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at
-		FROM data_points WHERE device_id = ?`
-	args := []any{deviceID}
-	if !before.IsZero() {
-		query += " AND collected_at < ?"
-		args = append(args, before)
-	}
-	query += " ORDER BY collected_at DESC LIMIT ?"
-	args = append(args, limit)
-
-	return queryList[*DataPoint](db, query, args, scanDataPoint)
+	return queryDataPointsByDevice(db, deviceID, limit, before)
 }
 
 func getDiskLatestDataPoints(limit int, before time.Time) ([]*DataPoint, error) {
@@ -255,16 +320,7 @@ func getDiskLatestDataPoints(limit int, before time.Time) ([]*DataPoint, error) 
 	}
 	defer db.Close()
 
-	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at FROM data_points`
-	args := []any{}
-	if !before.IsZero() {
-		query += " WHERE collected_at < ?"
-		args = append(args, before)
-	}
-	query += " ORDER BY collected_at DESC LIMIT ?"
-	args = append(args, limit)
-
-	return queryList[*DataPoint](db, query, args, scanDataPoint)
+	return queryLatestDataPoints(db, limit, before)
 }
 
 func getDiskDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
@@ -274,21 +330,7 @@ func getDiskDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, sta
 	}
 	defer db.Close()
 
-	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at
-		FROM data_points WHERE device_id = ? AND field_name = ?`
-	args := []any{deviceID, fieldName}
-	if !startTime.IsZero() {
-		query += " AND collected_at >= ?"
-		args = append(args, formatSQLiteTime(startTime))
-	}
-	if !endTime.IsZero() {
-		query += " AND collected_at <= ?"
-		args = append(args, formatSQLiteTime(endTime))
-	}
-	query += " ORDER BY collected_at DESC LIMIT ?"
-	args = append(args, limit)
-
-	return queryList[*DataPoint](db, query, args, scanDataPoint)
+	return queryDataPointsByDeviceFieldAndTime(db, deviceID, fieldName, startTime, endTime, limit)
 }
 
 func getDiskDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Time, limit int) ([]*DataPoint, error) {
@@ -298,21 +340,7 @@ func getDiskDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Ti
 	}
 	defer db.Close()
 
-	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at
-		FROM data_points WHERE device_id = ?`
-	args := []any{deviceID}
-	if !startTime.IsZero() {
-		query += " AND collected_at >= ?"
-		args = append(args, formatSQLiteTime(startTime))
-	}
-	if !endTime.IsZero() {
-		query += " AND collected_at <= ?"
-		args = append(args, formatSQLiteTime(endTime))
-	}
-	query += " ORDER BY collected_at DESC LIMIT ?"
-	args = append(args, limit)
-
-	return queryList[*DataPoint](db, query, args, scanDataPoint)
+	return queryDataPointsByDeviceAndTime(db, deviceID, startTime, endTime, limit)
 }
 
 // enforceDataPointsLimit 强制执行数据点大小限制
@@ -367,21 +395,7 @@ func GetDataPointsByDeviceAndTimeLimit(deviceID int64, startTime, endTime time.T
 	if limit <= 0 {
 		limit = 2000
 	}
-	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
-		FROM data_points WHERE device_id = ?`
-	args := []any{deviceID}
-	if !startTime.IsZero() {
-		query += " AND collected_at >= ?"
-		args = append(args, formatSQLiteTime(startTime))
-	}
-	if !endTime.IsZero() {
-		query += " AND collected_at <= ?"
-		args = append(args, formatSQLiteTime(endTime))
-	}
-	query += " ORDER BY collected_at DESC LIMIT ?"
-	args = append(args, limit)
-
-	memPoints, err := queryList[*DataPoint](DataDB, query, args, scanDataPoint)
+	memPoints, err := queryDataPointsByDeviceAndTime(DataDB, deviceID, startTime, endTime, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -401,21 +415,7 @@ func GetDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTi
 	if limit <= 0 {
 		limit = 2000
 	}
-	query := `SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
-		FROM data_points WHERE device_id = ? AND field_name = ?`
-	args := []any{deviceID, fieldName}
-	if !startTime.IsZero() {
-		query += " AND collected_at >= ?"
-		args = append(args, formatSQLiteTime(startTime))
-	}
-	if !endTime.IsZero() {
-		query += " AND collected_at <= ?"
-		args = append(args, formatSQLiteTime(endTime))
-	}
-	query += " ORDER BY collected_at DESC LIMIT ?"
-	args = append(args, limit)
-
-	memPoints, err := queryList[*DataPoint](DataDB, query, args, scanDataPoint)
+	memPoints, err := queryDataPointsByDeviceFieldAndTime(DataDB, deviceID, fieldName, startTime, endTime, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -439,12 +439,7 @@ func formatSQLiteTime(t time.Time) string {
 
 // GetDataPointsByDevice 根据设备ID获取历史数据（内存 + 磁盘）
 func GetDataPointsByDevice(deviceID int64, limit int) ([]*DataPoint, error) {
-	memPoints, err := queryList[*DataPoint](DataDB,
-		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
-		FROM data_points WHERE device_id = ? ORDER BY collected_at DESC LIMIT ?`,
-		[]any{deviceID, limit},
-		scanDataPoint,
-	)
+	memPoints, err := queryDataPointsByDevice(DataDB, deviceID, limit, time.Time{})
 	if err != nil {
 		return nil, err
 	}
@@ -461,12 +456,7 @@ func GetDataPointsByDevice(deviceID int64, limit int) ([]*DataPoint, error) {
 
 // GetLatestDataPoints 获取最新的历史数据点（内存 + 磁盘）
 func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
-	memPoints, err := queryList[*DataPoint](DataDB,
-		`SELECT id, device_id, device_name, field_name, value, value_type, collected_at 
-		FROM data_points ORDER BY collected_at DESC LIMIT ?`,
-		[]any{limit},
-		scanDataPoint,
-	)
+	memPoints, err := queryLatestDataPoints(DataDB, limit, time.Time{})
 	if err != nil {
 		return nil, err
 	}
