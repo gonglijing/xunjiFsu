@@ -9,13 +9,13 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func TestExtractCommandProperties_DirectParams(t *testing.T) {
+func TestResolveSagooCommandProperties_DirectParams(t *testing.T) {
 	params := map[string]interface{}{
 		"temperature": 25.3,
 		"enabled":     true,
 	}
 
-	properties, pk, dk := extractCommandProperties(params)
+	properties, pk, dk := resolveSagooCommandProperties(params)
 	if pk != "" || dk != "" {
 		t.Fatalf("unexpected identity: pk=%q dk=%q", pk, dk)
 	}
@@ -30,7 +30,7 @@ func TestExtractCommandProperties_DirectParams(t *testing.T) {
 	}
 }
 
-func TestExtractCommandProperties_DirectParamsWithRootIdentity(t *testing.T) {
+func TestResolveSagooCommandProperties_DirectParamsWithRootIdentity(t *testing.T) {
 	params := map[string]interface{}{
 		"identity": map[string]interface{}{
 			"productKey": "sub-pk",
@@ -39,7 +39,7 @@ func TestExtractCommandProperties_DirectParamsWithRootIdentity(t *testing.T) {
 		"voltage": 220,
 	}
 
-	properties, pk, dk := extractCommandProperties(params)
+	properties, pk, dk := resolveSagooCommandProperties(params)
 	if pk != "sub-pk" || dk != "sub-dk" {
 		t.Fatalf("expected identity sub-pk/sub-dk, got %q/%q", pk, dk)
 	}
@@ -335,18 +335,18 @@ func TestSplitTopic_IgnoreEmptySegments(t *testing.T) {
 	}
 }
 
-func TestExtractIdentity_FromTopic(t *testing.T) {
-	productKey, deviceKey, ok := extractIdentity(" /sys/pk1/dk1/thing/service/property/set ")
+func TestParseSagooTopicIdentity_FromTopic(t *testing.T) {
+	productKey, deviceKey, ok := parseSagooTopicIdentity(" /sys/pk1/dk1/thing/service/property/set ")
 	if !ok {
-		t.Fatal("extractIdentity() ok=false, want=true")
+		t.Fatal("parseSagooTopicIdentity() ok=false, want=true")
 	}
 	if productKey != "pk1" || deviceKey != "dk1" {
 		t.Fatalf("identity mismatch: %q/%q", productKey, deviceKey)
 	}
 
-	_, _, ok = extractIdentity("/bad/pk/dk")
+	_, _, ok = parseSagooTopicIdentity("/bad/pk/dk")
 	if ok {
-		t.Fatal("extractIdentity() ok=true, want=false")
+		t.Fatal("parseSagooTopicIdentity() ok=true, want=false")
 	}
 }
 
@@ -368,7 +368,7 @@ func TestSagooSysTopic(t *testing.T) {
 	}
 }
 
-func TestExtractCommandProperties_SubDeviceSnakeCase(t *testing.T) {
+func TestResolveSagooCommandProperties_SubDeviceSnakeCase(t *testing.T) {
 	params := map[string]interface{}{
 		"sub_device": map[string]interface{}{
 			"identity": map[string]interface{}{
@@ -381,7 +381,7 @@ func TestExtractCommandProperties_SubDeviceSnakeCase(t *testing.T) {
 		},
 	}
 
-	properties, pk, dk := extractCommandProperties(params)
+	properties, pk, dk := resolveSagooCommandProperties(params)
 	if pk != "sub-pk-snake" || dk != "sub-dk-snake" {
 		t.Fatalf("expected snake identity sub-pk-snake/sub-dk-snake, got %q/%q", pk, dk)
 	}

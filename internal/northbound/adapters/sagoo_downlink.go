@@ -10,7 +10,7 @@ import (
 )
 
 func (a *SagooAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
-	pk, dk, ok := extractIdentity(message.Topic())
+	pk, dk, ok := parseSagooTopicIdentity(message.Topic())
 	if !ok {
 		return
 	}
@@ -75,7 +75,7 @@ func (a *SagooAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 }
 
 func (a *SagooAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
-	pk, dk, ok := extractIdentity(message.Topic())
+	pk, dk, ok := parseSagooTopicIdentity(message.Topic())
 	if !ok {
 		return
 	}
@@ -97,7 +97,7 @@ func (a *SagooAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
 }
 
 func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}, rootIdentityPK, rootIdentityDK string) {
-	properties, identityPK, identityDK := extractCommandProperties(params)
+	properties, identityPK, identityDK := resolveSagooCommandProperties(params)
 	if len(properties) == 0 {
 		return
 	}

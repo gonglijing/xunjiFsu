@@ -36,7 +36,7 @@ func splitTopic(topic string) []string {
 	return parts
 }
 
-func extractIdentity(topic string) (string, string, bool) {
+func parseSagooTopicIdentity(topic string) (string, string, bool) {
 	parts := splitTopic(topic)
 	if len(parts) < 4 || parts[0] != "sys" {
 		return "", "", false
@@ -44,7 +44,7 @@ func extractIdentity(topic string) (string, string, bool) {
 	return parts[1], parts[2], true
 }
 
-func extractCommandProperties(params map[string]interface{}) (map[string]interface{}, string, string) {
+func resolveSagooCommandProperties(params map[string]interface{}) (map[string]interface{}, string, string) {
 	identityPK, identityDK := "", ""
 	if identity, ok := resolveMapValue(params["identity"]); ok {
 		identityPK, identityDK = parseIdentityMap(identity)
