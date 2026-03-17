@@ -106,6 +106,51 @@ func TestParsePaginatedDeviceID(t *testing.T) {
 	})
 }
 
+func TestGetPagination(t *testing.T) {
+	req := httptest.NewRequest("GET", "/devices?page=3&page_size=25", nil)
+
+	params := GetPagination(req, 20)
+	if params.Page != 3 {
+		t.Fatalf("params.Page = %d, want %d", params.Page, 3)
+	}
+	if params.PageSize != 25 {
+		t.Fatalf("params.PageSize = %d, want %d", params.PageSize, 25)
+	}
+	if params.Offset != 50 {
+		t.Fatalf("params.Offset = %d, want %d", params.Offset, 50)
+	}
+}
+
+func TestGetPagination_CapsPageSize(t *testing.T) {
+	req := httptest.NewRequest("GET", "/devices?page_size=999", nil)
+
+	params := GetPagination(req, 20)
+	if params.PageSize != maxPaginationPageSize {
+		t.Fatalf("params.PageSize = %d, want %d", params.PageSize, maxPaginationPageSize)
+	}
+}
+
+func TestParsePositivePageQuery_InvalidValue(t *testing.T) {
+	req := httptest.NewRequest("GET", "/devices?page=bad", nil)
+
+	value := parsePositivePageQuery(req, "page", 7)
+	if value != 7 {
+		t.Fatalf("value = %d, want %d", value, 7)
+	}
+}
+
+func TestNormalizePaginationPageSize(t *testing.T) {
+	if got := normalizePaginationPageSize(0); got != 1 {
+		t.Fatalf("normalizePaginationPageSize(0) = %d, want 1", got)
+	}
+	if got := normalizePaginationPageSize(25); got != 25 {
+		t.Fatalf("normalizePaginationPageSize(25) = %d, want 25", got)
+	}
+	if got := normalizePaginationPageSize(999); got != maxPaginationPageSize {
+		t.Fatalf("normalizePaginationPageSize(999) = %d, want %d", got, maxPaginationPageSize)
+	}
+}
+
 func TestNewDataPointsPage(t *testing.T) {
 	points := []*database.DataPoint{{DeviceID: 1}, {DeviceID: 2}}
 	params := PaginationParams{Page: 1, PageSize: 2}

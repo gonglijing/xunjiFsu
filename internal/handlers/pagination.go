@@ -8,6 +8,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+const maxPaginationPageSize = 100
+
 // PaginationParams 分页参数
 type PaginationParams struct {
 	Page     int // 页码（从1开始）
@@ -22,33 +24,39 @@ type paginationWindow struct {
 
 // GetPagination 从请求获取分页参数
 func GetPagination(r *http.Request, defaultPageSize int) PaginationParams {
-	page := 1
-	pageSize := defaultPageSize
-
-	if p := r.URL.Query().Get("page"); p != "" {
-		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
-			page = parsed
-		}
-	}
-
-	if ps := r.URL.Query().Get("page_size"); ps != "" {
-		if parsed, err := strconv.Atoi(ps); err == nil && parsed > 0 {
-			pageSize = parsed
-			// 限制最大每页数量
-			if pageSize > 100 {
-				pageSize = 100
-			}
-		}
-	}
-
-	// 计算偏移量
-	offset := (page - 1) * pageSize
+	page := parsePositivePageQuery(r, "page", 1)
+	pageSize := parsePositivePageQuery(r, "page_size", defaultPageSize)
+	pageSize = normalizePaginationPageSize(pageSize)
 
 	return PaginationParams{
 		Page:     page,
 		PageSize: pageSize,
-		Offset:   offset,
+		Offset:   (page - 1) * pageSize,
 	}
+}
+
+func parsePositivePageQuery(r *http.Request, key string, defaultValue int) int {
+	rawValue := r.URL.Query().Get(key)
+	if rawValue == "" {
+		return defaultValue
+	}
+
+	parsedValue, err := strconv.Atoi(rawValue)
+	if err != nil || parsedValue <= 0 {
+		return defaultValue
+	}
+
+	return parsedValue
+}
+
+func normalizePaginationPageSize(pageSize int) int {
+	if pageSize <= 0 {
+		return 1
+	}
+	if pageSize > maxPaginationPageSize {
+		return maxPaginationPageSize
+	}
+	return pageSize
 }
 
 // PaginatedResponse 分页响应
