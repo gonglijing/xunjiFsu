@@ -84,3 +84,38 @@ func TestJSONSingleRawField_MarshalJSON(t *testing.T) {
 		t.Fatalf("temperature=%v, want raw string", decoded["temperature"])
 	}
 }
+
+func TestResolveMapByEitherKey_PrefersPrimaryKey(t *testing.T) {
+	values := map[string]interface{}{
+		"primary": map[string]interface{}{"name": "primary"},
+		"backup":  map[string]interface{}{"name": "backup"},
+	}
+
+	got, ok := resolveMapByEitherKey(values, "primary", "backup")
+	if !ok {
+		t.Fatal("resolveMapByEitherKey() ok=false, want=true")
+	}
+	if got["name"] != "primary" {
+		t.Fatalf("resolveMapByEitherKey()=%v, want primary value", got)
+	}
+}
+
+func TestResolveInterfaceSliceByEitherKey_UsesFallbackKey(t *testing.T) {
+	values := map[string]interface{}{
+		"backup": []interface{}{"first", "second"},
+	}
+
+	got, ok := resolveInterfaceSliceByEitherKey(values, "primary", "backup")
+	if !ok {
+		t.Fatal("resolveInterfaceSliceByEitherKey() ok=false, want=true")
+	}
+	if len(got) != 2 || got[0] != "first" || got[1] != "second" {
+		t.Fatalf("resolveInterfaceSliceByEitherKey()=%v, want [first second]", got)
+	}
+}
+
+func TestPickFirstNonEmpty_ReturnsFirstTrimmedValue(t *testing.T) {
+	if got := pickFirstNonEmpty("  ", "\tvalue\t", "fallback"); got != "value" {
+		t.Fatalf("pickFirstNonEmpty()=%q, want=value", got)
+	}
+}

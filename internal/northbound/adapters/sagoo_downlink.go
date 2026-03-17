@@ -102,8 +102,8 @@ func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 		return
 	}
 
-	pk := pickFirstNonEmpty3(rootIdentityPK, identityPK, defaultPK)
-	dk := pickFirstNonEmpty3(rootIdentityDK, identityDK, defaultDK)
+	pk := pickFirstNonEmpty(rootIdentityPK, identityPK, defaultPK)
+	dk := pickFirstNonEmpty(rootIdentityDK, identityDK, defaultDK)
 	if pk == "" || dk == "" {
 		return
 	}

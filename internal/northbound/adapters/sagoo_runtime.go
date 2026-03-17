@@ -125,8 +125,8 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 		return nil
 	}
 
-	pk := pickFirstNonEmpty2(strings.TrimSpace(cfg.ProductKey), result.ProductKey)
-	dk := pickFirstNonEmpty2(strings.TrimSpace(cfg.DeviceKey), result.DeviceKey)
+	pk := pickFirstNonEmpty(strings.TrimSpace(cfg.ProductKey), result.ProductKey)
+	dk := pickFirstNonEmpty(strings.TrimSpace(cfg.DeviceKey), result.DeviceKey)
 	if pk == "" || dk == "" {
 		return nil
 	}

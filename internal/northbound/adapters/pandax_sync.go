@@ -115,7 +115,7 @@ func (a *PandaXAdapter) buildSyncSubDevice(
 
 	return pandaXSyncSubDevice{
 		ProductKey: strings.TrimSpace(collectData.ProductKey),
-		DeviceName: pickFirstNonEmpty2(collectData.DeviceName, strings.TrimSpace(dev.Name)),
+		DeviceName: pickFirstNonEmpty(collectData.DeviceName, strings.TrimSpace(dev.Name)),
 		Timestamp:  syncTimestampOrNow(collectData.Timestamp, nowMS),
 		Values:     buildSyncValues(collectData.Fields),
 	}

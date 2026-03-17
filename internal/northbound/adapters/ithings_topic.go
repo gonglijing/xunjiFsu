@@ -31,11 +31,11 @@ func resolveDeviceNameByMode(deviceName, deviceKey, mode string) string {
 	key := strings.TrimSpace(deviceKey)
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "devicename", "device_name":
-		return pickFirstNonEmpty2(name, key)
+		return pickFirstNonEmpty(name, key)
 	case "devicekey", "device_key", "":
-		return pickFirstNonEmpty2(key, name)
+		return pickFirstNonEmpty(key, name)
 	default:
-		return pickFirstNonEmpty2(key, name)
+		return pickFirstNonEmpty(key, name)
 	}
 }
 

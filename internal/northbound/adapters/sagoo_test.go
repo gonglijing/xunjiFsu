@@ -350,12 +350,12 @@ func TestExtractIdentity_FromTopic(t *testing.T) {
 	}
 }
 
-func TestPickFirstNonEmptyFixedArity(t *testing.T) {
-	if got := pickFirstNonEmpty2("  ", " dk "); got != "dk" {
-		t.Fatalf("pickFirstNonEmpty2()=%q, want=dk", got)
+func TestPickFirstNonEmpty_MultipleFallbacks(t *testing.T) {
+	if got := pickFirstNonEmpty("  ", " dk "); got != "dk" {
+		t.Fatalf("pickFirstNonEmpty()=%q, want=dk", got)
 	}
-	if got := pickFirstNonEmpty3("", "  ", " pk "); got != "pk" {
-		t.Fatalf("pickFirstNonEmpty3()=%q, want=pk", got)
+	if got := pickFirstNonEmpty("", "  ", " pk "); got != "pk" {
+		t.Fatalf("pickFirstNonEmpty()=%q, want=pk", got)
 	}
 }
 

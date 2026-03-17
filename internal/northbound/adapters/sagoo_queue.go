@@ -224,8 +224,8 @@ func (a *SagooAdapter) buildAlarmMessage(alarm *models.AlarmPayload) []byte {
 			SubDevices: []sagooAlarmSubDevice{
 				{
 					Identity: sagooIdentityPayload{
-						ProductKey: pickFirstNonEmpty2(alarm.ProductKey, defaultPK),
-						DeviceKey:  pickFirstNonEmpty2(alarm.DeviceKey, defaultDK),
+						ProductKey: pickFirstNonEmpty(alarm.ProductKey, defaultPK),
+						DeviceKey:  pickFirstNonEmpty(alarm.DeviceKey, defaultDK),
 					},
 					Properties: struct{}{},
 					Events: sagooAlarmEvents{

@@ -20,18 +20,18 @@ type jsonSingleRawField struct {
 	Value string
 }
 
-func mapFromAnyByKey2(values map[string]interface{}, key1, key2 string) (map[string]interface{}, bool) {
-	if out, ok := mapFromAny(values[key1]); ok {
+func resolveMapByEitherKey(values map[string]interface{}, primaryKey, secondaryKey string) (map[string]interface{}, bool) {
+	if out, ok := mapFromAny(values[primaryKey]); ok {
 		return out, true
 	}
-	return mapFromAny(values[key2])
+	return mapFromAny(values[secondaryKey])
 }
 
-func interfaceSliceByKey2(values map[string]interface{}, key1, key2 string) ([]interface{}, bool) {
-	if list, ok := values[key1].([]interface{}); ok {
+func resolveInterfaceSliceByEitherKey(values map[string]interface{}, primaryKey, secondaryKey string) ([]interface{}, bool) {
+	if list, ok := values[primaryKey].([]interface{}); ok {
 		return list, true
 	}
-	list, ok := values[key2].([]interface{})
+	list, ok := values[secondaryKey].([]interface{})
 	return list, ok
 }
 
@@ -168,20 +168,6 @@ func pickFirstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func pickFirstNonEmpty2(left, right string) string {
-	if v := strings.TrimSpace(left); v != "" {
-		return v
-	}
-	return strings.TrimSpace(right)
-}
-
-func pickFirstNonEmpty3(first, second, third string) string {
-	if v := pickFirstNonEmpty2(first, second); v != "" {
-		return v
-	}
-	return strings.TrimSpace(third)
 }
 
 func resolveInterval(ms int, fallback time.Duration) time.Duration {

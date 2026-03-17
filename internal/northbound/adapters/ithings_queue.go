@@ -180,8 +180,8 @@ func (a *IThingsAdapter) buildRealtimePublish(data *models.CollectData) (string,
 	}
 	topic := renderIThingsTopic(upPropertyTpl, gatewayProductID, gatewayDeviceName)
 
-	subProductID := pickFirstNonEmpty2(strings.TrimSpace(data.ProductKey), gatewayProductID)
-	subDeviceName := pickFirstNonEmpty2(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode))
+	subProductID := pickFirstNonEmpty(strings.TrimSpace(data.ProductKey), gatewayProductID)
+	subDeviceName := pickFirstNonEmpty(a.resolveCollectDeviceName(data, subDeviceNameMode), a.resolveCollectDeviceName(data, deviceNameMode))
 	if subDeviceName == "" {
 		subDeviceName = defaultDeviceToken(data.DeviceID)
 	}
@@ -233,7 +233,7 @@ func (a *IThingsAdapter) buildAlarmPublish(alarm *models.AlarmPayload) (string, 
 	}
 	topic := renderIThingsTopic(upEventTpl, gatewayProductID, gatewayDeviceName)
 
-	subProductID := pickFirstNonEmpty2(strings.TrimSpace(alarm.ProductKey), gatewayProductID)
+	subProductID := pickFirstNonEmpty(strings.TrimSpace(alarm.ProductKey), gatewayProductID)
 	subDeviceName := strings.TrimSpace(a.resolveAlarmDeviceName(alarm, deviceNameMode))
 	if subDeviceName == "" {
 		subDeviceName = defaultDeviceToken(alarm.DeviceID)

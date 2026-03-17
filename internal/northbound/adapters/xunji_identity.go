@@ -62,8 +62,8 @@ func resolveXunjiSubToken(data *models.CollectData, mode string) string {
 	}
 
 	pk := strings.TrimSpace(data.ProductKey)
-	name := pickFirstNonEmpty2(data.DeviceName, data.DeviceKey)
-	dk := pickFirstNonEmpty2(data.DeviceKey, data.DeviceName)
+	name := pickFirstNonEmpty(data.DeviceName, data.DeviceKey)
+	dk := pickFirstNonEmpty(data.DeviceKey, data.DeviceName)
 
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "devicekey", "device_key":

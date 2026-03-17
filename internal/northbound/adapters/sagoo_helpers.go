@@ -54,7 +54,7 @@ func extractCommandProperties(params map[string]interface{}) (map[string]interfa
 		return props, identityPK, identityDK
 	}
 
-	if sub, ok := mapFromAnyByKey2(params, "sub_device", "subDevice"); ok {
+	if sub, ok := resolveMapByEitherKey(params, "sub_device", "subDevice"); ok {
 		if identity, ok := mapFromAny(sub["identity"]); ok {
 			identityPK, identityDK = parseIdentityMap(identity)
 		}
@@ -63,7 +63,7 @@ func extractCommandProperties(params map[string]interface{}) (map[string]interfa
 		}
 	}
 
-	if list, ok := interfaceSliceByKey2(params, "sub_devices", "subDevices"); ok && len(list) > 0 {
+	if list, ok := resolveInterfaceSliceByEitherKey(params, "sub_devices", "subDevices"); ok && len(list) > 0 {
 		if item, ok := mapFromAny(list[0]); ok {
 			if identity, ok := mapFromAny(item["identity"]); ok {
 				identityPK, identityDK = parseIdentityMap(identity)
