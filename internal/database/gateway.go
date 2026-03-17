@@ -12,10 +12,26 @@ type GatewayConfig struct {
 	UpdatedAt         string `json:"updated_at" db:"updated_at"`
 }
 
+const (
+	defaultGatewayConfigName  = "HuShu智能网关"
+	selectGatewayConfigFields = `SELECT id, COALESCE(product_key, ''), COALESCE(device_key, ''), COALESCE(gateway_name, 'HuShu智能网关'),
+		COALESCE(data_retention_days, ?), updated_at FROM gateway_config`
+)
+
 var gatewayColumnsEnsured bool
 
 // InitGatewayConfigTable 创建网关配置表
 func InitGatewayConfigTable() error {
+	if err := createGatewayConfigTable(); err != nil {
+		return err
+	}
+	if err := ensureGatewayConfigColumns(); err != nil {
+		return err
+	}
+	return ensureDefaultGatewayConfig()
+}
+
+func createGatewayConfigTable() error {
 	_, err := ParamDB.Exec(`CREATE TABLE IF NOT EXISTS gateway_config (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		product_key TEXT NOT NULL,
@@ -24,22 +40,21 @@ func InitGatewayConfigTable() error {
 		data_retention_days INTEGER DEFAULT 30,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
-	if err != nil {
-		return err
-	}
+	return err
+}
 
-	if err := ensureGatewayConfigColumns(); err != nil {
-		return err
-	}
-
-	// 确保有默认配置
+func ensureDefaultGatewayConfig() error {
 	var count int
-	err = ParamDB.QueryRow("SELECT COUNT(*) FROM gateway_config").Scan(&count)
+	err := ParamDB.QueryRow("SELECT COUNT(*) FROM gateway_config").Scan(&count)
 	if err != nil {
 		return err
 	}
 	if count == 0 {
-		_, err = ParamDB.Exec(`INSERT INTO gateway_config (product_key, device_key, gateway_name, data_retention_days) VALUES ('', '', 'HuShu智能网关', ?)`, DefaultRetentionDays)
+		_, err = ParamDB.Exec(
+			`INSERT INTO gateway_config (product_key, device_key, gateway_name, data_retention_days) VALUES ('', '', ?, ?)`,
+			defaultGatewayConfigName,
+			DefaultRetentionDays,
+		)
 		if err != nil {
 			return err
 		}
@@ -77,16 +92,11 @@ func GetGatewayConfig() (*GatewayConfig, error) {
 		return nil, err
 	}
 
-	cfg := &GatewayConfig{}
-	err := ParamDB.QueryRow(`SELECT id, COALESCE(product_key, ''), COALESCE(device_key, ''), COALESCE(gateway_name, 'HuShu智能网关'), COALESCE(data_retention_days, ?), updated_at FROM gateway_config ORDER BY id LIMIT 1`, DefaultRetentionDays).Scan(
-		&cfg.ID, &cfg.ProductKey, &cfg.DeviceKey, &cfg.GatewayName, &cfg.DataRetentionDays, &cfg.UpdatedAt,
-	)
+	cfg, err := loadGatewayConfig(selectGatewayConfigFields+" ORDER BY id LIMIT 1", DefaultRetentionDays)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.DataRetentionDays <= 0 {
-		cfg.DataRetentionDays = DefaultRetentionDays
-	}
+	normalizeGatewayConfig(cfg)
 	return cfg, nil
 }
 
@@ -99,25 +109,65 @@ func UpdateGatewayConfig(cfg *GatewayConfig) error {
 		return err
 	}
 
-	if strings.TrimSpace(cfg.GatewayName) == "" {
-		cfg.GatewayName = "HuShu智能网关"
+	normalizeGatewayConfig(cfg)
+
+	targetID, err := resolveGatewayConfigID(cfg.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = ParamDB.Exec(`UPDATE gateway_config SET product_key = ?, device_key = ?, gateway_name = ?, data_retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		cfg.ProductKey, cfg.DeviceKey, cfg.GatewayName, cfg.DataRetentionDays, targetID)
+	return err
+}
+
+type gatewayConfigScanner interface {
+	Scan(dest ...any) error
+}
+
+func loadGatewayConfig(query string, args ...any) (*GatewayConfig, error) {
+	cfg := &GatewayConfig{}
+	err := scanGatewayConfig(ParamDB.QueryRow(query, args...), cfg)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func scanGatewayConfig(scanner gatewayConfigScanner, cfg *GatewayConfig) error {
+	return scanner.Scan(
+		&cfg.ID,
+		&cfg.ProductKey,
+		&cfg.DeviceKey,
+		&cfg.GatewayName,
+		&cfg.DataRetentionDays,
+		&cfg.UpdatedAt,
+	)
+}
+
+func normalizeGatewayConfig(cfg *GatewayConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.GatewayName = strings.TrimSpace(cfg.GatewayName)
+	if cfg.GatewayName == "" {
+		cfg.GatewayName = defaultGatewayConfigName
 	}
 	if cfg.DataRetentionDays <= 0 {
 		cfg.DataRetentionDays = DefaultRetentionDays
 	}
+}
 
-	targetID := cfg.ID
-	if targetID <= 0 {
-		current, err := GetGatewayConfig()
-		if err != nil {
-			return err
-		}
-		targetID = current.ID
+func resolveGatewayConfigID(id int64) (int64, error) {
+	if id > 0 {
+		return id, nil
 	}
 
-	_, err := ParamDB.Exec(`UPDATE gateway_config SET product_key = ?, device_key = ?, gateway_name = ?, data_retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		cfg.ProductKey, cfg.DeviceKey, cfg.GatewayName, cfg.DataRetentionDays, targetID)
-	return err
+	current, err := GetGatewayConfig()
+	if err != nil {
+		return 0, err
+	}
+	return current.ID, nil
 }
 
 // GetGatewayDataRetentionDays 获取网关全局历史保留天数
@@ -160,10 +210,10 @@ func GetGatewayDeviceKey() string {
 func GetGatewayName() string {
 	cfg, err := GetGatewayConfig()
 	if err != nil {
-		return "HuShu智能网关"
+		return defaultGatewayConfigName
 	}
 	if cfg.GatewayName == "" {
-		return "HuShu智能网关"
+		return defaultGatewayConfigName
 	}
 	return cfg.GatewayName
 }
