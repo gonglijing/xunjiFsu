@@ -583,7 +583,7 @@ func upsertLatestDeviceFieldRow(merged map[latestDeviceFieldKey]latestDeviceFiel
 	}
 }
 
-func mergeLatestDeviceFieldRowsFromDB(db *sql.DB, merged map[latestDeviceFieldKey]latestDeviceFieldRow) error {
+func loadLatestDeviceFieldRows(db *sql.DB, merged map[latestDeviceFieldKey]latestDeviceFieldRow) error {
 	if db == nil {
 		return fmt.Errorf("db is nil")
 	}
@@ -648,7 +648,7 @@ func buildLatestDeviceData(merged map[latestDeviceFieldKey]latestDeviceFieldRow)
 // GetAllDevicesLatestData 获取所有设备的最新数据（每个设备每个字段仅保留最新值）
 func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 	merged := make(map[latestDeviceFieldKey]latestDeviceFieldRow, 256)
-	if err := mergeLatestDeviceFieldRowsFromDB(DataDB, merged); err != nil {
+	if err := loadLatestDeviceFieldRows(DataDB, merged); err != nil {
 		return nil, err
 	}
 
@@ -661,7 +661,7 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 	}
 	defer diskDB.Close()
 
-	if err := mergeLatestDeviceFieldRowsFromDB(diskDB, merged); err != nil {
+	if err := loadLatestDeviceFieldRows(diskDB, merged); err != nil {
 		log.Printf("Failed to query latest device fields from disk: %v", err)
 		return buildLatestDeviceData(merged), nil
 	}

@@ -119,9 +119,7 @@ func InitDataDBWithPath(path string) error {
 	// 从文件恢复数据（如果存在）
 	if _, err := os.Stat(dataDBFile); err == nil {
 		log.Println("Restoring data database from file...")
-		if err := restoreDataFromFile(dataDBFile); err != nil {
-			log.Printf("Warning: failed to restore data database: %v", err)
-		}
+		log.Printf("Backup file exists (%s), real-time data will be collected on startup", dataDBFile)
 	}
 
 	return nil

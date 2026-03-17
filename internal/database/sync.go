@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -305,18 +304,5 @@ func ensureDiskDataSchema(db *sql.DB) error {
 		return fmt.Errorf("failed to normalize system device_name: %w", err)
 	}
 
-	return nil
-}
-
-// restoreDataFromFile 尝试从备份文件恢复数据
-// 注意：由于使用内存数据库，完整恢复比较复杂
-// 如果备份文件存在，记录日志但不影响主程序运行
-// 实时数据会在系统运行后自动重新采集
-func restoreDataFromFile(filename string) error {
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		return nil
-	}
-
-	log.Printf("Backup file exists (%s), real-time data will be collected on startup", filename)
 	return nil
 }
