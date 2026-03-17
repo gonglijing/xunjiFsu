@@ -72,18 +72,7 @@ func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	drivers := h.driverManager.ListDrivers()
 	now := time.Now()
 
-	status := StatusData{
-		CollectorRunning: h.collector.IsRunning(),
-		Devices:          summarizeDeviceStats(devices),
-		Northbound:       summarizeNorthboundStats(configs),
-		Alarms:           summarizeAlarmStats(alarms, now),
-		Drivers: DriverStats{
-			Total: len(drivers),
-		},
-		Timestamp: now,
-	}
-
-	WriteSuccess(w, status)
+	WriteSuccess(w, buildStatusData(devices, configs, alarms, len(drivers), h.collector.IsRunning(), now))
 }
 
 // StartCollector 启动采集器
@@ -92,13 +81,13 @@ func (h *Handler) StartCollector(w http.ResponseWriter, r *http.Request) {
 		writeServerErrorWithLog(w, apiErrStartCollectorFailed, err)
 		return
 	}
-	WriteSuccess(w, map[string]string{"status": "started"})
+	WriteSuccess(w, buildCollectorStatusResponse("started"))
 }
 
 // StopCollector 停止采集器
 func (h *Handler) StopCollector(w http.ResponseWriter, r *http.Request) {
 	h.collector.Stop()
-	WriteSuccess(w, map[string]string{"status": "stopped"})
+	WriteSuccess(w, buildCollectorStatusResponse("stopped"))
 }
 
 // 模板渲染与解析已移除（前端接管）

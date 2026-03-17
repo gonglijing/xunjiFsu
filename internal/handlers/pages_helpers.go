@@ -42,3 +42,27 @@ func summarizeAlarmStats(alarms []*models.AlarmLog, now time.Time) AlarmStats {
 	}
 	return stats
 }
+
+func buildStatusData(
+	devices []*models.Device,
+	configs []*models.NorthboundConfig,
+	alarms []*models.AlarmLog,
+	driverCount int,
+	collectorRunning bool,
+	now time.Time,
+) StatusData {
+	return StatusData{
+		CollectorRunning: collectorRunning,
+		Devices:          summarizeDeviceStats(devices),
+		Northbound:       summarizeNorthboundStats(configs),
+		Alarms:           summarizeAlarmStats(alarms, now),
+		Drivers: DriverStats{
+			Total: driverCount,
+		},
+		Timestamp: now,
+	}
+}
+
+func buildCollectorStatusResponse(status string) map[string]string {
+	return map[string]string{"status": status}
+}
