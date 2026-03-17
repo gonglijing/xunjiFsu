@@ -44,7 +44,7 @@ func (a *IThingsAdapter) lifecycleState() adapterLifecycleState {
 }
 
 func (a *IThingsAdapter) Start() {
-	a.lifecycleState().start(a.runLoop, nil)
+	a.lifecycleState().start(a.executeLoop, nil)
 }
 
 func (a *IThingsAdapter) Stop() {
@@ -245,7 +245,7 @@ func (a *IThingsAdapter) PendingCommandCount() int {
 	return len(a.commandQueue)
 }
 
-func (a *IThingsAdapter) runLoop() {
+func (a *IThingsAdapter) executeLoop() {
 	defer func() {
 		a.mu.Lock()
 		transition := updateLoopState(&a.loopState, adapterLoopStopped)

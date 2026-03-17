@@ -49,7 +49,7 @@ func (a *MQTTAdapter) reconnectState() adapterReconnectState {
 
 // Start 启动适配器的后台线程
 func (a *MQTTAdapter) Start() {
-	a.lifecycleState().start(a.runLoop, a.signalReconnect)
+	a.lifecycleState().start(a.executeLoop, a.signalReconnect)
 }
 
 // Stop 停止适配器的后台线程
@@ -93,8 +93,8 @@ func (a *MQTTAdapter) Close() error {
 	)
 }
 
-// runLoop 单协程事件循环（数据/报警/重连）
-func (a *MQTTAdapter) runLoop() {
+// executeLoop 单协程事件循环（数据/报警/重连）
+func (a *MQTTAdapter) executeLoop() {
 	defer func() {
 		a.mu.Lock()
 		transition := updateLoopState(&a.loopState, adapterLoopStopped)

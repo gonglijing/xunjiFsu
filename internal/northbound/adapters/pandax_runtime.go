@@ -46,7 +46,7 @@ func (a *PandaXAdapter) Start() {
 		}
 		needReconnect = !a.connected
 		a.wg.Add(1)
-		go a.runLoop()
+		go a.executeLoop()
 		log.Printf("[PandaX-%s] Start: 适配器已启动, reportInterval=%v, alarmInterval=%v",
 			a.name, a.reportEvery, a.alarmEvery)
 	}
@@ -271,7 +271,7 @@ func (a *PandaXAdapter) PendingCommandCount() int {
 	return len(a.commandQueue)
 }
 
-func (a *PandaXAdapter) runLoop() {
+func (a *PandaXAdapter) executeLoop() {
 	defer func() {
 		a.mu.Lock()
 		transition := updateLoopState(&a.loopState, adapterLoopStopped)

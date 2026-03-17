@@ -35,7 +35,7 @@ func (a *SagooAdapter) lifecycleState() adapterLifecycleState {
 
 // Start 启动适配器的后台线程
 func (a *SagooAdapter) Start() {
-	a.lifecycleState().start(a.runLoop, nil)
+	a.lifecycleState().start(a.executeLoop, nil)
 }
 
 // Stop 停止适配器的后台线程
@@ -157,7 +157,7 @@ func (a *SagooAdapter) ReportCommandResult(result *models.NorthboundCommandResul
 }
 
 // runLoop 单协程事件循环（实时与报警）
-func (a *SagooAdapter) runLoop() {
+func (a *SagooAdapter) executeLoop() {
 	defer func() {
 		a.mu.Lock()
 		transition := updateLoopState(&a.loopState, adapterLoopStopped)

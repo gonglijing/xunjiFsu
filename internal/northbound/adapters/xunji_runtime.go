@@ -39,7 +39,7 @@ func (a *XunjiAdapter) reconnectState() adapterReconnectState {
 }
 
 func (a *XunjiAdapter) Start() {
-	a.lifecycleState().start(a.runLoop, a.signalReconnect)
+	a.lifecycleState().start(a.executeLoop, a.signalReconnect)
 }
 
 func (a *XunjiAdapter) Stop() {
@@ -126,7 +126,7 @@ func (a *XunjiAdapter) GetLastSendTime() time.Time {
 
 func (a *XunjiAdapter) PendingCommandCount() int { return 0 }
 
-func (a *XunjiAdapter) runLoop() {
+func (a *XunjiAdapter) executeLoop() {
 	defer func() {
 		a.mu.Lock()
 		transition := updateLoopState(&a.loopState, adapterLoopStopped)

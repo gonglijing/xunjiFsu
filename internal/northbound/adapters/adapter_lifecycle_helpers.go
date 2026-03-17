@@ -25,7 +25,7 @@ type adapterLifecycleState struct {
 	reconnectChan  *chan struct{}
 }
 
-func (s adapterLifecycleState) start(runLoop func(), signalReconnect func()) {
+func (s adapterLifecycleState) start(executeLoop func(), signalReconnect func()) {
 	needReconnect := false
 	transition := loopStateTransition{}
 
@@ -44,7 +44,7 @@ func (s adapterLifecycleState) start(runLoop func(), signalReconnect func()) {
 		transition = updateLoopState(s.loopState, adapterLoopRunning)
 		needReconnect = !*s.connected
 		s.wg.Add(1)
-		go runLoop()
+		go executeLoop()
 		log.Printf("%s adapter started: %s", s.logLabel, s.adapterName)
 	}
 	s.mu.Unlock()
