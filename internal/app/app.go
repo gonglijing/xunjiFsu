@@ -15,6 +15,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/graceful"
 	"github.com/gonglijing/xunjiFsu/internal/handlers"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
 
@@ -123,28 +124,38 @@ func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error
 	}
 
 	loaded := 0
-	for _, d := range drivers {
-		if d.Enabled != 1 {
+	for _, driverModel := range drivers {
+		if !shouldLoadDriver(driverModel) {
 			continue
 		}
-		// 如果 file_path 为空，默认从 drivers 目录拼接
-		if d.FilePath == "" && cfg != nil {
-			d.FilePath = filepath.Join(cfg.DriversDir, d.Name+".wasm")
-		}
-		// 跳过 file_path 仍为空的驱动
-		if d.FilePath == "" {
-			logger.Debug("Skipping driver with empty file_path", "id", d.ID, "name", d.Name)
+		driverModel.FilePath = resolveDriverFilePath(cfg, driverModel)
+		if driverModel.FilePath == "" {
+			logger.Debug("Skipping driver with empty file_path", "id", driverModel.ID, "name", driverModel.Name)
 			continue
 		}
-		if err := manager.LoadDriverFromModel(d, 0); err != nil {
-			logger.Warn("Failed to load driver", "id", d.ID, "name", d.Name, "error", err)
+		if err := manager.LoadDriverFromModel(driverModel, 0); err != nil {
+			logger.Warn("Failed to load driver", "id", driverModel.ID, "name", driverModel.Name, "error", err)
 			continue
 		}
 		loaded++
-		logger.Info("Loaded driver", "id", d.ID, "name", d.Name)
+		logger.Info("Loaded driver", "id", driverModel.ID, "name", driverModel.Name)
 	}
 	logger.Info("Drivers loaded", "count", loaded)
 	return nil
+}
+
+func shouldLoadDriver(driverModel *models.Driver) bool {
+	return driverModel != nil && driverModel.Enabled == 1
+}
+
+func resolveDriverFilePath(cfg *config.Config, driverModel *models.Driver) string {
+	if driverModel == nil {
+		return ""
+	}
+	if driverModel.FilePath != "" || cfg == nil {
+		return driverModel.FilePath
+	}
+	return filepath.Join(cfg.DriversDir, driverModel.Name+".wasm")
 }
 
 func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector.Collector, northMgr *northbound.NorthboundManager, sysCollector *collector.SystemStatsCollector, cfg *config.Config) {

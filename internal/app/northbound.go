@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/collector"
@@ -25,7 +26,7 @@ func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 
 	enabledCount := 0
 	for _, config := range configs {
-		if config.Enabled != 1 {
+		if !shouldLoadNorthboundConfig(config) {
 			continue
 		}
 		if err := registerNorthboundAdapter(northboundMgr, config, sysStatsCollector); err != nil {
@@ -43,16 +44,13 @@ func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 }
 
 func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, config *models.NorthboundConfig, sysStatsCollector *collector.SystemStatsCollector) error {
-	// 从模型字段生成配置JSON
-	configJSON := adapters.BuildConfigFromModel(config)
-
 	// 使用内置适配器
 	adapter := adapters.NewAdapter(config.Type, config.Name)
 	if adapter == nil {
 		return fmt.Errorf("unsupported northbound type: %s", config.Type)
 	}
 
-	if err := adapter.Initialize(configJSON); err != nil {
+	if err := adapter.Initialize(northboundConfigPayload(config)); err != nil {
 		return fmt.Errorf("initialize northbound adapter %s: %w", config.Name, err)
 	}
 
@@ -60,16 +58,37 @@ func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, conf
 	interval := time.Duration(config.UploadInterval) * time.Millisecond
 	adapter.SetInterval(interval)
 
-	// 对于 pandax 适配器，设置系统属性提供者
-	if config.Type == "pandax" && sysStatsCollector != nil {
-		if pandaxAdapter, ok := adapter.(*adapters.PandaXAdapter); ok {
-			pandaxAdapter.SetSystemStatsProvider(sysStatsCollector)
-			logger.Info("Set system stats provider for pandax adapter")
-		}
-	}
+	configurePandaxSystemStats(adapter, config, sysStatsCollector)
 
 	// 注册到管理器
 	northboundMgr.RegisterAdapter(config.Name, adapter)
 
 	return nil
+}
+
+func shouldLoadNorthboundConfig(config *models.NorthboundConfig) bool {
+	return config != nil && config.Enabled == 1
+}
+
+func northboundConfigPayload(config *models.NorthboundConfig) string {
+	if config == nil {
+		return ""
+	}
+	trimmed := strings.TrimSpace(config.Config)
+	if trimmed != "" && trimmed != "{}" {
+		return config.Config
+	}
+	return adapters.BuildConfigFromModel(config)
+}
+
+func configurePandaxSystemStats(adapter adapters.NorthboundAdapter, config *models.NorthboundConfig, sysStatsCollector *collector.SystemStatsCollector) {
+	if config == nil || sysStatsCollector == nil || config.Type != "pandax" {
+		return
+	}
+	pandaxAdapter, ok := adapter.(*adapters.PandaXAdapter)
+	if !ok {
+		return
+	}
+	pandaxAdapter.SetSystemStatsProvider(sysStatsCollector)
+	logger.Info("Set system stats provider for pandax adapter")
 }
