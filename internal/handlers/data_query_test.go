@@ -144,3 +144,49 @@ func TestParseHistoryPointQuery_InvalidDeviceID(t *testing.T) {
 		t.Fatalf("error = %q, want %q", err.Error(), errInvalidDeviceIDMessage)
 	}
 }
+
+func TestParseHistoryQueryTimeRange(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?start=2026-01-02T03:04:05Z&end=2026-01-02T04:04:05Z", nil)
+
+	startTime, endTime, err := parseHistoryQueryTimeRange(req)
+	if err != nil {
+		t.Fatalf("parseHistoryQueryTimeRange returned error: %v", err)
+	}
+	if startTime.Format(time.RFC3339) != "2026-01-02T03:04:05Z" {
+		t.Fatalf("startTime = %s", startTime.Format(time.RFC3339))
+	}
+	if endTime.Format(time.RFC3339) != "2026-01-02T04:04:05Z" {
+		t.Fatalf("endTime = %s", endTime.Format(time.RFC3339))
+	}
+}
+
+func TestParseHistoryQueryTimeRange_InvalidStart(t *testing.T) {
+	req := httptest.NewRequest("GET", "/history?start=bad-time", nil)
+
+	_, _, err := parseHistoryQueryTimeRange(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != "Invalid start time" {
+		t.Fatalf("error = %q, want %q", err.Error(), "Invalid start time")
+	}
+}
+
+func TestIsValidHistoryDeviceID(t *testing.T) {
+	validID := int64(1)
+	systemID := int64(-1)
+	invalidID := int64(0)
+
+	if !isValidHistoryDeviceID(nil) {
+		t.Fatal("nil device id should be valid")
+	}
+	if !isValidHistoryDeviceID(&validID) {
+		t.Fatal("positive device id should be valid")
+	}
+	if !isValidHistoryDeviceID(&systemID) {
+		t.Fatal("system device id should be valid")
+	}
+	if isValidHistoryDeviceID(&invalidID) {
+		t.Fatal("zero device id should be invalid")
+	}
+}

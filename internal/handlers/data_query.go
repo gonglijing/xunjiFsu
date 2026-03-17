@@ -25,22 +25,17 @@ func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
 		FieldName: strings.TrimSpace(r.URL.Query().Get("field_name")),
 	}
 
-	deviceID, err := parseOptionalInt64Query(r, "device_id")
+	deviceID, err := parseHistoryQueryDeviceID(r)
 	if err != nil {
 		return historyDataQuery{}, fmt.Errorf(errInvalidDeviceIDMessage)
 	}
 	query.DeviceID = deviceID
 
-	startTime, err := parseOptionalTimeQuery(r, "start")
+	startTime, endTime, err := parseHistoryQueryTimeRange(r)
 	if err != nil {
-		return historyDataQuery{}, fmt.Errorf("Invalid start time")
+		return historyDataQuery{}, err
 	}
 	query.StartTime = startTime
-
-	endTime, err := parseOptionalTimeQuery(r, "end")
-	if err != nil {
-		return historyDataQuery{}, fmt.Errorf("Invalid end time")
-	}
 	query.EndTime = endTime
 
 	if err := validateHistoryDataQuery(query); err != nil {
@@ -51,7 +46,7 @@ func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
 }
 
 func parseHistoryPointQuery(r *http.Request) (historyPointQuery, error) {
-	deviceID, err := parseOptionalInt64Query(r, "device_id")
+	deviceID, err := parseHistoryQueryDeviceID(r)
 	if err != nil || deviceID == nil {
 		return historyPointQuery{}, fmt.Errorf(errInvalidDeviceIDMessage)
 	}
@@ -72,7 +67,7 @@ func parseHistoryPointQuery(r *http.Request) (historyPointQuery, error) {
 }
 
 func validateHistoryDataQuery(query historyDataQuery) error {
-	if query.DeviceID != nil && *query.DeviceID <= 0 && *query.DeviceID != -1 {
+	if !isValidHistoryDeviceID(query.DeviceID) {
 		return fmt.Errorf(errInvalidDeviceIDMessage)
 	}
 
@@ -88,6 +83,28 @@ func validateHistoryDataQuery(query historyDataQuery) error {
 	}
 
 	return nil
+}
+
+func parseHistoryQueryDeviceID(r *http.Request) (*int64, error) {
+	return parseOptionalInt64Query(r, "device_id")
+}
+
+func parseHistoryQueryTimeRange(r *http.Request) (time.Time, time.Time, error) {
+	startTime, err := parseOptionalTimeQuery(r, "start")
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid start time")
+	}
+
+	endTime, err := parseOptionalTimeQuery(r, "end")
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid end time")
+	}
+
+	return startTime, endTime, nil
+}
+
+func isValidHistoryDeviceID(deviceID *int64) bool {
+	return deviceID == nil || *deviceID > 0 || *deviceID == -1
 }
 
 func parseOptionalInt64Query(r *http.Request, key string) (*int64, error) {
