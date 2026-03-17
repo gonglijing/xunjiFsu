@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -24,18 +25,17 @@ func (h *Handler) GetThresholds(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateThreshold(w http.ResponseWriter, r *http.Request) {
-	var threshold models.Threshold
-	if !parseRequestOrWriteBadRequestDefault(w, r, &threshold) {
+	threshold, ok := parseThresholdPayload(w, r)
+	if !ok {
 		return
 	}
-	normalizeThresholdInput(&threshold)
 
-	id, err := database.CreateThreshold(&threshold)
+	id, err := database.CreateThreshold(threshold)
 	if err != nil {
 		writeServerErrorWithLog(w, apiErrCreateThresholdFailed, err)
 		return
 	}
-	collector.InvalidateDeviceCache(threshold.DeviceID)
+	invalidateThresholdDeviceCaches(threshold, nil)
 
 	threshold.ID = id
 	WriteCreated(w, threshold)
@@ -48,23 +48,18 @@ func (h *Handler) UpdateThreshold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	oldThreshold, _ := database.GetThresholdByID(id)
-
-	var threshold models.Threshold
-	if !parseRequestOrWriteBadRequestDefault(w, r, &threshold) {
+	threshold, ok := parseThresholdPayload(w, r)
+	if !ok {
 		return
 	}
-	normalizeThresholdInput(&threshold)
 
 	threshold.ID = id
-	if err := database.UpdateThreshold(&threshold); err != nil {
+	if err := database.UpdateThreshold(threshold); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateThresholdFailed, err)
 		return
 	}
 
-	collector.InvalidateDeviceCache(threshold.DeviceID)
-	if oldThreshold != nil && oldThreshold.DeviceID != threshold.DeviceID {
-		collector.InvalidateDeviceCache(oldThreshold.DeviceID)
-	}
+	invalidateThresholdDeviceCaches(threshold, oldThreshold)
 
 	WriteSuccess(w, threshold)
 }
@@ -81,9 +76,7 @@ func (h *Handler) DeleteThreshold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if threshold != nil {
-		collector.InvalidateDeviceCache(threshold.DeviceID)
-	}
+	invalidateThresholdDeviceCaches(nil, threshold)
 
 	WriteDeleted(w)
 }
@@ -104,7 +97,7 @@ func (h *Handler) UpdateAlarmRepeatInterval(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if payload.Seconds <= 0 {
+	if err := validateAlarmRepeatIntervalSeconds(payload.Seconds); err != nil {
 		WriteBadRequestDef(w, apiErrInvalidAlarmRepeatInterval)
 		return
 	}
@@ -130,4 +123,54 @@ func normalizeThresholdInput(threshold *models.Threshold) {
 	if threshold.Shielded != 1 {
 		threshold.Shielded = 0
 	}
+}
+
+func parseThresholdPayload(w http.ResponseWriter, r *http.Request) (*models.Threshold, bool) {
+	var threshold models.Threshold
+	if !parseRequestOrWriteBadRequestDefault(w, r, &threshold) {
+		return nil, false
+	}
+	normalizeThresholdInput(&threshold)
+	return &threshold, true
+}
+
+func invalidateThresholdDeviceCaches(current *models.Threshold, previous *models.Threshold) {
+	for _, deviceID := range buildThresholdCacheDeviceIDs(current, previous) {
+		collector.InvalidateDeviceCache(deviceID)
+	}
+}
+
+func buildThresholdCacheDeviceIDs(current *models.Threshold, previous *models.Threshold) []int64 {
+	if current == nil && previous == nil {
+		return nil
+	}
+
+	deviceIDs := make([]int64, 0, 2)
+	appendDeviceID := func(deviceID int64) {
+		if deviceID <= 0 {
+			return
+		}
+		for _, existing := range deviceIDs {
+			if existing == deviceID {
+				return
+			}
+		}
+		deviceIDs = append(deviceIDs, deviceID)
+	}
+
+	if current != nil {
+		appendDeviceID(current.DeviceID)
+	}
+	if previous != nil {
+		appendDeviceID(previous.DeviceID)
+	}
+
+	return deviceIDs
+}
+
+func validateAlarmRepeatIntervalSeconds(seconds int) error {
+	if seconds <= 0 {
+		return fmt.Errorf("alarm repeat interval must be > 0")
+	}
+	return nil
 }
