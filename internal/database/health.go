@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"log"
 	"sync"
 	"time"
@@ -15,6 +16,12 @@ type DBHealthChecker struct {
 	checkInterval time.Duration
 	stopChan      chan struct{}
 	stopOnce      sync.Once
+}
+
+type dbHealthStatus struct {
+	paramHealthy bool
+	dataHealthy  bool
+	lastCheck    time.Time
 }
 
 // NewDBHealthChecker 创建健康检查器
@@ -59,28 +66,13 @@ func (c *DBHealthChecker) Stop() {
 
 // check 执行健康检查
 func (c *DBHealthChecker) check() {
+	status := currentDBHealthStatus(time.Now())
+
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-
-	// 检查ParamDB
-	if err := ParamDB.Ping(); err != nil {
-		log.Printf("ParamDB health check failed: %v", err)
-		c.paramHealthy = false
-	} else {
-		c.paramHealthy = true
-	}
-
-	// 检查DataDB
-	if err := DataDB.Ping(); err != nil {
-		log.Printf("DataDB health check failed: %v", err)
-		c.dataHealthy = false
-	} else {
-		c.dataHealthy = true
-	}
-
-	c.lastCheck = now
+	c.paramHealthy = status.paramHealthy
+	c.dataHealthy = status.dataHealthy
+	c.lastCheck = status.lastCheck
+	c.mu.Unlock()
 }
 
 // IsHealthy 获取整体健康状态
@@ -94,14 +86,14 @@ func (c *DBHealthChecker) IsHealthy() bool {
 // GetStatus 获取详细状态
 func (c *DBHealthChecker) GetStatus() map[string]interface{} {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return map[string]interface{}{
-		"healthy":       c.paramHealthy && c.dataHealthy,
-		"param_healthy": c.paramHealthy,
-		"data_healthy":  c.dataHealthy,
-		"last_check":    c.lastCheck,
+	status := dbHealthStatus{
+		paramHealthy: c.paramHealthy,
+		dataHealthy:  c.dataHealthy,
+		lastCheck:    c.lastCheck,
 	}
+	c.mu.RUnlock()
+
+	return status.toMap()
 }
 
 // Global health checker instance
@@ -122,30 +114,18 @@ func StopDBHealthChecker() {
 
 // IsDBHealthy 检查数据库是否健康
 func IsDBHealthy() bool {
-	if healthChecker == nil {
-		// 如果没有启动健康检查，直接ping
-		if err := ParamDB.Ping(); err != nil {
-			return false
-		}
-		if err := DataDB.Ping(); err != nil {
-			return false
-		}
-		return true
+	if healthChecker != nil {
+		return healthChecker.IsHealthy()
 	}
-	return healthChecker.IsHealthy()
+	return currentDBHealthStatus(time.Now()).healthy()
 }
 
 // GetDBStatus 获取数据库状态
 func GetDBStatus() map[string]interface{} {
-	if healthChecker == nil {
-		return map[string]interface{}{
-			"healthy":       IsDBHealthy(),
-			"param_healthy": ParamDB.Ping() == nil,
-			"data_healthy":  DataDB.Ping() == nil,
-			"last_check":    time.Now(),
-		}
+	if healthChecker != nil {
+		return healthChecker.GetStatus()
 	}
-	return healthChecker.GetStatus()
+	return currentDBHealthStatus(time.Now()).toMap()
 }
 
 // ConnectionStats 连接统计
@@ -177,31 +157,86 @@ func GetConnectionStats() ConnectionStats {
 func RecoverConnection() error {
 	log.Println("Attempting to recover database connections...")
 
-	// 尝试重新连接ParamDB
-	if err := ParamDB.Ping(); err != nil {
-		log.Printf("Reconnecting ParamDB...")
-		ParamDB.Close()
-		maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
-		maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
-		ParamDB, err = openSQLite(paramDBFile, maxOpen, maxIdle)
-		if err != nil {
-			return err
-		}
+	if err := recoverParamDB(); err != nil {
+		return err
 	}
-
-	// 尝试重新连接DataDB
-	if err := DataDB.Ping(); err != nil {
-		log.Printf("Reconnecting DataDB...")
-		DataDB.Close()
-		maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
-		maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
-		DataDB, err = openSQLite(":memory:", maxOpen, maxIdle)
-		if err != nil {
-			return err
-		}
-		_, _ = DataDB.Exec("PRAGMA foreign_keys = OFF")
+	if err := recoverDataDB(); err != nil {
+		return err
 	}
 
 	log.Println("Database connections recovered")
+	return nil
+}
+
+func currentDBHealthStatus(now time.Time) dbHealthStatus {
+	return dbHealthStatus{
+		paramHealthy: pingDatabase("ParamDB", ParamDB),
+		dataHealthy:  pingDatabase("DataDB", DataDB),
+		lastCheck:    now,
+	}
+}
+
+func pingDatabase(name string, db *sql.DB) bool {
+	if db == nil {
+		log.Printf("%s health check failed: database is nil", name)
+		return false
+	}
+	if err := db.Ping(); err != nil {
+		log.Printf("%s health check failed: %v", name, err)
+		return false
+	}
+	return true
+}
+
+func (s dbHealthStatus) healthy() bool {
+	return s.paramHealthy && s.dataHealthy
+}
+
+func (s dbHealthStatus) toMap() map[string]interface{} {
+	return map[string]interface{}{
+		"healthy":       s.healthy(),
+		"param_healthy": s.paramHealthy,
+		"data_healthy":  s.dataHealthy,
+		"last_check":    s.lastCheck,
+	}
+}
+
+func recoverParamDB() error {
+	if pingDatabase("ParamDB", ParamDB) {
+		return nil
+	}
+
+	log.Printf("Reconnecting ParamDB...")
+	if ParamDB != nil {
+		_ = ParamDB.Close()
+	}
+
+	maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
+	maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
+
+	var err error
+	ParamDB, err = openSQLite(paramDBFile, maxOpen, maxIdle)
+	return err
+}
+
+func recoverDataDB() error {
+	if pingDatabase("DataDB", DataDB) {
+		return nil
+	}
+
+	log.Printf("Reconnecting DataDB...")
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+
+	maxOpen := getEnvInt("DB_MAX_OPEN_CONNS", DefaultMaxOpenConns)
+	maxIdle := getEnvInt("DB_MAX_IDLE_CONNS", DefaultMaxIdleConns)
+
+	var err error
+	DataDB, err = openSQLite(":memory:", maxOpen, maxIdle)
+	if err != nil {
+		return err
+	}
+	_, _ = DataDB.Exec("PRAGMA foreign_keys = OFF")
 	return nil
 }
