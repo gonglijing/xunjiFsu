@@ -179,8 +179,8 @@ func applyServerFileConfig(cfg *Config, flatCfg map[string]string) {
 	}
 
 	setStringIfNotEmpty(&cfg.ListenAddr, flatCfg["server.addr"])
-	setDurationFromText(&cfg.HTTPReadTimeout, flatCfg["server.read_timeout"])
-	setDurationFromText(&cfg.HTTPWriteTimeout, flatCfg["server.write_timeout"])
+	applyDurationText(&cfg.HTTPReadTimeout, flatCfg["server.read_timeout"])
+	applyDurationText(&cfg.HTTPWriteTimeout, flatCfg["server.write_timeout"])
 }
 
 func applyDriverFileConfig(cfg *Config, flatCfg map[string]string) {
@@ -189,14 +189,14 @@ func applyDriverFileConfig(cfg *Config, flatCfg map[string]string) {
 	}
 
 	setStringIfNotEmpty(&cfg.DriversDir, flatCfg["drivers.dir"])
-	setDurationFromText(&cfg.DriverCallTimeout, flatCfg["drivers.call_timeout"])
-	setDurationFromText(&cfg.DriverSerialReadTimeout, flatCfg["drivers.serial_read_timeout"])
-	setPositiveIntFromText(&cfg.DriverSerialOpenRetries, flatCfg["drivers.serial_open_retries"])
-	setDurationFromText(&cfg.DriverSerialOpenBackoff, flatCfg["drivers.serial_open_backoff"])
-	setDurationFromText(&cfg.DriverTCPDialTimeout, flatCfg["drivers.tcp_dial_timeout"])
-	setPositiveIntFromText(&cfg.DriverTCPDialRetries, flatCfg["drivers.tcp_dial_retries"])
-	setDurationFromText(&cfg.DriverTCPDialBackoff, flatCfg["drivers.tcp_dial_backoff"])
-	setDurationFromText(&cfg.DriverTCPReadTimeout, flatCfg["drivers.tcp_read_timeout"])
+	applyDurationText(&cfg.DriverCallTimeout, flatCfg["drivers.call_timeout"])
+	applyDurationText(&cfg.DriverSerialReadTimeout, flatCfg["drivers.serial_read_timeout"])
+	applyPositiveIntText(&cfg.DriverSerialOpenRetries, flatCfg["drivers.serial_open_retries"])
+	applyDurationText(&cfg.DriverSerialOpenBackoff, flatCfg["drivers.serial_open_backoff"])
+	applyDurationText(&cfg.DriverTCPDialTimeout, flatCfg["drivers.tcp_dial_timeout"])
+	applyPositiveIntText(&cfg.DriverTCPDialRetries, flatCfg["drivers.tcp_dial_retries"])
+	applyDurationText(&cfg.DriverTCPDialBackoff, flatCfg["drivers.tcp_dial_backoff"])
+	applyDurationText(&cfg.DriverTCPReadTimeout, flatCfg["drivers.tcp_read_timeout"])
 }
 
 func applyNorthboundFileConfig(cfg *Config, flatCfg map[string]string) {
@@ -205,7 +205,7 @@ func applyNorthboundFileConfig(cfg *Config, flatCfg map[string]string) {
 	}
 
 	setStringIfNotEmpty(&cfg.NorthboundPluginsDir, flatCfg["northbound.plugins_dir"])
-	setDurationFromText(&cfg.NorthboundMQTTReconnectInterval, flatCfg["northbound.mqtt_reconnect_interval"])
+	applyDurationText(&cfg.NorthboundMQTTReconnectInterval, flatCfg["northbound.mqtt_reconnect_interval"])
 }
 
 func applyCollectorFileConfig(cfg *Config, flatCfg map[string]string) {
@@ -213,8 +213,8 @@ func applyCollectorFileConfig(cfg *Config, flatCfg map[string]string) {
 		return
 	}
 
-	setDurationFromText(&cfg.CollectorDeviceSyncInterval, flatCfg["collector.device_sync_interval"])
-	setDurationFromText(&cfg.CollectorCommandPollInterval, flatCfg["collector.command_poll_interval"])
+	applyDurationText(&cfg.CollectorDeviceSyncInterval, flatCfg["collector.device_sync_interval"])
+	applyDurationText(&cfg.CollectorCommandPollInterval, flatCfg["collector.command_poll_interval"])
 }
 
 func parseFlatYAML(data []byte) (map[string]string, error) {
@@ -325,7 +325,7 @@ func setStringIfNotEmpty(dst *string, value string) {
 	*dst = value
 }
 
-func setDurationFromText(dst *time.Duration, value string) {
+func applyDurationText(dst *time.Duration, value string) {
 	if dst == nil || value == "" {
 		return
 	}
@@ -341,7 +341,7 @@ func setPositiveInt(dst *int, value int) {
 	*dst = value
 }
 
-func setPositiveIntFromText(dst *int, value string) {
+func applyPositiveIntText(dst *int, value string) {
 	if dst == nil || value == "" {
 		return
 	}
@@ -373,72 +373,72 @@ func applyEnvConfig(cfg *Config) {
 }
 
 func applyServerEnvConfig(cfg, defaults *Config) {
-	setStringFromEnv(&cfg.ListenAddr, "LISTEN_ADDR")
-	setDurationFromEnvWithFallback(&cfg.HTTPReadTimeout, "HTTP_READ_TIMEOUT", defaults.HTTPReadTimeout, false)
-	setDurationFromEnvWithFallback(&cfg.HTTPWriteTimeout, "HTTP_WRITE_TIMEOUT", defaults.HTTPWriteTimeout, false)
-	setDurationFromEnv(&cfg.HTTPIdleTimeout, "HTTP_IDLE_TIMEOUT")
+	applyEnvString(&cfg.ListenAddr, "LISTEN_ADDR")
+	applyEnvDurationWithFallback(&cfg.HTTPReadTimeout, "HTTP_READ_TIMEOUT", defaults.HTTPReadTimeout, false)
+	applyEnvDurationWithFallback(&cfg.HTTPWriteTimeout, "HTTP_WRITE_TIMEOUT", defaults.HTTPWriteTimeout, false)
+	applyEnvDuration(&cfg.HTTPIdleTimeout, "HTTP_IDLE_TIMEOUT")
 }
 
 func applyDatabaseEnvConfig(cfg *Config) {
-	setStringFromEnv(&cfg.DBPath, "DB_PATH")
-	setStringFromEnv(&cfg.ParamDBPath, "PARAM_DB_PATH")
-	setStringFromEnv(&cfg.DataDBPath, "DATA_DB_PATH")
+	applyEnvString(&cfg.DBPath, "DB_PATH")
+	applyEnvString(&cfg.ParamDBPath, "PARAM_DB_PATH")
+	applyEnvString(&cfg.DataDBPath, "DATA_DB_PATH")
 }
 
 func applyTLSEnvConfig(cfg *Config) {
-	setStringFromEnv(&cfg.TLSCertFile, "TLS_CERT_FILE")
-	setStringFromEnv(&cfg.TLSKeyFile, "TLS_KEY_FILE")
-	setBoolFromEnvAllowOne(&cfg.TLSAuto, "TLS_AUTO")
-	setStringFromEnv(&cfg.TLSDomain, "TLS_DOMAIN")
-	setStringFromEnv(&cfg.TLSCacheDir, "TLS_CACHE_DIR")
+	applyEnvString(&cfg.TLSCertFile, "TLS_CERT_FILE")
+	applyEnvString(&cfg.TLSKeyFile, "TLS_KEY_FILE")
+	applyEnvBoolAllowOne(&cfg.TLSAuto, "TLS_AUTO")
+	applyEnvString(&cfg.TLSDomain, "TLS_DOMAIN")
+	applyEnvString(&cfg.TLSCacheDir, "TLS_CACHE_DIR")
 }
 
 func applySessionEnvConfig(cfg *Config) {
-	setStringFromEnv(&cfg.SessionSecret, "SESSION_SECRET")
-	setStringFromEnv(&cfg.AllowedOrigins, "ALLOWED_ORIGINS")
+	applyEnvString(&cfg.SessionSecret, "SESSION_SECRET")
+	applyEnvString(&cfg.AllowedOrigins, "ALLOWED_ORIGINS")
 }
 
 func applyLogEnvConfig(cfg *Config) {
-	setStringFromEnv(&cfg.LogLevel, "LOG_LEVEL")
-	setBoolFromEnv(&cfg.LogJSON, "LOG_JSON")
+	applyEnvString(&cfg.LogLevel, "LOG_LEVEL")
+	applyEnvBool(&cfg.LogJSON, "LOG_JSON")
 }
 
 func applyCollectorEnvConfig(cfg, defaults *Config) {
-	setBoolFromEnv(&cfg.CollectorEnabled, "COLLECTOR_ENABLED")
-	setIntFromEnvWithFallback(&cfg.CollectorWorkers, "COLLECTOR_WORKERS", defaults.CollectorWorkers)
-	setDurationFromEnvWithFallback(&cfg.SyncInterval, "SYNC_INTERVAL", defaults.SyncInterval, false)
-	setDurationFromEnvWithFallback(&cfg.CollectorDeviceSyncInterval, "COLLECTOR_DEVICE_SYNC_INTERVAL", defaults.CollectorDeviceSyncInterval, true)
-	setDurationFromEnvWithFallback(&cfg.CollectorCommandPollInterval, "COLLECTOR_COMMAND_POLL_INTERVAL", defaults.CollectorCommandPollInterval, true)
+	applyEnvBool(&cfg.CollectorEnabled, "COLLECTOR_ENABLED")
+	applyEnvIntWithFallback(&cfg.CollectorWorkers, "COLLECTOR_WORKERS", defaults.CollectorWorkers)
+	applyEnvDurationWithFallback(&cfg.SyncInterval, "SYNC_INTERVAL", defaults.SyncInterval, false)
+	applyEnvDurationWithFallback(&cfg.CollectorDeviceSyncInterval, "COLLECTOR_DEVICE_SYNC_INTERVAL", defaults.CollectorDeviceSyncInterval, true)
+	applyEnvDurationWithFallback(&cfg.CollectorCommandPollInterval, "COLLECTOR_COMMAND_POLL_INTERVAL", defaults.CollectorCommandPollInterval, true)
 }
 
 func applyDriverEnvConfig(cfg *Config) {
-	setStringFromEnv(&cfg.DriversDir, "DRIVERS_DIR")
-	setDurationFromEnv(&cfg.DriverCallTimeout, "DRIVER_CALL_TIMEOUT")
-	setDurationFromEnv(&cfg.DriverSerialReadTimeout, "DRIVER_SERIAL_READ_TIMEOUT")
-	setIntFromEnv(&cfg.DriverSerialOpenRetries, "DRIVER_SERIAL_OPEN_RETRIES")
-	setDurationFromEnv(&cfg.DriverSerialOpenBackoff, "DRIVER_SERIAL_OPEN_BACKOFF")
-	setDurationFromEnv(&cfg.DriverTCPDialTimeout, "DRIVER_TCP_DIAL_TIMEOUT")
-	setIntFromEnv(&cfg.DriverTCPDialRetries, "DRIVER_TCP_DIAL_RETRIES")
-	setDurationFromEnv(&cfg.DriverTCPDialBackoff, "DRIVER_TCP_DIAL_BACKOFF")
-	setDurationFromEnv(&cfg.DriverTCPReadTimeout, "DRIVER_TCP_READ_TIMEOUT")
+	applyEnvString(&cfg.DriversDir, "DRIVERS_DIR")
+	applyEnvDuration(&cfg.DriverCallTimeout, "DRIVER_CALL_TIMEOUT")
+	applyEnvDuration(&cfg.DriverSerialReadTimeout, "DRIVER_SERIAL_READ_TIMEOUT")
+	applyEnvInt(&cfg.DriverSerialOpenRetries, "DRIVER_SERIAL_OPEN_RETRIES")
+	applyEnvDuration(&cfg.DriverSerialOpenBackoff, "DRIVER_SERIAL_OPEN_BACKOFF")
+	applyEnvDuration(&cfg.DriverTCPDialTimeout, "DRIVER_TCP_DIAL_TIMEOUT")
+	applyEnvInt(&cfg.DriverTCPDialRetries, "DRIVER_TCP_DIAL_RETRIES")
+	applyEnvDuration(&cfg.DriverTCPDialBackoff, "DRIVER_TCP_DIAL_BACKOFF")
+	applyEnvDuration(&cfg.DriverTCPReadTimeout, "DRIVER_TCP_READ_TIMEOUT")
 }
 
 func applyNorthboundEnvConfig(cfg, defaults *Config) {
-	setStringFromEnv(&cfg.NorthboundPluginsDir, "NORTHBOUND_PLUGINS_DIR")
-	setDurationFromEnvWithFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
+	applyEnvString(&cfg.NorthboundPluginsDir, "NORTHBOUND_PLUGINS_DIR")
+	applyEnvDurationWithFallback(&cfg.NorthboundMQTTReconnectInterval, "NORTHBOUND_MQTT_RECONNECT_INTERVAL", defaults.NorthboundMQTTReconnectInterval, true)
 }
 
 func applyThresholdEnvConfig(cfg *Config) {
-	setBoolFromEnv(&cfg.ThresholdCacheEnabled, "THRESHOLD_CACHE_ENABLED")
-	setDurationFromEnv(&cfg.ThresholdCacheTTL, "THRESHOLD_CACHE_TTL")
+	applyEnvBool(&cfg.ThresholdCacheEnabled, "THRESHOLD_CACHE_ENABLED")
+	applyEnvDuration(&cfg.ThresholdCacheTTL, "THRESHOLD_CACHE_TTL")
 }
 
 func applyDataLimitEnvConfig(cfg *Config) {
-	setIntFromEnv(&cfg.MaxDataPoints, "MAX_DATA_POINTS")
-	setIntFromEnv(&cfg.MaxDataCache, "MAX_DATA_CACHE")
+	applyEnvInt(&cfg.MaxDataPoints, "MAX_DATA_POINTS")
+	applyEnvInt(&cfg.MaxDataCache, "MAX_DATA_CACHE")
 }
 
-func setStringFromEnv(dst *string, key string) {
+func applyEnvString(dst *string, key string) {
 	if dst == nil {
 		return
 	}
@@ -447,7 +447,7 @@ func setStringFromEnv(dst *string, key string) {
 	}
 }
 
-func setBoolFromEnv(dst *bool, key string) {
+func applyEnvBool(dst *bool, key string) {
 	if dst == nil {
 		return
 	}
@@ -456,7 +456,7 @@ func setBoolFromEnv(dst *bool, key string) {
 	}
 }
 
-func setBoolFromEnvAllowOne(dst *bool, key string) {
+func applyEnvBoolAllowOne(dst *bool, key string) {
 	if dst == nil {
 		return
 	}
@@ -465,7 +465,7 @@ func setBoolFromEnvAllowOne(dst *bool, key string) {
 	}
 }
 
-func setIntFromEnv(dst *int, key string) {
+func applyEnvInt(dst *int, key string) {
 	if dst == nil {
 		return
 	}
@@ -478,7 +478,7 @@ func setIntFromEnv(dst *int, key string) {
 	}
 }
 
-func setIntFromEnvWithFallback(dst *int, key string, fallback int) {
+func applyEnvIntWithFallback(dst *int, key string, fallback int) {
 	if dst == nil {
 		return
 	}
@@ -495,7 +495,7 @@ func setIntFromEnvWithFallback(dst *int, key string, fallback int) {
 	}
 }
 
-func setDurationFromEnv(dst *time.Duration, key string) {
+func applyEnvDuration(dst *time.Duration, key string) {
 	if dst == nil {
 		return
 	}
@@ -508,7 +508,7 @@ func setDurationFromEnv(dst *time.Duration, key string) {
 	}
 }
 
-func setDurationFromEnvWithFallback(dst *time.Duration, key string, fallback time.Duration, mustPositive bool) {
+func applyEnvDurationWithFallback(dst *time.Duration, key string, fallback time.Duration, mustPositive bool) {
 	if dst == nil {
 		return
 	}
