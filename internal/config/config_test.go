@@ -644,8 +644,8 @@ collector:
 	t.Cleanup(func() { _ = os.Chdir(oldWD) })
 
 	cfg := DefaultConfig()
-	if err := loadConfigFromFile(cfg); err != nil {
-		t.Fatalf("loadConfigFromFile: %v", err)
+	if err := applyFileConfig(cfg); err != nil {
+		t.Fatalf("applyFileConfig: %v", err)
 	}
 
 	if cfg.ListenAddr != ":7777" {

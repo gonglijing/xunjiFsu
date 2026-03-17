@@ -121,7 +121,7 @@ func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
 	// 1. 先从 YAML 文件加载配置
-	if err := loadConfigFromFile(cfg); err != nil {
+	if err := applyFileConfig(cfg); err != nil {
 		// 配置文件不存在或解析失败，使用默认配置（不报错）
 		// fmt.Fprintf(os.Stderr, "Warning: Failed to load config file: %v\n", err)
 	}
@@ -132,8 +132,8 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// loadConfigFromFile 从 YAML 文件加载配置（仅解析本项目使用的简单层级键值）
-func loadConfigFromFile(cfg *Config) error {
+// applyFileConfig 从 YAML 文件加载配置（仅解析本项目使用的简单层级键值）
+func applyFileConfig(cfg *Config) error {
 	configFile, err := findConfigFile()
 	if err != nil {
 		return err
