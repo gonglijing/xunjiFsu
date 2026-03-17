@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestRunMQTTLikeLoop_StopFlushesAndExits(t *testing.T) {
+func TestRunMQTTFlushReconnectLoop_StopFlushesAndExits(t *testing.T) {
 	stopChan := make(chan struct{})
 	dataChan := make(chan struct{}, 1)
 	reconnectNow := make(chan struct{}, 1)
@@ -16,7 +16,7 @@ func TestRunMQTTLikeLoop_StopFlushesAndExits(t *testing.T) {
 	var flushAlarmCalls atomic.Int32
 
 	go func() {
-		runMQTTLikeLoop(mqttLikeLoopConfig{
+		runMQTTFlushReconnectLoop(mqttFlushReconnectLoopConfig{
 			logLabel:     "test",
 			adapterName:  "loop",
 			interval:     time.Hour,
@@ -41,7 +41,7 @@ func TestRunMQTTLikeLoop_StopFlushesAndExits(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(200 * time.Millisecond):
-		t.Fatal("runMQTTLikeLoop did not exit after stop")
+		t.Fatal("runMQTTFlushReconnectLoop did not exit after stop")
 	}
 
 	if got := flushDataCalls.Load(); got != 1 {

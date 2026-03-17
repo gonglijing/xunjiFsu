@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestRunBufferedFlushLoop_StopDrainsAlarmQueue(t *testing.T) {
+func TestRunPeriodicFlushLoop_StopDrainsAlarmQueue(t *testing.T) {
 	stopChan := make(chan struct{})
 	flushNow := make(chan struct{}, 1)
 	done := make(chan struct{})
@@ -14,7 +14,7 @@ func TestRunBufferedFlushLoop_StopDrainsAlarmQueue(t *testing.T) {
 	var alarmFlushCalls atomic.Int32
 
 	go func() {
-		runBufferedFlushLoop(bufferedFlushLoopConfig{
+		runPeriodicFlushLoop(periodicFlushLoopConfig{
 			logLabel:       "test",
 			reportLabel:    "report",
 			reportInterval: time.Hour,
@@ -38,7 +38,7 @@ func TestRunBufferedFlushLoop_StopDrainsAlarmQueue(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("runBufferedFlushLoop did not exit after draining alarms")
+		t.Fatal("runPeriodicFlushLoop did not exit after draining alarms")
 	}
 
 	if got := alarmFlushCalls.Load(); got != 2 {

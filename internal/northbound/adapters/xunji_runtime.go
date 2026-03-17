@@ -142,7 +142,7 @@ func (a *XunjiAdapter) runLoop() {
 	reconnectNow := a.reconnectNow
 	a.mu.RUnlock()
 
-	runMQTTLikeLoop(mqttLikeLoopConfig{
+	runMQTTFlushReconnectLoop(mqttFlushReconnectLoopConfig{
 		logLabel:     "Xunji",
 		adapterName:  a.name,
 		interval:     interval,

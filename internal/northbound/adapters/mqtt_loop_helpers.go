@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type mqttLikeLoopConfig struct {
+type mqttFlushReconnectLoopConfig struct {
 	logLabel        string
 	adapterName     string
 	interval        time.Duration
@@ -19,7 +19,7 @@ type mqttLikeLoopConfig struct {
 	reconnectDelay  func() time.Duration
 }
 
-func runMQTTLikeLoop(cfg mqttLikeLoopConfig) {
+func runMQTTFlushReconnectLoop(cfg mqttFlushReconnectLoopConfig) {
 	interval := cfg.interval
 	if interval < minUploadInterval {
 		interval = minUploadInterval

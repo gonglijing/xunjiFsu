@@ -110,7 +110,7 @@ func (a *MQTTAdapter) runLoop() {
 	reconnectNow := a.reconnectNow
 	a.mu.RUnlock()
 
-	runMQTTLikeLoop(mqttLikeLoopConfig{
+	runMQTTFlushReconnectLoop(mqttFlushReconnectLoopConfig{
 		logLabel:     "MQTT",
 		adapterName:  a.name,
 		interval:     interval,

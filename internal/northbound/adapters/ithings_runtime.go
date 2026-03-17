@@ -261,7 +261,7 @@ func (a *IThingsAdapter) runLoop() {
 	stopChan := a.stopChan
 	a.mu.RUnlock()
 
-	runBufferedFlushLoop(bufferedFlushLoopConfig{
+	runPeriodicFlushLoop(periodicFlushLoopConfig{
 		logLabel:       "iThings",
 		reportLabel:    "realtime",
 		reportInterval: reportInterval,

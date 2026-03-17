@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type bufferedFlushLoopConfig struct {
+type periodicFlushLoopConfig struct {
 	logLabel        string
 	reportLabel     string
 	reportInterval  time.Duration
@@ -17,7 +17,7 @@ type bufferedFlushLoopConfig struct {
 	alarmQueueEmpty func() bool
 }
 
-func runBufferedFlushLoop(cfg bufferedFlushLoopConfig) {
+func runPeriodicFlushLoop(cfg periodicFlushLoopConfig) {
 	reportInterval := cfg.reportInterval
 	alarmInterval := cfg.alarmInterval
 

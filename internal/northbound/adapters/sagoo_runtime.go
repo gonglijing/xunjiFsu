@@ -173,7 +173,7 @@ func (a *SagooAdapter) runLoop() {
 	stopChan := a.stopChan
 	a.mu.RUnlock()
 
-	runBufferedFlushLoop(bufferedFlushLoopConfig{
+	runPeriodicFlushLoop(periodicFlushLoopConfig{
 		logLabel:       "Sagoo",
 		reportLabel:    "report",
 		reportInterval: reportInterval,
