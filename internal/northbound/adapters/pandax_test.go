@@ -10,7 +10,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func TestNormalizePandaXServerURL(t *testing.T) {
+func TestNormalizeServerURLWithPort_ForPandaXConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		server   string
@@ -53,9 +53,9 @@ func TestNormalizePandaXServerURL(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			got := normalizePandaXServerURL(testCase.server, testCase.protocol, testCase.port)
+			got := normalizeServerURLWithPort(testCase.server, testCase.protocol, testCase.port)
 			if got != testCase.want {
-				t.Fatalf("normalizePandaXServerURL() = %q, want %q", got, testCase.want)
+				t.Fatalf("normalizeServerURLWithPort() = %q, want %q", got, testCase.want)
 			}
 		})
 	}

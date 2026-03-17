@@ -40,7 +40,7 @@ func parsePandaXConfig(configStr string) (*PandaXConfig, error) {
 	}
 
 	cfg := &PandaXConfig{
-		ServerURL:              normalizePandaXServerURL(raw.pickString("serverUrl", "broker", "server_url"), raw.pickString("protocol"), raw.pickInt(0, "port")),
+		ServerURL:              normalizeServerURLWithPort(raw.pickString("serverUrl", "broker", "server_url"), raw.pickString("protocol"), raw.pickInt(0, "port")),
 		Username:               raw.pickString("username", "token", "deviceToken"),
 		Password:               raw.pickString("password"),
 		ClientID:               raw.pickString("clientId", "client_id"),
@@ -105,10 +105,6 @@ func normalizePandaXConfig(cfg *PandaXConfig) error {
 	applyDefaultString(&cfg.GatewayRegisterTopic, defaultPandaXGatewayRegisterTopic)
 
 	return nil
-}
-
-func normalizePandaXServerURL(serverURL, protocol string, port int) string {
-	return normalizeServerURLWithPort(serverURL, protocol, port)
 }
 
 func buildPandaXInitSettings(adapterName string, cfg *PandaXConfig) pandaXInitSettings {

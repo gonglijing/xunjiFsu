@@ -8,19 +8,30 @@ import (
 )
 
 func normalizeServerURLWithPort(serverURL, protocol string, port int) string {
-	serverURL = strings.TrimSpace(serverURL)
+	serverURL = ensureServerURLProtocol(serverURL, protocol)
 	if serverURL == "" {
 		return ""
 	}
+	return appendServerURLPort(serverURL, port)
+}
 
-	if !strings.Contains(serverURL, "://") {
-		transport := strings.TrimSpace(protocol)
-		if transport == "" {
-			transport = "tcp"
-		}
-		serverURL = transport + "://" + serverURL
+func ensureServerURLProtocol(serverURL, protocol string) string {
+	trimmedServerURL := strings.TrimSpace(serverURL)
+	if trimmedServerURL == "" {
+		return ""
+	}
+	if strings.Contains(trimmedServerURL, "://") {
+		return trimmedServerURL
 	}
 
+	transport := strings.TrimSpace(protocol)
+	if transport == "" {
+		transport = "tcp"
+	}
+	return transport + "://" + trimmedServerURL
+}
+
+func appendServerURLPort(serverURL string, port int) string {
 	if port <= 0 {
 		return serverURL
 	}

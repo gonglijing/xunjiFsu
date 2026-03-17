@@ -27,6 +27,18 @@ func TestNormalizeServerURLWithPort(t *testing.T) {
 	}
 }
 
+func TestEnsureServerURLProtocol_DefaultsToTCP(t *testing.T) {
+	if got := ensureServerURLProtocol(" broker.example.com ", " "); got != "tcp://broker.example.com" {
+		t.Fatalf("ensureServerURLProtocol() = %q, want %q", got, "tcp://broker.example.com")
+	}
+}
+
+func TestAppendServerURLPort_IgnoresInvalidURL(t *testing.T) {
+	if got := appendServerURLPort("://bad-url", 1883); got != "://bad-url" {
+		t.Fatalf("appendServerURLPort() = %q, want %q", got, "://bad-url")
+	}
+}
+
 func TestBuildBrokerURL_NoDoublePort(t *testing.T) {
 	got := buildBrokerURL("tcp://example.com:1883", 2883)
 	if got != "tcp://example.com:1883" {
