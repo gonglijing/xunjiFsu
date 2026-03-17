@@ -31,19 +31,19 @@ func parseXunjiConfig(configStr string) (*XunjiConfig, error) {
 	}
 
 	cfg := &XunjiConfig{
-		ServerURL:          raw.normalizedServerURL("serverUrl", "broker", "server_url"),
-		Username:           raw.string("username"),
-		Password:           raw.string("password"),
-		ClientID:           raw.string("clientId", "client_id"),
-		QOS:                raw.int(0, "qos"),
-		Retain:             raw.bool(false, "retain"),
-		KeepAlive:          raw.int(60, "keepAlive", "keep_alive"),
-		Timeout:            raw.int(10, "connectTimeout", "connect_timeout", "timeout"),
-		UploadIntervalMs:   raw.int(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
-		Topic:              raw.string("topic", "gatewayTelemetryTopic", "gatewayTopic"),
-		AlarmTopic:         raw.string("alarmTopic", "alarm_topic"),
-		GatewayName:        raw.string("gatewayName", "gateway_name"),
-		SubDeviceTokenMode: raw.string("subDeviceTokenMode"),
+		ServerURL:          raw.pickNormalizedServerURL("serverUrl", "broker", "server_url"),
+		Username:           raw.pickString("username"),
+		Password:           raw.pickString("password"),
+		ClientID:           raw.pickString("clientId", "client_id"),
+		QOS:                raw.pickInt(0, "qos"),
+		Retain:             raw.pickBool(false, "retain"),
+		KeepAlive:          raw.pickInt(60, "keepAlive", "keep_alive"),
+		Timeout:            raw.pickInt(10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:   raw.pickInt(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms", "reportIntervalMs"),
+		Topic:              raw.pickString("topic", "gatewayTelemetryTopic", "gatewayTopic"),
+		AlarmTopic:         raw.pickString("alarmTopic", "alarm_topic"),
+		GatewayName:        raw.pickString("gatewayName", "gateway_name"),
+		SubDeviceTokenMode: raw.pickString("subDeviceTokenMode"),
 	}
 
 	if err := normalizeXunjiConfig(cfg); err != nil {

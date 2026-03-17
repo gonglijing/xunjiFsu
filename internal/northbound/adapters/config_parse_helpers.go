@@ -18,22 +18,22 @@ func parseAdapterRawConfig(configStr string) (adapterRawConfig, error) {
 	return adapterRawConfig{values: values}, nil
 }
 
-func (c adapterRawConfig) string(keys ...string) string {
+func (c adapterRawConfig) pickString(keys ...string) string {
 	return strings.TrimSpace(pickConfigString(c.values, keys...))
 }
 
-func (c adapterRawConfig) int(defaultValue int, keys ...string) int {
+func (c adapterRawConfig) pickInt(defaultValue int, keys ...string) int {
 	return pickConfigInt(c.values, defaultValue, keys...)
 }
 
-func (c adapterRawConfig) bool(defaultValue bool, keys ...string) bool {
+func (c adapterRawConfig) pickBool(defaultValue bool, keys ...string) bool {
 	return pickConfigBool(c.values, defaultValue, keys...)
 }
 
-func (c adapterRawConfig) normalizedServerURL(keys ...string) string {
+func (c adapterRawConfig) pickNormalizedServerURL(keys ...string) string {
 	return normalizeServerURLWithPort(
 		pickConfigString(c.values, keys...),
-		c.string("protocol"),
-		c.int(0, "port"),
+		c.pickString("protocol"),
+		c.pickInt(0, "port"),
 	)
 }

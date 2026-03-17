@@ -31,26 +31,26 @@ func parseSagooConfig(configStr string) (*SagooConfig, error) {
 	}
 
 	cfg := &SagooConfig{
-		ProductKey:           raw.string("productKey", "product_key", "productID", "product_id"),
-		DeviceKey:            raw.string("deviceKey", "device_key", "deviceName", "device_name"),
-		Username:             raw.string("username"),
-		Password:             raw.string("password"),
-		Topic:                raw.string("topic"),
-		AlarmTopic:           raw.string("alarmTopic", "alarm_topic"),
-		ClientID:             raw.string("clientId", "client_id"),
-		QOS:                  raw.int(0, "qos"),
-		Retain:               raw.bool(false, "retain"),
-		KeepAlive:            raw.int(60, "keepAlive", "keep_alive"),
-		Timeout:              raw.int(10, "connectTimeout", "connect_timeout", "timeout"),
-		UploadIntervalMs:     raw.int(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms"),
-		ReportIntervalMs:     raw.int(0, "reportIntervalMs", "report_interval_ms"),
-		AlarmFlushIntervalMs: raw.int(int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs", "alarm_flush_interval_ms"),
-		AlarmBatchSize:       raw.int(defaultAlarmBatch, "alarmBatchSize", "alarm_batch_size"),
-		AlarmQueueSize:       raw.int(defaultAlarmQueue, "alarmQueueSize", "alarm_queue_size"),
-		RealtimeQueueSize:    raw.int(defaultRealtimeQueue, "realtimeQueueSize", "realtime_queue_size"),
+		ProductKey:           raw.pickString("productKey", "product_key", "productID", "product_id"),
+		DeviceKey:            raw.pickString("deviceKey", "device_key", "deviceName", "device_name"),
+		Username:             raw.pickString("username"),
+		Password:             raw.pickString("password"),
+		Topic:                raw.pickString("topic"),
+		AlarmTopic:           raw.pickString("alarmTopic", "alarm_topic"),
+		ClientID:             raw.pickString("clientId", "client_id"),
+		QOS:                  raw.pickInt(0, "qos"),
+		Retain:               raw.pickBool(false, "retain"),
+		KeepAlive:            raw.pickInt(60, "keepAlive", "keep_alive"),
+		Timeout:              raw.pickInt(10, "connectTimeout", "connect_timeout", "timeout"),
+		UploadIntervalMs:     raw.pickInt(int(defaultReportInterval.Milliseconds()), "uploadIntervalMs", "upload_interval_ms"),
+		ReportIntervalMs:     raw.pickInt(0, "reportIntervalMs", "report_interval_ms"),
+		AlarmFlushIntervalMs: raw.pickInt(int(defaultAlarmInterval.Milliseconds()), "alarmFlushIntervalMs", "alarm_flush_interval_ms"),
+		AlarmBatchSize:       raw.pickInt(defaultAlarmBatch, "alarmBatchSize", "alarm_batch_size"),
+		AlarmQueueSize:       raw.pickInt(defaultAlarmQueue, "alarmQueueSize", "alarm_queue_size"),
+		RealtimeQueueSize:    raw.pickInt(defaultRealtimeQueue, "realtimeQueueSize", "realtime_queue_size"),
 	}
 
-	cfg.ServerURL = raw.normalizedServerURL("serverUrl", "server_url", "broker")
+	cfg.ServerURL = raw.pickNormalizedServerURL("serverUrl", "server_url", "broker")
 
 	if err := normalizeSagooConfig(cfg); err != nil {
 		return nil, err
