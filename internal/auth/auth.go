@@ -88,7 +88,7 @@ func (m *JWTManager) Logout(w http.ResponseWriter, r *http.Request) error {
 
 // GetSession 获取会话信息（从 Authorization Bearer 或 Cookie）
 func (m *JWTManager) GetSession(r *http.Request) (*SessionInfo, error) {
-	tokenStr := extractToken(r, m.cookieName)
+	tokenStr := resolveRequestToken(r, m.cookieName)
 	if tokenStr == "" {
 		return nil, nil
 	}
@@ -222,7 +222,7 @@ func signHS256Bytes(input string, secret []byte) []byte {
 	return mac.Sum(nil)
 }
 
-func extractToken(r *http.Request, cookieName string) string {
+func resolveRequestToken(r *http.Request, cookieName string) string {
 	// Authorization: Bearer <token>
 	authz := r.Header.Get("Authorization")
 	if strings.HasPrefix(strings.ToLower(authz), "bearer ") {

@@ -84,24 +84,24 @@ func TestJWTManager_ParseToken_InvalidSigningMethod(t *testing.T) {
 	}
 }
 
-func TestExtractToken_FromAuthorizationHeader(t *testing.T) {
+func TestResolveRequestToken_FromAuthorizationHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("Authorization", "Bearer test-token-123")
 
-	got := extractToken(req, defaultCookieName)
+	got := resolveRequestToken(req, defaultCookieName)
 	if got != "test-token-123" {
 		t.Fatalf("expected token from header, got %q", got)
 	}
 }
 
-func TestExtractToken_FromCookie(t *testing.T) {
+func TestResolveRequestToken_FromCookie(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  defaultCookieName,
 		Value: "cookie-token",
 	})
 
-	got := extractToken(req, defaultCookieName)
+	got := resolveRequestToken(req, defaultCookieName)
 	if got != "cookie-token" {
 		t.Fatalf("expected token from cookie, got %q", got)
 	}
