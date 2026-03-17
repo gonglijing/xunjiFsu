@@ -1,8 +1,10 @@
 package database
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
@@ -190,5 +192,61 @@ func TestAlarmRepeatIntervalSettings(t *testing.T) {
 
 	if err := UpdateAlarmRepeatIntervalSeconds(0); err == nil {
 		t.Fatalf("expected error when setting non-positive repeat interval")
+	}
+}
+
+type stubThresholdScanner struct {
+	values []any
+	err    error
+}
+
+func (s stubThresholdScanner) Scan(dest ...any) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	for i := range dest {
+		switch out := dest[i].(type) {
+		case *int64:
+			*out = s.values[i].(int64)
+		case *string:
+			*out = s.values[i].(string)
+		case *float64:
+			*out = s.values[i].(float64)
+		case *int:
+			*out = s.values[i].(int)
+		case *time.Time:
+			*out = s.values[i].(time.Time)
+		}
+	}
+
+	return nil
+}
+
+func TestScanThreshold(t *testing.T) {
+	now := time.Now()
+	threshold := &models.Threshold{}
+	scanner := stubThresholdScanner{
+		values: []any{
+			int64(1), int64(2), "temperature", ">", 40.5, "warning", 1, "too hot", now, now,
+		},
+	}
+
+	err := scanThreshold(scanner, threshold)
+	if err != nil {
+		t.Fatalf("scanThreshold returned error: %v", err)
+	}
+	if threshold.ID != 1 || threshold.DeviceID != 2 || threshold.FieldName != "temperature" {
+		t.Fatalf("unexpected threshold fields: %+v", threshold)
+	}
+	if threshold.Value != 40.5 || threshold.Shielded != 1 || threshold.Message != "too hot" {
+		t.Fatalf("unexpected threshold values: %+v", threshold)
+	}
+}
+
+func TestScanThreshold_Error(t *testing.T) {
+	err := scanThreshold(stubThresholdScanner{err: errors.New("scan failed")}, &models.Threshold{})
+	if err == nil {
+		t.Fatal("expected scanThreshold error")
 	}
 }

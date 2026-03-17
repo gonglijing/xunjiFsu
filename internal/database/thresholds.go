@@ -11,6 +11,7 @@ import (
 // ==================== 阈值操作 (param.db - 直接写) ====================
 
 const DefaultAlarmRepeatIntervalSeconds = 60
+const selectThresholdFields = `SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds`
 
 var thresholdColumnsEnsureState struct {
 	mu        sync.Mutex
@@ -166,16 +167,7 @@ func GetThresholdByID(id int64) (*models.Threshold, error) {
 		return nil, err
 	}
 
-	threshold := &models.Threshold{}
-	err := ParamDB.QueryRow(
-		"SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE id = ?",
-		id,
-	).Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-		&threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return threshold, nil
+	return loadThreshold(selectThresholdFields+" WHERE id = ?", id)
 }
 
 // GetThresholdsByDeviceID 根据设备ID获取阈值
@@ -184,18 +176,7 @@ func GetThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
 		return nil, err
 	}
 
-	return queryList[*models.Threshold](ParamDB,
-		"SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds WHERE device_id = ?",
-		[]any{deviceID},
-		func(rows *sql.Rows) (*models.Threshold, error) {
-			threshold := &models.Threshold{}
-			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-				&threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
-				return nil, err
-			}
-			return threshold, nil
-		},
-	)
+	return listThresholds(selectThresholdFields+" WHERE device_id = ?", []any{deviceID})
 }
 
 // GetAllThresholds 获取所有阈值
@@ -204,18 +185,7 @@ func GetAllThresholds() ([]*models.Threshold, error) {
 		return nil, err
 	}
 
-	return queryList[*models.Threshold](ParamDB,
-		"SELECT id, device_id, field_name, operator, value, severity, COALESCE(shielded, 0), message, created_at, updated_at FROM thresholds ORDER BY id",
-		nil,
-		func(rows *sql.Rows) (*models.Threshold, error) {
-			threshold := &models.Threshold{}
-			if err := rows.Scan(&threshold.ID, &threshold.DeviceID, &threshold.FieldName, &threshold.Operator, &threshold.Value, &threshold.Severity,
-				&threshold.Shielded, &threshold.Message, &threshold.CreatedAt, &threshold.UpdatedAt); err != nil {
-				return nil, err
-			}
-			return threshold, nil
-		},
-	)
+	return listThresholds(selectThresholdFields+" ORDER BY id", nil)
 }
 
 // UpdateThreshold 更新阈值
@@ -239,4 +209,42 @@ func DeleteThreshold(id int64) error {
 
 	_, err := ParamDB.Exec("DELETE FROM thresholds WHERE id = ?", id)
 	return err
+}
+
+type thresholdScanner interface {
+	Scan(dest ...any) error
+}
+
+func loadThreshold(query string, args ...any) (*models.Threshold, error) {
+	threshold := &models.Threshold{}
+	err := scanThreshold(ParamDB.QueryRow(query, args...), threshold)
+	if err != nil {
+		return nil, err
+	}
+	return threshold, nil
+}
+
+func listThresholds(query string, args []any) ([]*models.Threshold, error) {
+	return queryList[*models.Threshold](ParamDB, query, args, func(rows *sql.Rows) (*models.Threshold, error) {
+		threshold := &models.Threshold{}
+		if err := scanThreshold(rows, threshold); err != nil {
+			return nil, err
+		}
+		return threshold, nil
+	})
+}
+
+func scanThreshold(scanner thresholdScanner, threshold *models.Threshold) error {
+	return scanner.Scan(
+		&threshold.ID,
+		&threshold.DeviceID,
+		&threshold.FieldName,
+		&threshold.Operator,
+		&threshold.Value,
+		&threshold.Severity,
+		&threshold.Shielded,
+		&threshold.Message,
+		&threshold.CreatedAt,
+		&threshold.UpdatedAt,
+	)
 }
