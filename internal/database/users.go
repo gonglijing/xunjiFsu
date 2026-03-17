@@ -2,8 +2,11 @@ package database
 
 import (
 	"database/sql"
+
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
+
+const selectUserFields = `SELECT id, username, password, role, created_at, updated_at FROM users`
 
 // ==================== 用户操作 (param.db - 直接写) ====================
 
@@ -21,42 +24,54 @@ func CreateUser(user *models.User) (int64, error) {
 
 // GetUserByUsername 根据用户名获取用户
 func GetUserByUsername(username string) (*models.User, error) {
-	user := &models.User{}
-	err := ParamDB.QueryRow(
-		"SELECT id, username, password, role, created_at, updated_at FROM users WHERE username = ?",
-		username,
-	).Scan(&user.ID, &user.Username, &user.Password, &user.Role, &user.CreatedAt, &user.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return user, nil
+	return loadUser(selectUserFields+" WHERE username = ?", username)
 }
 
 // GetUserByID 根据ID获取用户
 func GetUserByID(id int64) (*models.User, error) {
+	return loadUser(selectUserFields+" WHERE id = ?", id)
+}
+
+// GetAllUsers 获取所有用户
+func GetAllUsers() ([]*models.User, error) {
+	return listUsers(selectUserFields+" ORDER BY id", nil)
+}
+
+type userScanner interface {
+	Scan(dest ...any) error
+}
+
+func loadUser(query string, args ...any) (*models.User, error) {
 	user := &models.User{}
-	err := ParamDB.QueryRow(
-		"SELECT id, username, password, role, created_at, updated_at FROM users WHERE id = ?",
-		id,
-	).Scan(&user.ID, &user.Username, &user.Password, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	err := scanUser(ParamDB.QueryRow(query, args...), user)
 	if err != nil {
 		return nil, err
 	}
 	return user, nil
 }
 
-// GetAllUsers 获取所有用户
-func GetAllUsers() ([]*models.User, error) {
+func listUsers(query string, args []any) ([]*models.User, error) {
 	return queryList[*models.User](ParamDB,
-		"SELECT id, username, password, role, created_at, updated_at FROM users ORDER BY id",
-		nil,
+		query,
+		args,
 		func(rows *sql.Rows) (*models.User, error) {
 			user := &models.User{}
-			if err := rows.Scan(&user.ID, &user.Username, &user.Password, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
+			if err := scanUser(rows, user); err != nil {
 				return nil, err
 			}
 			return user, nil
 		},
+	)
+}
+
+func scanUser(scanner userScanner, user *models.User) error {
+	return scanner.Scan(
+		&user.ID,
+		&user.Username,
+		&user.Password,
+		&user.Role,
+		&user.CreatedAt,
+		&user.UpdatedAt,
 	)
 }
 

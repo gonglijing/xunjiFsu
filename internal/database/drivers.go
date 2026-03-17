@@ -2,8 +2,11 @@ package database
 
 import (
 	"database/sql"
+
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
+
+const selectDriverFields = `SELECT id, name, file_path, description, version, config_schema, enabled, created_at, updated_at FROM drivers`
 
 // ==================== 驱动操作 (param.db - 直接写) ====================
 
@@ -21,31 +24,57 @@ func CreateDriver(driver *models.Driver) (int64, error) {
 
 // GetDriverByID 根据ID获取驱动
 func GetDriverByID(id int64) (*models.Driver, error) {
+	return loadDriver(selectDriverFields+" WHERE id = ?", id)
+}
+
+// GetAllDrivers 获取所有驱动
+func GetAllDrivers() ([]*models.Driver, error) {
+	return listDrivers(selectDriverFields+" ORDER BY id", nil)
+}
+
+// GetDriverByName 根据名称获取驱动
+func GetDriverByName(name string) (*models.Driver, error) {
+	return loadDriver(selectDriverFields+" WHERE name = ?", name)
+}
+
+type driverScanner interface {
+	Scan(dest ...any) error
+}
+
+func loadDriver(query string, args ...any) (*models.Driver, error) {
 	driver := &models.Driver{}
-	err := ParamDB.QueryRow(
-		"SELECT id, name, file_path, description, version, config_schema, enabled, created_at, updated_at FROM drivers WHERE id = ?",
-		id,
-	).Scan(&driver.ID, &driver.Name, &driver.FilePath, &driver.Description, &driver.Version, &driver.ConfigSchema,
-		&driver.Enabled, &driver.CreatedAt, &driver.UpdatedAt)
+	err := scanDriver(ParamDB.QueryRow(query, args...), driver)
 	if err != nil {
 		return nil, err
 	}
 	return driver, nil
 }
 
-// GetAllDrivers 获取所有驱动
-func GetAllDrivers() ([]*models.Driver, error) {
+func listDrivers(query string, args []any) ([]*models.Driver, error) {
 	return queryList[*models.Driver](ParamDB,
-		"SELECT id, name, file_path, description, version, config_schema, enabled, created_at, updated_at FROM drivers ORDER BY id",
-		nil,
+		query,
+		args,
 		func(rows *sql.Rows) (*models.Driver, error) {
 			driver := &models.Driver{}
-			if err := rows.Scan(&driver.ID, &driver.Name, &driver.FilePath, &driver.Description, &driver.Version, &driver.ConfigSchema,
-				&driver.Enabled, &driver.CreatedAt, &driver.UpdatedAt); err != nil {
+			if err := scanDriver(rows, driver); err != nil {
 				return nil, err
 			}
 			return driver, nil
 		},
+	)
+}
+
+func scanDriver(scanner driverScanner, driver *models.Driver) error {
+	return scanner.Scan(
+		&driver.ID,
+		&driver.Name,
+		&driver.FilePath,
+		&driver.Description,
+		&driver.Version,
+		&driver.ConfigSchema,
+		&driver.Enabled,
+		&driver.CreatedAt,
+		&driver.UpdatedAt,
 	)
 }
 
@@ -62,20 +91,6 @@ func UpdateDriver(driver *models.Driver) error {
 func DeleteDriver(id int64) error {
 	_, err := ParamDB.Exec("DELETE FROM drivers WHERE id = ?", id)
 	return err
-}
-
-// GetDriverByName 根据名称获取驱动
-func GetDriverByName(name string) (*models.Driver, error) {
-	driver := &models.Driver{}
-	err := ParamDB.QueryRow(
-		"SELECT id, name, file_path, description, version, config_schema, enabled, created_at, updated_at FROM drivers WHERE name = ?",
-		name,
-	).Scan(&driver.ID, &driver.Name, &driver.FilePath, &driver.Description, &driver.Version, &driver.ConfigSchema,
-		&driver.Enabled, &driver.CreatedAt, &driver.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return driver, nil
 }
 
 // UpsertDriverFile 保存或忽略重复的驱动记录
