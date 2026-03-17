@@ -21,10 +21,10 @@ type jsonSingleRawField struct {
 }
 
 func resolveMapByEitherKey(values map[string]interface{}, primaryKey, secondaryKey string) (map[string]interface{}, bool) {
-	if out, ok := mapFromAny(values[primaryKey]); ok {
+	if out, ok := resolveMapValue(values[primaryKey]); ok {
 		return out, true
 	}
-	return mapFromAny(values[secondaryKey])
+	return resolveMapValue(values[secondaryKey])
 }
 
 func resolveInterfaceSliceByEitherKey(values map[string]interface{}, primaryKey, secondaryKey string) ([]interface{}, bool) {
@@ -35,7 +35,7 @@ func resolveInterfaceSliceByEitherKey(values map[string]interface{}, primaryKey,
 	return list, ok
 }
 
-func mapFromAny(value interface{}) (map[string]interface{}, bool) {
+func resolveMapValue(value interface{}) (map[string]interface{}, bool) {
 	out, ok := value.(map[string]interface{})
 	if !ok || out == nil {
 		return nil, false

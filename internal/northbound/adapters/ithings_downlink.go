@@ -92,7 +92,7 @@ func buildIThingsCommands(requestID, topicType, method, actionID string, params 
 	switch topicType {
 	case "property":
 		if strings.EqualFold(method, "control") {
-			if obj, ok := mapFromAny(params); ok {
+			if obj, ok := resolveMapValue(params); ok {
 				appendPropertyCommands(obj)
 			}
 		}

@@ -130,22 +130,22 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 		pk := pickFirstNonEmpty(pickConfigString(obj, "productKey", "product_key"), defaultPK)
 		dk := pickFirstNonEmpty(pickConfigString(obj, "deviceKey", "device_key"), defaultDK)
 
-		if props, ok := mapFromAny(obj["properties"]); ok {
+		if props, ok := resolveMapValue(obj["properties"]); ok {
 			appendProperties(pk, dk, props)
 		}
 
 		for _, key := range []string{"sub_device", "subDevice"} {
-			sub, ok := mapFromAny(obj[key])
+			sub, ok := resolveMapValue(obj[key])
 			if !ok {
 				continue
 			}
 			subPK := pk
 			subDK := dk
-			if identity, ok := mapFromAny(sub["identity"]); ok {
+			if identity, ok := resolveMapValue(sub["identity"]); ok {
 				subPK = pickFirstNonEmpty(pickConfigString(identity, "productKey", "product_key"), subPK)
 				subDK = pickFirstNonEmpty(pickConfigString(identity, "deviceKey", "device_key"), subDK)
 			}
-			if props, ok := mapFromAny(sub["properties"]); ok {
+			if props, ok := resolveMapValue(sub["properties"]); ok {
 				appendProperties(subPK, subDK, props)
 			}
 		}
@@ -156,17 +156,17 @@ func buildPandaXCommands(requestID, method string, params interface{}, defaultPK
 				continue
 			}
 			for _, item := range list {
-				row, ok := mapFromAny(item)
+				row, ok := resolveMapValue(item)
 				if !ok {
 					continue
 				}
 				subPK := pk
 				subDK := dk
-				if identity, ok := mapFromAny(row["identity"]); ok {
+				if identity, ok := resolveMapValue(row["identity"]); ok {
 					subPK = pickFirstNonEmpty(pickConfigString(identity, "productKey", "product_key"), subPK)
 					subDK = pickFirstNonEmpty(pickConfigString(identity, "deviceKey", "device_key"), subDK)
 				}
-				if props, ok := mapFromAny(row["properties"]); ok {
+				if props, ok := resolveMapValue(row["properties"]); ok {
 					appendProperties(subPK, subDK, props)
 				}
 			}

@@ -46,29 +46,29 @@ func extractIdentity(topic string) (string, string, bool) {
 
 func extractCommandProperties(params map[string]interface{}) (map[string]interface{}, string, string) {
 	identityPK, identityDK := "", ""
-	if identity, ok := mapFromAny(params["identity"]); ok {
+	if identity, ok := resolveMapValue(params["identity"]); ok {
 		identityPK, identityDK = parseIdentityMap(identity)
 	}
 
-	if props, ok := mapFromAny(params["properties"]); ok {
+	if props, ok := resolveMapValue(params["properties"]); ok {
 		return props, identityPK, identityDK
 	}
 
 	if sub, ok := resolveMapByEitherKey(params, "sub_device", "subDevice"); ok {
-		if identity, ok := mapFromAny(sub["identity"]); ok {
+		if identity, ok := resolveMapValue(sub["identity"]); ok {
 			identityPK, identityDK = parseIdentityMap(identity)
 		}
-		if props, ok := mapFromAny(sub["properties"]); ok {
+		if props, ok := resolveMapValue(sub["properties"]); ok {
 			return props, identityPK, identityDK
 		}
 	}
 
 	if list, ok := resolveInterfaceSliceByEitherKey(params, "sub_devices", "subDevices"); ok && len(list) > 0 {
-		if item, ok := mapFromAny(list[0]); ok {
-			if identity, ok := mapFromAny(item["identity"]); ok {
+		if item, ok := resolveMapValue(list[0]); ok {
+			if identity, ok := resolveMapValue(item["identity"]); ok {
 				identityPK, identityDK = parseIdentityMap(identity)
 			}
-			if props, ok := mapFromAny(item["properties"]); ok {
+			if props, ok := resolveMapValue(item["properties"]); ok {
 				return props, identityPK, identityDK
 			}
 		}

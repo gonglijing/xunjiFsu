@@ -119,3 +119,12 @@ func TestPickFirstNonEmpty_ReturnsFirstTrimmedValue(t *testing.T) {
 		t.Fatalf("pickFirstNonEmpty()=%q, want=value", got)
 	}
 }
+
+func TestResolveMapValue(t *testing.T) {
+	if got, ok := resolveMapValue(map[string]interface{}{"name": "demo"}); !ok || got["name"] != "demo" {
+		t.Fatalf("resolveMapValue()=%v, %v, want map with name=demo", got, ok)
+	}
+	if _, ok := resolveMapValue([]interface{}{"demo"}); ok {
+		t.Fatal("resolveMapValue() ok=true for slice input, want false")
+	}
+}
