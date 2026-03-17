@@ -93,7 +93,7 @@ func initDataIndexes() error {
 }
 
 func executeIndexStatement(stmt string) error {
-	tableName := extractIndexTableName(stmt)
+	tableName := parseIndexTableName(stmt)
 	if tableName == "" {
 		if err := execIndexOnDB(DataDB, stmt); err != nil {
 			return err
@@ -176,7 +176,7 @@ func isNoSuchTableError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "no such table")
 }
 
-func extractIndexTableName(stmt string) string {
+func parseIndexTableName(stmt string) string {
 	upper := strings.ToUpper(stmt)
 	onPos := strings.Index(upper, " ON ")
 	if onPos < 0 {
@@ -206,6 +206,7 @@ func extractIndexTableName(stmt string) string {
 	if dot := strings.LastIndex(tableName, "."); dot >= 0 && dot < len(tableName)-1 {
 		tableName = tableName[dot+1:]
 	}
+	tableName = strings.Trim(tableName, "`\"[]")
 
 	return tableName
 }
