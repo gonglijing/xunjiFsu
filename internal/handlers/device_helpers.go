@@ -240,16 +240,16 @@ func resolveSingleWriteCandidate(params map[string]interface{}) (field string, v
 }
 
 func extractWriteProperties(params map[string]interface{}) (map[string]interface{}, bool) {
-	if properties, ok := mapFromAny(params["properties"]); ok {
+	if properties, ok := resolveMapValue(params["properties"]); ok {
 		return properties, true
 	}
 
 	for _, key := range []string{"sub_device", "subDevice"} {
-		sub, ok := mapFromAny(params[key])
+		sub, ok := resolveMapValue(params[key])
 		if !ok {
 			continue
 		}
-		if properties, ok := mapFromAny(sub["properties"]); ok {
+		if properties, ok := resolveMapValue(sub["properties"]); ok {
 			return properties, true
 		}
 	}
@@ -259,11 +259,11 @@ func extractWriteProperties(params map[string]interface{}) (map[string]interface
 		if !ok || len(list) != 1 {
 			continue
 		}
-		item, ok := mapFromAny(list[0])
+		item, ok := resolveMapValue(list[0])
 		if !ok {
 			continue
 		}
-		if properties, ok := mapFromAny(item["properties"]); ok {
+		if properties, ok := resolveMapValue(item["properties"]); ok {
 			return properties, true
 		}
 	}
@@ -271,7 +271,7 @@ func extractWriteProperties(params map[string]interface{}) (map[string]interface
 	return nil, false
 }
 
-func mapFromAny(value interface{}) (map[string]interface{}, bool) {
+func resolveMapValue(value interface{}) (map[string]interface{}, bool) {
 	if value == nil {
 		return nil, false
 	}

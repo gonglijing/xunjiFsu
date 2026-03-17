@@ -212,6 +212,15 @@ func TestBuildResourceMap(t *testing.T) {
 	}
 }
 
+func TestResolveMapValue(t *testing.T) {
+	if got, ok := resolveMapValue(map[string]interface{}{"k": "v"}); !ok || got["k"] != "v" {
+		t.Fatalf("resolveMapValue() = %#v, %v; want map with k=v", got, ok)
+	}
+	if _, ok := resolveMapValue([]interface{}{"v"}); ok {
+		t.Fatal("resolveMapValue() ok=true for slice input, want false")
+	}
+}
+
 func TestEnrichDeviceDisplay(t *testing.T) {
 	driverID := int64(7)
 	resourceID := int64(3)
