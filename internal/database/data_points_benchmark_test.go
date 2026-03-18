@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -173,15 +174,19 @@ func BenchmarkWriteCollectDataBatch_SingleItem_CacheOnly_8Fields(b *testing.B) {
 	oldSyncBatchTrigger := syncBatchTrigger
 	oldMaxDataPointsLimit := maxDataPointsLimit
 	oldMaxDataCacheLimit := maxDataCacheLimit
+	oldDataDBFile := dataDBFile
 	b.Cleanup(func() {
 		syncBatchTrigger = oldSyncBatchTrigger
 		maxDataPointsLimit = oldMaxDataPointsLimit
 		maxDataCacheLimit = oldMaxDataCacheLimit
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
 	})
 
 	syncBatchTrigger = int(^uint(0) >> 1)
 	maxDataPointsLimit = int(^uint(0) >> 1)
 	maxDataCacheLimit = int(^uint(0) >> 1)
+	dataDBFile = ""
 
 	items := []collectWriteRequest{{data: makeBenchmarkCollectData(8), storeHistory: false}}
 
@@ -399,6 +404,191 @@ func BenchmarkBatchSaveDataCacheEntries_1000Fields(b *testing.B) {
 		}
 		if err := BatchSaveDataCacheEntries(entries); err != nil {
 			b.Fatalf("BatchSaveDataCacheEntries error: %v", err)
+		}
+	}
+}
+
+func BenchmarkGetLatestDataPoints_1000Limit(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	now := time.Now()
+	entries := make([]DataPointEntry, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		entries = append(entries, DataPointEntry{
+			DeviceID:    int64(i%10 + 1),
+			DeviceName:  "bench-device",
+			FieldName:   fmt.Sprintf("f_%d", i),
+			Value:       fmt.Sprintf("%d", i),
+			ValueType:   collectDataValueTypeString,
+			CollectedAt: now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	if err := BatchSaveDataPoints(entries); err != nil {
+		b.Fatalf("BatchSaveDataPoints seed error: %v", err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		points, err := GetLatestDataPoints(1000)
+		if err != nil {
+			b.Fatalf("GetLatestDataPoints error: %v", err)
+		}
+		if len(points) != 1000 {
+			b.Fatalf("unexpected points len: %d", len(points))
+		}
+	}
+}
+
+func benchmarkGetDiskLatestDataPoints1000Limit(b *testing.B, closeBeforeEach bool) {
+	oldDataDBFile := dataDBFile
+	b.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
+	})
+
+	tmpDir := b.TempDir()
+	diskPath := filepath.Join(tmpDir, "data.db")
+	diskDB, err := openSQLite(diskPath, 1, 1)
+	if err != nil {
+		b.Fatalf("open disk db: %v", err)
+	}
+	b.Cleanup(func() {
+		_ = diskDB.Close()
+	})
+	if err := ensureDiskDataSchema(diskDB); err != nil {
+		b.Fatalf("ensure disk schema: %v", err)
+	}
+
+	now := time.Now()
+	entries := make([]DataPointEntry, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		entries = append(entries, DataPointEntry{
+			DeviceID:    int64(i%10 + 1),
+			DeviceName:  "bench-device",
+			FieldName:   fmt.Sprintf("f_%d", i),
+			Value:       fmt.Sprintf("%d", i),
+			ValueType:   collectDataValueTypeString,
+			CollectedAt: now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	for _, entry := range entries {
+		if _, err := diskDB.Exec(
+			`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			entry.DeviceID,
+			entry.DeviceName,
+			entry.FieldName,
+			entry.Value,
+			entry.ValueType,
+			entry.CollectedAt,
+		); err != nil {
+			b.Fatalf("seed disk data point: %v", err)
+		}
+	}
+
+	dataDBFile = diskPath
+	closeCachedDataDiskDBForPath(diskPath)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if closeBeforeEach {
+			closeCachedDataDiskDBForPath(diskPath)
+		}
+		points, err := getDiskLatestDataPoints(1000, time.Time{})
+		if err != nil {
+			b.Fatalf("getDiskLatestDataPoints error: %v", err)
+		}
+		if len(points) != 1000 {
+			b.Fatalf("unexpected points len: %d", len(points))
+		}
+	}
+}
+
+func BenchmarkGetDiskLatestDataPoints_1000Limit_Cached(b *testing.B) {
+	benchmarkGetDiskLatestDataPoints1000Limit(b, false)
+}
+
+func BenchmarkGetDiskLatestDataPoints_1000Limit_ColdOpen(b *testing.B) {
+	benchmarkGetDiskLatestDataPoints1000Limit(b, true)
+}
+
+func BenchmarkMergeDataPoints_NoOverlap_1000(b *testing.B) {
+	now := time.Now()
+	primary := make([]*DataPoint, 0, 1000)
+	secondary := make([]*DataPoint, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		primary = append(primary, &DataPoint{
+			DeviceID:    1,
+			FieldName:   fmt.Sprintf("p_%d", i),
+			CollectedAt: now.Add(-time.Duration(i) * time.Second),
+		})
+		secondary = append(secondary, &DataPoint{
+			DeviceID:    1,
+			FieldName:   fmt.Sprintf("s_%d", i),
+			CollectedAt: now.Add(-time.Duration(2000+i) * time.Second),
+		})
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		points := mergeDataPoints(primary, secondary, 1500)
+		if len(points) != 1500 {
+			b.Fatalf("unexpected len: %d", len(points))
+		}
+	}
+}
+
+func BenchmarkGetAllDevicesLatestData_1000Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldDataDBFile := dataDBFile
+	b.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
+	})
+	dataDBFile = ""
+
+	entries := make([]DataPointEntry, 0, 1000)
+	now := time.Now()
+	for i := 0; i < 1000; i++ {
+		entries = append(entries, DataPointEntry{
+			DeviceID:    int64(i%50 + 1),
+			DeviceName:  fmt.Sprintf("dev-%d", i%50+1),
+			FieldName:   fmt.Sprintf("f_%d", i),
+			Value:       fmt.Sprintf("%d", i),
+			ValueType:   collectDataValueTypeString,
+			CollectedAt: now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	if err := BatchSaveLatestDataPoints(entries); err != nil {
+		b.Fatalf("BatchSaveLatestDataPoints seed error: %v", err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		items, err := GetAllDevicesLatestData()
+		if err != nil {
+			b.Fatalf("GetAllDevicesLatestData error: %v", err)
+		}
+		if len(items) != 50 {
+			b.Fatalf("unexpected device count: %d", len(items))
 		}
 	}
 }

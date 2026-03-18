@@ -74,6 +74,7 @@ func TestGetAllDevicesLatestData_MergeMemoryAndDisk(t *testing.T) {
 
 	oldDataDBFile := dataDBFile
 	t.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
 		dataDBFile = oldDataDBFile
 	})
 
@@ -148,6 +149,7 @@ func TestGetAllDevicesLatestData_FallbackWhenDiskMissing(t *testing.T) {
 
 	oldDataDBFile := dataDBFile
 	t.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
 		dataDBFile = oldDataDBFile
 	})
 
@@ -612,6 +614,7 @@ func TestDeleteHistoryDataByPoint_MemoryAndDisk(t *testing.T) {
 
 	oldDataDBFile := dataDBFile
 	t.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
 		dataDBFile = oldDataDBFile
 	})
 

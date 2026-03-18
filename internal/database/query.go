@@ -9,7 +9,7 @@ func queryList[T any](db *sql.DB, query string, args []any, scan func(*sql.Rows)
 	}
 	defer rows.Close()
 
-	var list []T
+	list := make([]T, 0, estimateQueryListCap(args))
 	for rows.Next() {
 		item, err := scan(rows)
 		if err != nil {
@@ -21,4 +21,25 @@ func queryList[T any](db *sql.DB, query string, args []any, scan func(*sql.Rows)
 		return nil, err
 	}
 	return list, nil
+}
+
+func estimateQueryListCap(args []any) int {
+	if len(args) == 0 {
+		return 0
+	}
+	switch v := args[len(args)-1].(type) {
+	case int:
+		if v > 0 && v <= 4096 {
+			return v
+		}
+	case int32:
+		if v > 0 && v <= 4096 {
+			return int(v)
+		}
+	case int64:
+		if v > 0 && v <= 4096 {
+			return int(v)
+		}
+	}
+	return 0
 }

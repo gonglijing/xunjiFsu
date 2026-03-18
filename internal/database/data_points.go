@@ -31,6 +31,9 @@ type DataPoint struct {
 var (
 	dataPointsCleanupCounter uint64
 	dataPointsLastCleanupNS  int64
+	dataDiskDBMu             sync.Mutex
+	dataDiskDB               *sql.DB
+	dataDiskDBPath           string
 
 	// 允许在测试中覆盖
 	dataPointsCleanupEveryWrites uint64        = 128
@@ -697,6 +700,19 @@ func mergeDataPoints(primary, secondary []*DataPoint, limit int) []*DataPoint {
 		}
 		return secondary
 	}
+	if dataPointsDoNotOverlap(primary, secondary) {
+		if len(primary) >= limit {
+			return primary[:limit]
+		}
+		remaining := limit - len(primary)
+		if remaining > len(secondary) {
+			remaining = len(secondary)
+		}
+		result := make([]*DataPoint, 0, len(primary)+remaining)
+		result = append(result, primary...)
+		result = append(result, secondary[:remaining]...)
+		return result
+	}
 
 	maxSeen := len(primary) + len(secondary)
 	if maxSeen > limit {
@@ -747,6 +763,18 @@ func mergeDataPoints(primary, secondary []*DataPoint, limit int) []*DataPoint {
 	return result
 }
 
+func dataPointsDoNotOverlap(primary, secondary []*DataPoint) bool {
+	if len(primary) == 0 || len(secondary) == 0 {
+		return true
+	}
+	oldestPrimary := primary[len(primary)-1]
+	newestSecondary := secondary[0]
+	if oldestPrimary == nil || newestSecondary == nil {
+		return false
+	}
+	return !newestSecondary.CollectedAt.After(oldestPrimary.CollectedAt)
+}
+
 func oldestCollectedAt(points []*DataPoint) time.Time {
 	if len(points) == 0 {
 		return time.Time{}
@@ -773,9 +801,43 @@ func openDataDiskDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("data db path is empty")
 	}
 	if _, err := os.Stat(dataDBFile); err != nil {
+		closeCachedDataDiskDBForPath(dataDBFile)
 		return nil, err
 	}
-	return openSQLite(dataDiskDSN(dataDBFile), 1, 1)
+
+	dataDiskDBMu.Lock()
+	defer dataDiskDBMu.Unlock()
+
+	if dataDiskDB != nil && dataDiskDBPath == dataDBFile {
+		return dataDiskDB, nil
+	}
+	if dataDiskDB != nil {
+		_ = dataDiskDB.Close()
+		dataDiskDB = nil
+		dataDiskDBPath = ""
+	}
+
+	db, err := openSQLite(dataDiskDSN(dataDBFile), 1, 1)
+	if err != nil {
+		return nil, err
+	}
+	dataDiskDB = db
+	dataDiskDBPath = dataDBFile
+	return dataDiskDB, nil
+}
+
+func closeCachedDataDiskDBForPath(path string) {
+	dataDiskDBMu.Lock()
+	defer dataDiskDBMu.Unlock()
+	if dataDiskDB == nil {
+		return
+	}
+	if path != "" && dataDiskDBPath != path {
+		return
+	}
+	_ = dataDiskDB.Close()
+	dataDiskDB = nil
+	dataDiskDBPath = ""
 }
 
 func getDiskDataPointsByDevice(deviceID int64, limit int, before time.Time) ([]*DataPoint, error) {
@@ -783,7 +845,6 @@ func getDiskDataPointsByDevice(deviceID int64, limit int, before time.Time) ([]*
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	return queryDataPointsByDevice(db, deviceID, limit, before)
 }
@@ -793,7 +854,6 @@ func getDiskLatestDataPoints(limit int, before time.Time) ([]*DataPoint, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	return queryLatestDataPoints(db, limit, before)
 }
@@ -803,7 +863,6 @@ func getDiskDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, sta
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	return queryDataPointsByDeviceFieldAndTime(db, deviceID, fieldName, startTime, endTime, limit)
 }
@@ -813,7 +872,6 @@ func getDiskDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Ti
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	return queryDataPointsByDeviceAndTime(db, deviceID, startTime, endTime, limit)
 }
@@ -884,6 +942,9 @@ func GetDataPointsByDeviceAndTimeLimit(deviceID int64, startTime, endTime time.T
 	if err != nil {
 		return nil, err
 	}
+	if dataDBFile == "" {
+		return memPoints, nil
+	}
 
 	diskPoints, err := getDiskDataPointsByDeviceAndTime(deviceID, startTime, endTime, limit)
 	if err != nil {
@@ -903,6 +964,9 @@ func GetDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTi
 	memPoints, err := queryDataPointsByDeviceFieldAndTime(DataDB, deviceID, fieldName, startTime, endTime, limit)
 	if err != nil {
 		return nil, err
+	}
+	if dataDBFile == "" {
+		return memPoints, nil
 	}
 
 	diskPoints, err := getDiskDataPointsByDeviceFieldAndTime(deviceID, fieldName, startTime, endTime, limit)
@@ -928,6 +992,9 @@ func GetDataPointsByDevice(deviceID int64, limit int) ([]*DataPoint, error) {
 	if err != nil {
 		return nil, err
 	}
+	if dataDBFile == "" {
+		return memPoints, nil
+	}
 
 	diskPoints, err := getDiskDataPointsByDevice(deviceID, limit, oldestCollectedAt(memPoints))
 	if err != nil {
@@ -944,6 +1011,9 @@ func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
 	memPoints, err := queryLatestDataPoints(DataDB, limit, time.Time{})
 	if err != nil {
 		return nil, err
+	}
+	if dataDBFile == "" {
+		return memPoints, nil
 	}
 
 	diskPoints, err := getDiskLatestDataPoints(limit, oldestCollectedAt(memPoints))
@@ -1050,12 +1120,14 @@ const latestDeviceFieldRowsQuery = `SELECT p.device_id, p.device_name, p.field_n
 		AND p.collected_at = latest.max_collected_at
 	ORDER BY p.device_id ASC, p.collected_at DESC`
 
+const latestDeviceFieldsInitialCap = 24
+
 func upsertLatestDeviceFieldRow(merged map[latestDeviceFieldKey]latestDeviceFieldRow, row latestDeviceFieldRow) {
 	if merged == nil {
 		return
 	}
 
-	row.FieldName = strings.TrimSpace(row.FieldName)
+	row.FieldName = trimDataPointFieldName(row.FieldName)
 	if row.DeviceID == 0 || row.FieldName == "" {
 		return
 	}
@@ -1095,46 +1167,78 @@ func loadLatestDeviceFieldRows(db *sql.DB, merged map[latestDeviceFieldKey]lates
 	return nil
 }
 
-func buildLatestDeviceData(merged map[latestDeviceFieldKey]latestDeviceFieldRow) []*LatestDeviceData {
-	deviceDataMap := make(map[int64]*LatestDeviceData, len(merged)/2+1)
-	for _, row := range merged {
-		if row.DeviceID == 0 || row.FieldName == "" {
-			continue
-		}
-
-		item, exists := deviceDataMap[row.DeviceID]
-		if !exists {
-			item = &LatestDeviceData{
-				DeviceID:   row.DeviceID,
-				DeviceName: row.DeviceName,
-				Fields:     make(map[string]string, 8),
-			}
-			deviceDataMap[row.DeviceID] = item
-		}
-
-		if item.DeviceName == "" {
-			item.DeviceName = row.DeviceName
-		}
-		item.Fields[row.FieldName] = row.Value
-		if row.CollectedAt.After(item.CollectedAt) {
-			item.CollectedAt = row.CollectedAt
-		}
+func appendLatestDeviceDataRow(result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64, row latestDeviceFieldRow) []*LatestDeviceData {
+	if row.DeviceID == 0 || row.FieldName == "" {
+		return result
+	}
+	idx, exists := deviceIndex[row.DeviceID]
+	if !exists {
+		idx = len(result)
+		deviceIndex[row.DeviceID] = idx
+		result = append(result, &LatestDeviceData{
+			DeviceID:   row.DeviceID,
+			DeviceName: row.DeviceName,
+			Fields:     make(map[string]string, latestDeviceFieldsInitialCap),
+		})
 	}
 
-	result := make([]*LatestDeviceData, 0, len(deviceDataMap))
-	for _, item := range deviceDataMap {
-		if len(item.Fields) > 0 {
-			result = append(result, item)
+	item := result[idx]
+	if fieldTimes != nil {
+		key := latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}
+		collectedAtNS := row.CollectedAt.UnixNano()
+		if existingAtNS, ok := fieldTimes[key]; ok && existingAtNS > collectedAtNS {
+			return result
 		}
+		fieldTimes[key] = collectedAtNS
+	}
+	if item.DeviceName == "" {
+		item.DeviceName = row.DeviceName
+	}
+	item.Fields[row.FieldName] = row.Value
+	if row.CollectedAt.After(item.CollectedAt) {
+		item.CollectedAt = row.CollectedAt
 	}
 	return result
 }
 
+func appendLatestDeviceFieldRows(db *sql.DB, result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64) ([]*LatestDeviceData, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db is nil")
+	}
+
+	rows, err := db.Query(latestDeviceFieldRowsQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item latestDeviceFieldRow
+		if err := rows.Scan(&item.DeviceID, &item.DeviceName, &item.FieldName, &item.Value, &item.CollectedAt); err != nil {
+			return nil, err
+		}
+		item.FieldName = trimDataPointFieldName(item.FieldName)
+		result = appendLatestDeviceDataRow(result, deviceIndex, fieldTimes, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // GetAllDevicesLatestData 获取所有设备的最新数据（每个设备每个字段仅保留最新值）
 func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
-	merged := make(map[latestDeviceFieldKey]latestDeviceFieldRow, 256)
-	if err := loadLatestDeviceFieldRows(DataDB, merged); err != nil {
+	deviceIndex := make(map[int64]int, 64)
+	var fieldTimes map[latestDeviceFieldKey]int64
+	if dataDBFile != "" {
+		fieldTimes = make(map[latestDeviceFieldKey]int64, 256)
+	}
+	result, err := appendLatestDeviceFieldRows(DataDB, make([]*LatestDeviceData, 0, 64), deviceIndex, fieldTimes)
+	if err != nil {
 		return nil, err
+	}
+	if dataDBFile == "" {
+		return result, nil
 	}
 
 	diskDB, err := openDataDiskDB()
@@ -1142,16 +1246,16 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 		if !os.IsNotExist(err) {
 			log.Printf("Failed to read latest device fields from disk: %v", err)
 		}
-		return buildLatestDeviceData(merged), nil
+		return result, nil
 	}
-	defer diskDB.Close()
 
-	if err := loadLatestDeviceFieldRows(diskDB, merged); err != nil {
+	result, err = appendLatestDeviceFieldRows(diskDB, result, deviceIndex, fieldTimes)
+	if err != nil {
 		log.Printf("Failed to query latest device fields from disk: %v", err)
-		return buildLatestDeviceData(merged), nil
+		return result, nil
 	}
 
-	return buildLatestDeviceData(merged), nil
+	return result, nil
 }
 
 // InsertCollectData 将采集数据写入缓存与历史库

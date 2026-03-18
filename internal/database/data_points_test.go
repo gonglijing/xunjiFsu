@@ -71,3 +71,24 @@ func TestNormalizeDeviceName_TrimmedName(t *testing.T) {
 		t.Fatalf("normalizeDeviceName = %q, want %q", got, "dev-1")
 	}
 }
+
+func TestEstimateQueryListCap(t *testing.T) {
+	cases := []struct {
+		name string
+		args []any
+		want int
+	}{
+		{name: "no args", args: nil, want: 0},
+		{name: "last int limit", args: []any{int64(1), 200}, want: 200},
+		{name: "last int64 limit", args: []any{"temperature", int64(128)}, want: 128},
+		{name: "non positive", args: []any{0}, want: 0},
+		{name: "too large", args: []any{50000}, want: 0},
+		{name: "non numeric tail", args: []any{100, "tail"}, want: 0},
+	}
+
+	for _, tc := range cases {
+		if got := estimateQueryListCap(tc.args); got != tc.want {
+			t.Fatalf("%s: estimateQueryListCap(%v) = %d, want %d", tc.name, tc.args, got, tc.want)
+		}
+	}
+}
