@@ -1,6 +1,7 @@
 import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
+import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { getErrorMessage } from '../api/errorMessages';
@@ -302,131 +303,127 @@ function Realtime() {
       )}
 
       <Show when={historyOpen()}>
-        <div
-          class="modal-backdrop"
-          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1001;"
-          onClick={(e) => { if (e.target === e.currentTarget) setHistoryOpen(false); }}
+        <Modal
+          title={`历史数据 - ${historyDeviceName()} / ${historyField()}`}
+          onClose={() => setHistoryOpen(false)}
+          closeOnBackdrop
+          backdropStyle="z-index:1001;"
+          contentStyle="width:780px; max-width:95vw;"
         >
-          <div class="card" style="width:780px; max-width:95vw;">
-            <div class="card-header">
-              <h3 class="card-title">历史数据 - {historyDeviceName()} / {historyField()}</h3>
-              <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={() => setHistoryOpen(false)}>✕</button>
+          <div class="card-body">
+            <div class="grid" style="grid-template-columns: 1.4fr 1.4fr 1fr; gap:12px; margin-bottom:12px;">
+              <div class="form-group">
+                <label class="form-label">开始时间</label>
+                <input
+                  class="form-input"
+                  type="datetime-local"
+                  value={historyStart()}
+                  onInput={(e) => setHistoryStart(e.target.value)}
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">结束时间</label>
+                <input
+                  class="form-input"
+                  type="datetime-local"
+                  value={historyEnd()}
+                  onInput={(e) => setHistoryEnd(e.target.value)}
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">展现方式</label>
+                <div class="toolbar-actions">
+                  <button
+                    class={`btn btn-sm ${historyView() === 'chart' ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => setHistoryView('chart')}
+                  >
+                    折线图
+                  </button>
+                  <button
+                    class={`btn btn-sm ${historyView() === 'list' ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => setHistoryView('list')}
+                  >
+                    列表
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="card-body">
-              <div class="grid" style="grid-template-columns: 1.4fr 1.4fr 1fr; gap:12px; margin-bottom:12px;">
-                <div class="form-group">
-                  <label class="form-label">开始时间</label>
-                  <input
-                    class="form-input"
-                    type="datetime-local"
-                    value={historyStart()}
-                    onInput={(e) => setHistoryStart(e.target.value)}
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">结束时间</label>
-                  <input
-                    class="form-input"
-                    type="datetime-local"
-                    value={historyEnd()}
-                    onInput={(e) => setHistoryEnd(e.target.value)}
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">展现方式</label>
-                  <div class="toolbar-actions">
-                    <button
-                      class={`btn btn-sm ${historyView() === 'chart' ? 'btn-primary' : 'btn-outline-primary'}`}
-                      onClick={() => setHistoryView('chart')}
-                    >
-                      折线图
-                    </button>
-                    <button
-                      class={`btn btn-sm ${historyView() === 'list' ? 'btn-primary' : 'btn-outline-primary'}`}
-                      onClick={() => setHistoryView('list')}
-                    >
-                      列表
-                    </button>
-                  </div>
-                </div>
+
+            <div class="modal-actions" style="margin-bottom:12px;">
+              <button
+                class="btn btn-soft-primary btn-sm"
+                onClick={() => fetchHistory()}
+                disabled={historyLoading() || historyClearing()}
+              >
+                {historyLoading() ? '加载中...' : '查询'}
+              </button>
+              <button
+                class="btn btn-outline-danger btn-sm"
+                onClick={clearCurrentPointHistory}
+                disabled={historyLoading() || historyClearing()}
+              >
+                {historyClearing() ? '清除中...' : '清除当前测点历史'}
+              </button>
+            </div>
+
+            <Show when={historyError()}>
+              <div style="color:var(--accent-red); margin-bottom:12px;">{historyError()}</div>
+            </Show>
+
+            <Show when={historyView() === 'chart'}>
+              <div style="border:1px solid var(--border-color); border-radius:12px; padding:12px;">
+                <Show when={series().length > 1} fallback={<div style="color:var(--text-muted); padding:16px; text-align:center;">暂无可绘制数据</div>}>
+                  <svg viewBox="0 0 700 260" style="width:100%; height:260px;">
+                    {chartTicks().yTicks.map((t, idx) => (
+                      <g key={`y-${idx}`}>
+                        <line x1="28" x2="680" y1={t.y} y2={t.y} stroke="rgba(255,255,255,0.06)" />
+                        <text x="8" y={t.y + 4} font-size="10" fill="var(--text-muted)">{t.value}</text>
+                      </g>
+                    ))}
+                    {chartTicks().xTicks.map((t, idx) => (
+                      <g key={`x-${idx}`}>
+                        <line x1={t.x} x2={t.x} y1="24" y2="232" stroke="rgba(255,255,255,0.04)" />
+                        <text x={t.x - 12} y="248" font-size="10" fill="var(--text-muted)">{t.label}</text>
+                      </g>
+                    ))}
+                    <path
+                      d={buildPath(series(), 700, 260, 28)}
+                      fill="none"
+                      stroke="var(--accent-blue)"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </Show>
               </div>
+            </Show>
 
-              <div class="modal-actions" style="margin-bottom:12px;">
-                <button
-                  class="btn btn-soft-primary btn-sm"
-                  onClick={() => fetchHistory()}
-                  disabled={historyLoading() || historyClearing()}
-                >
-                  {historyLoading() ? '加载中...' : '查询'}
-                </button>
-                <button
-                  class="btn btn-outline-danger btn-sm"
-                  onClick={clearCurrentPointHistory}
-                  disabled={historyLoading() || historyClearing()}
-                >
-                  {historyClearing() ? '清除中...' : '清除当前测点历史'}
-                </button>
-              </div>
-
-              <Show when={historyError()}>
-                <div style="color:var(--accent-red); margin-bottom:12px;">{historyError()}</div>
-              </Show>
-
-              <Show when={historyView() === 'chart'}>
-                <div style="border:1px solid var(--border-color); border-radius:12px; padding:12px;">
-                  <Show when={series().length > 1} fallback={<div style="color:var(--text-muted); padding:16px; text-align:center;">暂无可绘制数据</div>}>
-                    <svg viewBox="0 0 700 260" style="width:100%; height:260px;">
-                      {chartTicks().yTicks.map((t, idx) => (
-                        <g key={`y-${idx}`}>
-                          <line x1="28" x2="680" y1={t.y} y2={t.y} stroke="rgba(255,255,255,0.06)" />
-                          <text x="8" y={t.y + 4} font-size="10" fill="var(--text-muted)">{t.value}</text>
-                        </g>
-                      ))}
-                      {chartTicks().xTicks.map((t, idx) => (
-                        <g key={`x-${idx}`}>
-                          <line x1={t.x} x2={t.x} y1="24" y2="232" stroke="rgba(255,255,255,0.04)" />
-                          <text x={t.x - 12} y="248" font-size="10" fill="var(--text-muted)">{t.label}</text>
-                        </g>
-                      ))}
-                      <path
-                        d={buildPath(series(), 700, 260, 28)}
-                        fill="none"
-                        stroke="var(--accent-blue)"
-                        stroke-width="2"
-                      />
-                    </svg>
-                  </Show>
-                </div>
-              </Show>
-
-              <Show when={historyView() === 'list'}>
-                <div class="table-container" style="max-height:360px; overflow:auto;">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>时间</th>
-                        <th>值</th>
+            <Show when={historyView() === 'list'}>
+              <div class="table-container" style="max-height:360px; overflow:auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>时间</th>
+                      <th>值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyData().map((p) => (
+                      <tr key={p.id || `${p.device_id}-${p.field_name}-${p.collected_at}`}>
+                        <td>{formatDateTime(p.collected_at || p.CollectedAt)}</td>
+                        <td>{p.value || p.Value}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {historyData().map((p) => (
-                        <tr key={p.id || `${p.device_id}-${p.field_name}-${p.collected_at}`}>
-                          <td>{formatDateTime(p.collected_at || p.CollectedAt)}</td>
-                          <td>{p.value || p.Value}</td>
-                        </tr>
-                      ))}
-                      {historyData().length === 0 && (
-                        <tr>
-                          <td colSpan={2} style="text-align:center; padding:16px; color:var(--text-muted);">暂无数据</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </Show>
-            </div>
+                    ))}
+                    {historyData().length === 0 && (
+                      <tr>
+                        <td colSpan={2} style="text-align:center; padding:16px; color:var(--text-muted);">暂无数据</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Show>
           </div>
-        </div>
+        </Modal>
       </Show>
     </Card>
   );

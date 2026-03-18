@@ -6,6 +6,7 @@ import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
 import LoadErrorHint from '../components/LoadErrorHint';
+import Modal from '../components/Modal';
 
 const DEFAULT_REPEAT_INTERVAL_MINUTES = 1;
 const empty = {
@@ -226,105 +227,101 @@ export function Thresholds() {
       </Card>
 
       <Show when={showModal()}>
-        <div
-          class="modal-backdrop"
-          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000;"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+        <Modal
+          title="新增阈值"
+          onClose={() => { setShowModal(false); setForm(empty); }}
+          closeOnBackdrop
+          contentStyle="width:440px; max-width:92vw;"
         >
-          <div class="card" style="width:440px; max-width:92vw;">
-            <div class="card-header">
-              <h3 class="card-title">新增阈值</h3>
+          <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
+            <div class="form-group">
+              <label class="form-label">设备</label>
+              <select
+                class="form-select"
+                value={form().device_id}
+                onChange={(e) => setForm({ ...form(), device_id: +e.target.value })}
+                required
+              >
+                <option value="">选择设备</option>
+                {devices().map((device) => (
+                  <option key={device.id} value={device.id}>{device.name || device.id}</option>
+                ))}
+              </select>
             </div>
-            <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
+            <div class="form-group">
+              <label class="form-label">字段名</label>
+              <input
+                class="form-input"
+                value={form().field_name}
+                onInput={(e) => setForm({ ...form(), field_name: e.target.value })}
+                required
+              />
+            </div>
+            <div class="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div class="form-group">
-                <label class="form-label">设备</label>
+                <label class="form-label">运算符</label>
                 <select
                   class="form-select"
-                  value={form().device_id}
-                  onChange={(e) => setForm({ ...form(), device_id: +e.target.value })}
-                  required
+                  value={form().operator}
+                  onChange={(e) => setForm({ ...form(), operator: e.target.value })}
                 >
-                  <option value="">选择设备</option>
-                  {devices().map((device) => (
-                    <option key={device.id} value={device.id}>{device.name || device.id}</option>
-                  ))}
+                  <option value=">">大于 &gt;</option>
+                  <option value=">=">大于等于 &gt;=</option>
+                  <option value="<">小于 &lt;</option>
+                  <option value="<=">小于等于 &lt;=</option>
+                  <option value="==">等于 ==</option>
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">字段名</label>
+                <label class="form-label">阈值</label>
                 <input
                   class="form-input"
-                  value={form().field_name}
-                  onInput={(e) => setForm({ ...form(), field_name: e.target.value })}
+                  type="number"
+                  value={form().value}
+                  onInput={(e) => setForm({ ...form(), value: +e.target.value })}
                   required
                 />
               </div>
-              <div class="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div class="form-group">
-                  <label class="form-label">运算符</label>
-                  <select
-                    class="form-select"
-                    value={form().operator}
-                    onChange={(e) => setForm({ ...form(), operator: e.target.value })}
-                  >
-                    <option value=">">大于 &gt;</option>
-                    <option value=">=">大于等于 &gt;=</option>
-                    <option value="<">小于 &lt;</option>
-                    <option value="<=">小于等于 &lt;=</option>
-                    <option value="==">等于 ==</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">阈值</label>
-                  <input
-                    class="form-input"
-                    type="number"
-                    value={form().value}
-                    onInput={(e) => setForm({ ...form(), value: +e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">严重程度</label>
-                <select
-                  class="form-select"
-                  value={form().severity}
-                  onChange={(e) => setForm({ ...form(), severity: e.target.value })}
-                >
-                  <option value="info">info</option>
-                  <option value="warning">warning</option>
-                  <option value="error">error</option>
-                  <option value="critical">critical</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">报警消息</label>
-                <input
-                  class="form-input"
-                  value={form().message}
-                  onInput={(e) => setForm({ ...form(), message: e.target.value })}
-                />
-              </div>
-              <Show when={err()}>
-                <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
-              </Show>
-              <div class="modal-actions" style={{ marginTop: '8px' }}>
-                <button
-                  type="button"
-                  class="btn btn-outline-primary btn-sm"
-                  onClick={() => { setShowModal(false); setForm(empty); }}
-                  disabled={saving()}
-                >
-                  取消
-                </button>
-                <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
-                  {saving() ? '创建中...' : '创建'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">严重程度</label>
+              <select
+                class="form-select"
+                value={form().severity}
+                onChange={(e) => setForm({ ...form(), severity: e.target.value })}
+              >
+                <option value="info">info</option>
+                <option value="warning">warning</option>
+                <option value="error">error</option>
+                <option value="critical">critical</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">报警消息</label>
+              <input
+                class="form-input"
+                value={form().message}
+                onInput={(e) => setForm({ ...form(), message: e.target.value })}
+              />
+            </div>
+            <Show when={err()}>
+              <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
+            </Show>
+            <div class="modal-actions" style={{ marginTop: '8px' }}>
+              <button
+                type="button"
+                class="btn btn-outline-primary btn-sm"
+                onClick={() => { setShowModal(false); setForm(empty); }}
+                disabled={saving()}
+              >
+                取消
+              </button>
+              <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
+                {saving() ? '创建中...' : '创建'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       </Show>
     </div>
   );

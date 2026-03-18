@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
+import Modal from '../components/Modal';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
 import { formatDateTime } from '../utils/time';
@@ -401,12 +402,12 @@ export function Devices() {
       </Card>
 
       <Show when={showModal()}>
-        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:24px;">
-          <div class="card" style="width:720px; max-width:100%;">
-            <div class="card-header">
-              <h3 class="card-title">{editing() ? '编辑设备' : '新增设备'}</h3>
-              <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }}>✕</button>
-            </div>
+        <Modal
+          title={editing() ? '编辑设备' : '新增设备'}
+          onClose={() => { setShowModal(false); setEditing(null); setForm(defaultForm); }}
+          contentStyle="width:720px; max-width:100%;"
+          backdropStyle="overflow:auto; padding:24px;"
+        >
             <form class="form" onSubmit={submit} style="padding:0 4px;">
               <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap:12px;">
                 <div class="form-group">
@@ -629,17 +630,16 @@ export function Devices() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       </Show>
 
       <Show when={showWriteModal()}>
-        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1001;">
-          <div class="card" style="width:400px; max-width:90vw;">
-            <div class="card-header">
-              <h3 class="card-title">写入数据 - {writeTarget()?.name}</h3>
-              <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={() => setShowWriteModal(false)}>✕</button>
-            </div>
+        <Modal
+          title={`写入数据 - ${writeTarget()?.name}`}
+          onClose={() => setShowWriteModal(false)}
+          backdropStyle="z-index:1001;"
+          contentStyle="width:400px; max-width:90vw;"
+        >
             <form class="form" onSubmit={submitWrite} style="padding:16px;">
               <div class="form-group">
                 <label class="form-label">字段</label>
@@ -671,8 +671,7 @@ export function Devices() {
                 <button type="submit" class="btn btn-primary btn-sm">写入</button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       </Show>
 
       <DeviceDetailDrawer

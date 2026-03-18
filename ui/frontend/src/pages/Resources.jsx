@@ -6,6 +6,7 @@ import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
 import LoadErrorHint from '../components/LoadErrorHint';
+import Modal from '../components/Modal';
 
 const empty = { name: '', type: 'serial', path: '', enabled: 1 };
 
@@ -276,77 +277,73 @@ function Resources() {
       </Card>
 
       <Show when={showModal()}>
-        <div
-          class="modal-backdrop"
-          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000;"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+        <Modal
+          title={editing() ? '编辑资源' : '新增资源'}
+          onClose={() => { setShowModal(false); setEditing(null); setForm(empty); }}
+          closeOnBackdrop
+          contentStyle="width:420px; max-width:90vw;"
         >
-          <div class="card" style="width:420px; max-width:90vw;">
-            <div class="card-header">
-              <h3 class="card-title">{editing() ? '编辑资源' : '新增资源'}</h3>
+          <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
+            <div class="form-group">
+              <label class="form-label">名称</label>
+              <input 
+                class="form-input" 
+                value={form().name} 
+                onInput={(e) => setForm({ ...form(), name: e.target.value })} 
+                required 
+              />
             </div>
-            <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
-              <div class="form-group">
-                <label class="form-label">名称</label>
-                <input 
-                  class="form-input" 
-                  value={form().name} 
-                  onInput={(e) => setForm({ ...form(), name: e.target.value })} 
-                  required 
+            <div class="form-group">
+              <label class="form-label">类型</label>
+              <select
+                class="form-select"
+                value={form().type}
+                onChange={(e) => setForm({ ...form(), type: e.target.value })}
+              >
+                <option value="serial">串口</option>
+                <option value="net">网口 (TCP)</option>
+                <option value="di">DI</option>
+                <option value="do">DO</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">路径</label>
+              <Show when={form().type === 'net'} fallback={
+                <input
+                  class="form-input"
+                  value={form().path}
+                  onInput={(e) => setForm({ ...form(), path: e.target.value })}
+                  placeholder="如 /dev/ttyUSB0"
+                  required
                 />
-              </div>
-              <div class="form-group">
-                <label class="form-label">类型</label>
-                <select
-                  class="form-select"
-                  value={form().type}
-                  onChange={(e) => setForm({ ...form(), type: e.target.value })}
-                >
-                  <option value="serial">串口</option>
-                  <option value="net">网口 (TCP)</option>
-                  <option value="di">DI</option>
-                  <option value="do">DO</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">路径</label>
-                <Show when={form().type === 'net'} fallback={
-                  <input
-                    class="form-input"
-                    value={form().path}
-                    onInput={(e) => setForm({ ...form(), path: e.target.value })}
-                    placeholder="如 /dev/ttyUSB0"
-                    required
-                  />
-                }>
-                  <input
-                    class="form-input"
-                    value={form().path}
-                    onInput={(e) => setForm({ ...form(), path: e.target.value })}
-                    placeholder="如 192.168.1.100:502"
-                    required
-                  />
-                </Show>
-              </div>
-              <Show when={err()}>
-                <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
+              }>
+                <input
+                  class="form-input"
+                  value={form().path}
+                  onInput={(e) => setForm({ ...form(), path: e.target.value })}
+                  placeholder="如 192.168.1.100:502"
+                  required
+                />
               </Show>
-              <div class="modal-actions" style={{ marginTop: '8px' }}>
-                <button 
-                  type="button" 
-                  class="btn btn-outline-primary btn-sm" 
-                  onClick={() => { setShowModal(false); setEditing(null); setForm(empty); }} 
-                  disabled={saving()}
-                >
-                  取消
-                </button>
-                <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
-                  {saving() ? '保存中...' : (editing() ? '保存' : '创建')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <Show when={err()}>
+              <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
+            </Show>
+            <div class="modal-actions" style={{ marginTop: '8px' }}>
+              <button 
+                type="button" 
+                class="btn btn-outline-primary btn-sm" 
+                onClick={() => { setShowModal(false); setEditing(null); setForm(empty); }} 
+                disabled={saving()}
+              >
+                取消
+              </button>
+              <button type="submit" class="btn btn-primary btn-sm" disabled={saving()}>
+                {saving() ? '保存中...' : (editing() ? '保存' : '创建')}
+              </button>
+            </div>
+          </form>
+        </Modal>
       </Show>
     </div>
   );

@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast';
 import Card from '../components/cards';
 import CrudTable from '../components/CrudTable';
 import LoadErrorHint from '../components/LoadErrorHint';
+import Modal from '../components/Modal';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast, withErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
@@ -504,12 +505,12 @@ export function Northbound() {
       </Card>
 
       <Show when={showModal()}>
-        <div class="modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; overflow:auto; padding:16px;">
-          <div class="card" style="width:780px; max-width:94vw;">
-            <div class="card-header">
-              <h3 class="card-title">{editing() ? '编辑北向配置' : '新增北向配置'}</h3>
-              <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={resetForm}>✕</button>
-            </div>
+        <Modal
+          title={editing() ? '编辑北向配置' : '新增北向配置'}
+          onClose={resetForm}
+          contentStyle="width:780px; max-width:94vw;"
+          backdropStyle="overflow:auto; padding:16px;"
+        >
             <form class="form" onSubmit={submit} style="padding:12px 16px 16px;">
               <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap:12px;">
                 <div class="form-group">
@@ -661,8 +662,7 @@ export function Northbound() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       </Show>
     </div>
   );
