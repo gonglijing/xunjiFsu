@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,11 +95,15 @@ func inferResourceType(device *models.Device) string {
 }
 
 func buildDeviceConfig(device *models.Device) map[string]string {
+	_, resourceType := resolveDeviceResource(device)
+	return buildDeviceConfigForResourceType(device, resourceType)
+}
+
+func buildDeviceConfigForResourceType(device *models.Device, resourceType string) map[string]string {
 	capHint := 4
 	if device != nil && device.DeviceAddress != "" {
 		capHint++
 	}
-	_, resourceType := resolveDeviceResource(device)
 	if resourceType == "serial" {
 		capHint += 5
 	} else {
@@ -119,15 +124,15 @@ func buildDeviceConfig(device *models.Device) map[string]string {
 
 func appendSerialDeviceConfig(deviceConfig map[string]string, device *models.Device) {
 	deviceConfig["serial_port"] = device.SerialPort
-	deviceConfig["baud_rate"] = fmt.Sprintf("%d", device.BaudRate)
-	deviceConfig["data_bits"] = fmt.Sprintf("%d", device.DataBits)
-	deviceConfig["stop_bits"] = fmt.Sprintf("%d", device.StopBits)
+	deviceConfig["baud_rate"] = strconv.FormatInt(int64(device.BaudRate), 10)
+	deviceConfig["data_bits"] = strconv.FormatInt(int64(device.DataBits), 10)
+	deviceConfig["stop_bits"] = strconv.FormatInt(int64(device.StopBits), 10)
 	deviceConfig["parity"] = device.Parity
 }
 
 func appendNetworkDeviceConfig(deviceConfig map[string]string, device *models.Device) {
 	deviceConfig["ip_address"] = device.IPAddress
-	deviceConfig["port_num"] = fmt.Sprintf("%d", device.PortNum)
+	deviceConfig["port_num"] = strconv.FormatInt(int64(device.PortNum), 10)
 }
 
 func parseDriverResourceID(configSchema string) int64 {
@@ -169,7 +174,7 @@ func NewPreparedExecution(device *models.Device) *PreparedExecution {
 	}
 
 	resourceID, resourceType := resolveDeviceResource(device)
-	deviceConfig := buildDeviceConfig(device)
+	deviceConfig := buildDeviceConfigForResourceType(device, resourceType)
 	driverCtx := buildDriverContext(device, resourceID, resourceType, deviceConfig)
 	inputJSON, _ := marshalDriverInvocationInput(driverCtx)
 	return &PreparedExecution{

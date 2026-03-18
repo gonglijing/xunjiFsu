@@ -27,7 +27,7 @@ func (c *Collector) collectDataFromDriver(task *collectTask) (*models.CollectDat
 		return nil, err
 	}
 
-	collect := driverResultToCollectData(device, result)
+	collect := driverResultToCollectDataWithTask(task, result)
 	if err := c.syncDeviceProductKey(device, collect); err != nil {
 		log.Printf("Failed to sync device product_key from driver output: %v", err)
 	}
@@ -59,8 +59,22 @@ func (c *Collector) handleThresholdForDevice(device *models.Device, data *models
 
 // driverResultToCollectData 转换驱动结果为采集数据
 func driverResultToCollectData(device *models.Device, res *driver.DriverResult) *models.CollectData {
+	return driverResultToCollectDataWithCache(device, res, trimCollectorText(device.ProductKey), trimCollectorText(device.DeviceKey))
+}
+
+func driverResultToCollectDataWithTask(task *collectTask, res *driver.DriverResult) *models.CollectData {
+	if task == nil {
+		return driverResultToCollectData(nil, res)
+	}
+	return driverResultToCollectDataWithCache(task.device, res, task.deviceProductKey, task.deviceKey)
+}
+
+func driverResultToCollectDataWithCache(device *models.Device, res *driver.DriverResult, deviceProductKey, deviceKey string) *models.CollectData {
 	if res == nil {
 		res = &driver.DriverResult{}
+	}
+	if device == nil {
+		device = &models.Device{}
 	}
 
 	fields, points := resultFieldsForCollect(res)
@@ -69,7 +83,6 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		ts = time.Now()
 	}
 	resultProductKey := trimCollectorText(res.ProductKey)
-	deviceProductKey := trimCollectorText(device.ProductKey)
 	if resultProductKey == "" {
 		resultProductKey = deviceProductKey
 	}
@@ -77,7 +90,7 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		DeviceID:   device.ID,
 		DeviceName: device.Name,
 		ProductKey: resultProductKey,
-		DeviceKey:  trimCollectorText(device.DeviceKey),
+		DeviceKey:  deviceKey,
 		Timestamp:  ts,
 		Fields:     fields,
 		Points:     points,
@@ -103,6 +116,10 @@ func (c *Collector) syncDeviceProductKey(device *models.Device, collect *models.
 		}
 	}
 	device.ProductKey = nextProductKey
+	task := c.findTask(device.ID)
+	if task != nil {
+		task.deviceProductKey = nextProductKey
+	}
 	return nil
 }
 
@@ -176,6 +193,9 @@ func normalizedCollectPoints(points []driver.DriverPoint) []models.CollectPoint 
 	if len(points) == 0 {
 		return nil
 	}
+	if canReuseCollectedPoints(points) {
+		return points
+	}
 
 	write := 0
 	for i := range points {
@@ -191,6 +211,19 @@ func normalizedCollectPoints(points []driver.DriverPoint) []models.CollectPoint 
 		return nil
 	}
 	return points[:write]
+}
+
+func canReuseCollectedPoints(points []driver.DriverPoint) bool {
+	for i := range points {
+		name := trimCollectorText(points[i].FieldName)
+		if name == "" {
+			return false
+		}
+		if points[i].FieldName != name {
+			return false
+		}
+	}
+	return true
 }
 
 func canReuseCollectedDataFields(data map[string]string) bool {

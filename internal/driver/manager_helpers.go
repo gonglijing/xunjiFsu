@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const driverReadRetryInterval = 2 * time.Millisecond
+
 func validI64Ptr(ptr uint64) bool {
 	return ptr != 0 && ptr <= uint64(^uint32(0))
 }
@@ -18,9 +20,12 @@ func validI64PtrSize(ptr uint64, size int) bool {
 }
 
 func readWithTimeout(port SerialPort, buf []byte, expect int, timeout time.Duration) (int, error) {
+	if timeout <= 0 {
+		timeout = driverReadRetryInterval
+	}
 	deadline := time.Now().Add(timeout)
 	read := 0
-	for read < expect && time.Now().Before(deadline) {
+	for read < expect {
 		n, err := port.Read(buf[read:expect])
 		if n > 0 {
 			read += n
@@ -31,15 +36,26 @@ func readWithTimeout(port SerialPort, buf []byte, expect int, timeout time.Durat
 		if read >= expect {
 			break
 		}
-		time.Sleep(2 * time.Millisecond)
+		if n > 0 {
+			continue
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		if remaining > driverReadRetryInterval {
+			remaining = driverReadRetryInterval
+		}
+		time.Sleep(remaining)
 	}
 	if read < expect {
-		return read, fmt.Errorf("timeout")
+		return read, ErrDriverReadTimeout
 	}
 	return read, nil
 }
 
 var ErrPluginEmptyOutput = errors.New("plugin returned empty output")
+var ErrDriverReadTimeout = errors.New("timeout")
 
 func callPlugin(ctx context.Context, driver *WasmDriver, function string, input []byte) (uint32, []byte, error) {
 	if ctx == nil {

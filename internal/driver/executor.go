@@ -553,11 +553,11 @@ func mapResultFields(result *DriverResult) map[string]string {
 	if len(result.Points) > 0 {
 		var fields map[string]string
 		for _, point := range result.Points {
-			name := strings.TrimSpace(point.FieldName)
+			name := trimDriverFieldName(point.FieldName)
 			if name == "" {
 				continue
 			}
-			if isDriverIdentityField(name) {
+			if isNormalizedDriverIdentityField(name) {
 				continue
 			}
 			if fields == nil {
@@ -577,11 +577,11 @@ func mapResultFields(result *DriverResult) map[string]string {
 
 	var fields map[string]string
 	for key, value := range result.Data {
-		name := strings.TrimSpace(key)
+		name := trimDriverFieldName(key)
 		if name == "" {
 			continue
 		}
-		if isDriverIdentityField(name) {
+		if isNormalizedDriverIdentityField(name) {
 			continue
 		}
 		if fields == nil {
@@ -594,13 +594,14 @@ func mapResultFields(result *DriverResult) map[string]string {
 
 func canReuseResultData(data map[string]string) bool {
 	for key := range data {
-		if strings.TrimSpace(key) == "" {
+		name := trimDriverFieldName(key)
+		if name == "" {
 			return false
 		}
-		if key != strings.TrimSpace(key) {
+		if key != name {
 			return false
 		}
-		if isDriverIdentityField(key) {
+		if isNormalizedDriverIdentityField(name) {
 			return false
 		}
 	}

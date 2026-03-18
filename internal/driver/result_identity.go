@@ -3,6 +3,7 @@ package driver
 import (
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 )
 
 type driverIdentityProbe struct {
@@ -72,8 +73,52 @@ func firstNonEmptyTrimmed(values ...string) string {
 }
 
 func isDriverIdentityField(field string) bool {
-	switch strings.ToLower(strings.TrimSpace(field)) {
-	case "productkey", "product_key", "devicekey", "device_key":
+	return isNormalizedDriverIdentityField(trimDriverFieldName(field))
+}
+
+func isNormalizedDriverIdentityField(field string) bool {
+	switch len(field) {
+	case 9:
+		return strings.EqualFold(field, "devicekey")
+	case 10:
+		return strings.EqualFold(field, "productkey") || strings.EqualFold(field, "device_key")
+	case 11:
+		return strings.EqualFold(field, "product_key")
+	default:
+		return false
+	}
+}
+
+func trimDriverFieldName(s string) string {
+	if s == "" {
+		return ""
+	}
+	start := 0
+	end := len(s)
+	for start < end && isASCIIDriverSpace(s[start]) {
+		start++
+	}
+	if start == end {
+		return ""
+	}
+	for end > start && isASCIIDriverSpace(s[end-1]) {
+		end--
+	}
+	if start == 0 && end == len(s) {
+		if s[0] < utf8.RuneSelf && s[len(s)-1] < utf8.RuneSelf {
+			return s
+		}
+		return strings.TrimSpace(s)
+	}
+	if s[start] < utf8.RuneSelf && s[end-1] < utf8.RuneSelf {
+		return s[start:end]
+	}
+	return strings.TrimSpace(s)
+}
+
+func isASCIIDriverSpace(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
 		return true
 	default:
 		return false

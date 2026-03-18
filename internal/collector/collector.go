@@ -60,6 +60,8 @@ type Collector struct {
 type collectTask struct {
 	device              *models.Device
 	preparedRead        *driver.PreparedExecution
+	deviceProductKey    string
+	deviceKey           string
 	interval            time.Duration
 	storageInterval     time.Duration
 	nextRun             time.Time
@@ -649,14 +651,16 @@ func (c *Collector) popNextCurrentTaskLocked() *collectTask {
 func newCollectTask(device *models.Device, previous *collectTask) *collectTask {
 	interval := resolveCollectInterval(device.CollectInterval)
 	task := &collectTask{
-		device:          device,
-		preparedRead:    driver.NewPreparedExecution(device),
-		interval:        interval,
-		storageInterval: resolveStorageInterval(device.StorageInterval),
-		nextRun:         time.Now().Add(interval),
-		lastRun:         time.Time{},
-		lastErrorKind:   collectErrorKindNone,
-		index:           -1,
+		device:           device,
+		preparedRead:     driver.NewPreparedExecution(device),
+		deviceProductKey: trimCollectorText(device.ProductKey),
+		deviceKey:        trimCollectorText(device.DeviceKey),
+		interval:         interval,
+		storageInterval:  resolveStorageInterval(device.StorageInterval),
+		nextRun:          time.Now().Add(interval),
+		lastRun:          time.Time{},
+		lastErrorKind:    collectErrorKindNone,
+		index:            -1,
 	}
 	if previous != nil {
 		task.lastRun = previous.lastRun
@@ -676,6 +680,8 @@ func (c *Collector) refreshTaskLocked(task *collectTask, device *models.Device) 
 
 	task.device = device
 	task.preparedRead = driver.NewPreparedExecution(device)
+	task.deviceProductKey = trimCollectorText(device.ProductKey)
+	task.deviceKey = trimCollectorText(device.DeviceKey)
 	task.interval = resolveCollectInterval(device.CollectInterval)
 	task.storageInterval = resolveStorageInterval(device.StorageInterval)
 	task.nextRun = time.Now().Add(task.interval)
@@ -732,6 +738,15 @@ func (c *Collector) isTaskCurrent(task *collectTask) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.isTaskCurrentLocked(task)
+}
+
+func (c *Collector) findTask(deviceID int64) *collectTask {
+	if c == nil || deviceID <= 0 {
+		return nil
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.tasks[deviceID]
 }
 
 func (c *Collector) waitForStopOrWake(delay time.Duration) bool {

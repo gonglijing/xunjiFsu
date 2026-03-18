@@ -157,6 +157,42 @@ func TestResolveDriverProductKeyFromResultData(t *testing.T) {
 	}
 }
 
+func TestTrimDriverFieldName(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{input: "", want: ""},
+		{input: " temperature ", want: "temperature"},
+		{input: "\tdevice_key\r", want: "device_key"},
+		{input: "中文", want: "中文"},
+	}
+
+	for _, tc := range cases {
+		if got := trimDriverFieldName(tc.input); got != tc.want {
+			t.Fatalf("trimDriverFieldName(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestIsDriverIdentityField(t *testing.T) {
+	cases := []struct {
+		field string
+		want  bool
+	}{
+		{field: " productKey ", want: true},
+		{field: "PRODUCT_KEY", want: true},
+		{field: "deviceKey", want: true},
+		{field: "temperature", want: false},
+	}
+
+	for _, tc := range cases {
+		if got := isDriverIdentityField(tc.field); got != tc.want {
+			t.Fatalf("isDriverIdentityField(%q) = %v, want %v", tc.field, got, tc.want)
+		}
+	}
+}
+
 func TestFirstNonEmptyTrimmed(t *testing.T) {
 	got := firstNonEmptyTrimmed("", "  ", " value ", "other")
 	if got != "value" {
