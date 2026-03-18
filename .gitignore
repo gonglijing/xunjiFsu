@@ -18,6 +18,7 @@
 # ------------------------------------------
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *.swn
@@ -75,6 +76,7 @@ drvs/
 build/
 dist/
 bin/
+deploy/
 
 # ------------------------------------------
 # Configuration (if contains secrets)
@@ -82,6 +84,7 @@ bin/
 config.local.yaml
 *.local.yml
 *.local.yaml
+config/session_secret.key
 
 
 
