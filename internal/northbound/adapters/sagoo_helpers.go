@@ -107,11 +107,6 @@ func parseIdentityMap(identity map[string]interface{}) (string, string) {
 	return productKey, deviceKey
 }
 
-func isReservedCommandKey(key string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(key))
-	return isReservedCommandKeyNormalized(normalized)
-}
-
 func isReservedCommandKeyNormalized(normalized string) bool {
 	switch normalized {
 	case "id", "method", "version", "params",

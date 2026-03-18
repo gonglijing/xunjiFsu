@@ -64,13 +64,21 @@ func setupThresholdCacheTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
+func resetThresholdCache() {
+	cache.mu.Lock()
+	cache.thresholds = make(map[int64][]*models.Threshold)
+	cache.rules = make(map[int64][]thresholdEvalRule)
+	cache.lastRefresh = time.Time{}
+	cache.mu.Unlock()
+}
+
 func TestGetDeviceThresholds_RefreshesStaleCache(t *testing.T) {
 	oldDB := database.ParamDB
 	db := setupThresholdCacheTestDB(t)
 	database.ParamDB = db
 	defer func() {
 		StopThresholdCache()
-		InvalidateAllCache()
+		resetThresholdCache()
 		database.ParamDB = oldDB
 		_ = db.Close()
 	}()
@@ -89,15 +97,15 @@ func TestGetDeviceThresholds_RefreshesStaleCache(t *testing.T) {
 		t.Fatalf("insert threshold failed: %v", err)
 	}
 
-	InvalidateAllCache()
+	resetThresholdCache()
 	cache.mu.Lock()
 	cache.thresholds[1] = []*models.Threshold{}
 	cache.lastRefresh = time.Now().Add(-3 * cache.interval)
 	cache.mu.Unlock()
 
-	thresholds, err := GetDeviceThresholds(1)
+	thresholds, _, err := getThresholdCacheEntry(1)
 	if err != nil {
-		t.Fatalf("GetDeviceThresholds failed: %v", err)
+		t.Fatalf("getThresholdCacheEntry failed: %v", err)
 	}
 	if len(thresholds) != 1 {
 		t.Fatalf("expected 1 threshold after stale refresh, got %d", len(thresholds))
@@ -113,7 +121,7 @@ func TestThresholdCache_RefreshRebuildsAndDropsStaleEntries(t *testing.T) {
 	database.ParamDB = db
 	defer func() {
 		StopThresholdCache()
-		InvalidateAllCache()
+		resetThresholdCache()
 		database.ParamDB = oldDB
 		_ = db.Close()
 	}()
@@ -136,7 +144,7 @@ func TestThresholdCache_RefreshRebuildsAndDropsStaleEntries(t *testing.T) {
 		t.Fatalf("insert thresholds failed: %v", err)
 	}
 
-	InvalidateAllCache()
+	resetThresholdCache()
 	cache.mu.Lock()
 	cache.thresholds[12345] = []*models.Threshold{{DeviceID: 12345, FieldName: "stale"}}
 	cache.mu.Unlock()
@@ -163,7 +171,7 @@ func TestThresholdCache_StartStopIdempotent(t *testing.T) {
 	database.ParamDB = db
 	defer func() {
 		StopThresholdCache()
-		InvalidateAllCache()
+		resetThresholdCache()
 		database.ParamDB = oldDB
 		_ = db.Close()
 	}()
@@ -197,7 +205,7 @@ func TestGetDeviceThresholds_DoesNotCacheEmptyMiss(t *testing.T) {
 	database.ParamDB = db
 	defer func() {
 		StopThresholdCache()
-		InvalidateAllCache()
+		resetThresholdCache()
 		database.ParamDB = oldDB
 		_ = db.Close()
 	}()
@@ -210,11 +218,11 @@ func TestGetDeviceThresholds_DoesNotCacheEmptyMiss(t *testing.T) {
 		t.Fatalf("insert device failed: %v", err)
 	}
 
-	InvalidateAllCache()
+	resetThresholdCache()
 
-	thresholds, err := GetDeviceThresholds(10)
+	thresholds, _, err := getThresholdCacheEntry(10)
 	if err != nil {
-		t.Fatalf("GetDeviceThresholds first call failed: %v", err)
+		t.Fatalf("getThresholdCacheEntry first call failed: %v", err)
 	}
 	if len(thresholds) != 0 {
 		t.Fatalf("expected 0 thresholds, got %d", len(thresholds))
@@ -233,9 +241,9 @@ func TestGetDeviceThresholds_DoesNotCacheEmptyMiss(t *testing.T) {
 		t.Fatalf("insert threshold failed: %v", err)
 	}
 
-	thresholds, err = GetDeviceThresholds(10)
+	thresholds, _, err = getThresholdCacheEntry(10)
 	if err != nil {
-		t.Fatalf("GetDeviceThresholds second call failed: %v", err)
+		t.Fatalf("getThresholdCacheEntry second call failed: %v", err)
 	}
 	if len(thresholds) != 1 {
 		t.Fatalf("expected 1 threshold after insert, got %d", len(thresholds))
@@ -243,7 +251,7 @@ func TestGetDeviceThresholds_DoesNotCacheEmptyMiss(t *testing.T) {
 }
 
 func TestGetDeviceThresholdRules_RebuildsMissingRulesCache(t *testing.T) {
-	InvalidateAllCache()
+	resetThresholdCache()
 
 	cache.mu.Lock()
 	cache.thresholds[99] = []*models.Threshold{

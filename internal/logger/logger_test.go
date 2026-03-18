@@ -108,143 +108,6 @@ func TestStructuredLogger_NewEntryCallerOnlyForJSON(t *testing.T) {
 	}
 }
 
-func TestStructuredLogger_WithModule(t *testing.T) {
-	original := NewStructuredLogger(DEBUG, "original", true)
-
-	withModule := original.WithModule("new_module")
-
-	if withModule.module != "new_module" {
-		t.Errorf("module = %s, want 'new_module'", withModule.module)
-	}
-
-	// 验证原始 logger 不受影响
-	if original.module != "original" {
-		t.Errorf("original.module changed to %s", original.module)
-	}
-}
-
-func TestStructuredLogger_Debug(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(DEBUG, "test", false)
-	logger.logger.SetOutput(&buf)
-
-	logger.Debug("test message", "key", "value")
-
-	output := buf.String()
-	if !strings.Contains(output, "test message") {
-		t.Errorf("Debug output = %s, want to contain 'test message'", output)
-	}
-	if !strings.Contains(output, "DEBUG") {
-		t.Errorf("Debug output = %s, want to contain 'DEBUG'", output)
-	}
-}
-
-func TestStructuredLogger_Debug_Suppressed(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
-
-	logger.Debug("test message")
-
-	output := buf.String()
-	if output != "" {
-		t.Errorf("Debug output = %s, want empty (suppressed)", output)
-	}
-}
-
-func TestStructuredLogger_Info(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
-
-	logger.Info("info message", "key", "value")
-
-	output := buf.String()
-	if !strings.Contains(output, "info message") {
-		t.Errorf("Info output = %s, want to contain 'info message'", output)
-	}
-	if !strings.Contains(output, "INFO") {
-		t.Errorf("Info output = %s, want to contain 'INFO'", output)
-	}
-}
-
-func TestStructuredLogger_Warn(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
-
-	logger.Warn("warning message", "key", "value")
-
-	output := buf.String()
-	if !strings.Contains(output, "warning message") {
-		t.Errorf("Warn output = %s, want to contain 'warning message'", output)
-	}
-	if !strings.Contains(output, "WARN") {
-		t.Errorf("Warn output = %s, want to contain 'WARN'", output)
-	}
-}
-
-func TestStructuredLogger_Error(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
-
-	testErr := os.ErrNotExist
-	logger.Error("error message", testErr, "key", "value")
-
-	output := buf.String()
-	if !strings.Contains(output, "error message") {
-		t.Errorf("Error output = %s, want to contain 'error message'", output)
-	}
-	if !strings.Contains(output, "ERROR") {
-		t.Errorf("Error output = %s, want to contain 'ERROR'", output)
-	}
-	if !strings.Contains(output, "file does not exist") {
-		t.Errorf("Error output should contain error description")
-	}
-}
-
-func TestStructuredLogger_Error_NoError(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
-
-	logger.Error("error message", nil, "key", "value")
-
-	output := buf.String()
-	if !strings.Contains(output, "error message") {
-		t.Errorf("Error output = %s, want to contain 'error message'", output)
-	}
-}
-
-func TestStructuredLogger_Fatal(t *testing.T) {
-	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
-	originalExit := exitFunc
-	defer func() { exitFunc = originalExit }()
-
-	exitCalled := false
-	exitCode := 0
-	exitFunc = func(code int) {
-		exitCalled = true
-		exitCode = code
-	}
-
-	testErr := os.ErrPermission
-	logger.Fatal("fatal message", testErr)
-
-	if !exitCalled {
-		t.Fatal("expected exit function to be called")
-	}
-	if exitCode != 1 {
-		t.Fatalf("exit code = %d, want 1", exitCode)
-	}
-	output := buf.String()
-	if !strings.Contains(output, "fatal message") {
-		t.Errorf("Fatal output = %s, want to contain 'fatal message'", output)
-	}
-}
 
 func TestParseKeyValues(t *testing.T) {
 	tests := []struct {
@@ -445,7 +308,7 @@ func TestStructuredLogger_Output_JSON(t *testing.T) {
 	logger := NewStructuredLogger(INFO, "test", true)
 	logger.logger.SetOutput(&buf)
 
-	logger.Info("test message", "key", "value")
+	logger.log(INFO, "test message", "key", "value")
 
 	output := buf.String()
 
@@ -465,7 +328,7 @@ func TestStructuredLogger_Output_Text(t *testing.T) {
 	logger := NewStructuredLogger(INFO, "test", false)
 	logger.logger.SetOutput(&buf)
 
-	logger.Info("test message", "key", "value")
+	logger.log(INFO, "test message", "key", "value")
 
 	output := buf.String()
 

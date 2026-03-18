@@ -128,7 +128,7 @@ func TestCheckThresholds_ShieldAndRepeatInterval(t *testing.T) {
 		_ = db.Close()
 	})
 
-	InvalidateAllCache()
+	resetThresholdCache()
 	clearAlarmStateForDevice(1)
 	InvalidateAlarmRepeatIntervalCache()
 

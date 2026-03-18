@@ -64,53 +64,6 @@ func NewStructuredLogger(level LogLevel, module string, jsonOutput bool) *Struct
 	}
 }
 
-// WithModule 创建带模块名的日志
-func (l *StructuredLogger) WithModule(module string) *StructuredLogger {
-	return &StructuredLogger{
-		level:      l.level,
-		module:     module,
-		jsonOutput: l.jsonOutput,
-		logger:     l.logger,
-	}
-}
-
-// Debug 调试日志
-func (l *StructuredLogger) Debug(msg string, keysAndValues ...interface{}) {
-	l.log(DEBUG, msg, keysAndValues...)
-}
-
-// Info 信息日志
-func (l *StructuredLogger) Info(msg string, keysAndValues ...interface{}) {
-	l.log(INFO, msg, keysAndValues...)
-}
-
-// Warn 警告日志
-func (l *StructuredLogger) Warn(msg string, keysAndValues ...interface{}) {
-	l.log(WARN, msg, keysAndValues...)
-}
-
-// Error 错误日志
-func (l *StructuredLogger) Error(msg string, err error, keysAndValues ...interface{}) {
-	entry := l.newEntry(ERROR, msg)
-	if err != nil {
-		entry.Error = err.Error()
-	}
-	if len(keysAndValues) > 0 {
-		entry.Fields = parseKeyValues(keysAndValues...)
-	}
-	l.output(entry)
-}
-
-// Fatal 致命日志
-func (l *StructuredLogger) Fatal(msg string, err error) {
-	entry := l.newEntry(FATAL, msg)
-	if err != nil {
-		entry.Error = err.Error()
-	}
-	l.output(entry)
-	exitFunc(1)
-}
-
 // log 内部日志方法
 func (l *StructuredLogger) log(level LogLevel, msg string, keysAndValues ...interface{}) {
 	if level < l.level {

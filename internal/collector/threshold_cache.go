@@ -133,12 +133,6 @@ func (c *thresholdCache) Refresh() {
 	log.Printf("Threshold cache refreshed, %d devices with thresholds, %d thresholds", len(next), len(thresholds))
 }
 
-// GetDeviceThresholds 获取设备的阈值配置（优先从缓存获取）
-func GetDeviceThresholds(deviceID int64) ([]*models.Threshold, error) {
-	thresholds, _, err := getThresholdCacheEntry(deviceID)
-	return thresholds, err
-}
-
 func getDeviceThresholdRules(deviceID int64) ([]thresholdEvalRule, error) {
 	_, rules, err := getThresholdCacheEntry(deviceID)
 	return rules, err
@@ -205,15 +199,6 @@ func InvalidateDeviceCache(deviceID int64) {
 	cache.mu.Lock()
 	delete(cache.thresholds, deviceID)
 	delete(cache.rules, deviceID)
-	cache.mu.Unlock()
-}
-
-// InvalidateAllCache 使所有缓存失效
-func InvalidateAllCache() {
-	cache.mu.Lock()
-	cache.thresholds = make(map[int64][]*models.Threshold)
-	cache.rules = make(map[int64][]thresholdEvalRule)
-	cache.lastRefresh = time.Time{}
 	cache.mu.Unlock()
 }
 

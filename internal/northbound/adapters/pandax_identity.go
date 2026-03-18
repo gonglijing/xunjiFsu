@@ -69,10 +69,6 @@ func (a *PandaXAdapter) isInitialized() bool {
 	return a.initialized
 }
 
-func (a *PandaXAdapter) nextID(prefix string) string {
-	return nextPrefixedID(prefix, &a.seq)
-}
-
 func formatMetricFloat(value float64) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
