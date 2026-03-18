@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	extism "github.com/extism/go-sdk"
@@ -125,17 +126,16 @@ type SerialPort interface {
 
 // WasmDriver WASM驱动实现
 type WasmDriver struct {
-	ID                int64
-	Name              string
-	plugin            *extism.Plugin
-	mu                sync.RWMutex
-	lastActive        time.Time
-	config            string
-	resourceID        int64 // 关联的串口资源ID
-	exportedFunctions []string
-	exportedSet       map[string]struct{}
-	version           string
-	productKey        string
+	ID                 int64
+	Name               string
+	plugin             *extism.Plugin
+	lastActiveUnixNano int64
+	config             string
+	resourceID         int64 // 关联的串口资源ID
+	exportedFunctions  []string
+	exportedSet        map[string]struct{}
+	version            string
+	productKey         string
 }
 
 // DriverManager 驱动管理器
@@ -217,16 +217,16 @@ func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resou
 	}
 
 	wasmDriver := &WasmDriver{
-		ID:                driver.ID,
-		Name:              driver.Name,
-		plugin:            plugin,
-		lastActive:        time.Now(),
-		config:            driver.ConfigSchema,
-		resourceID:        resourceID,
-		exportedFunctions: exportedFunctions,
-		exportedSet:       exportedSet,
-		version:           version,
-		productKey:        productKey,
+		ID:                 driver.ID,
+		Name:               driver.Name,
+		plugin:             plugin,
+		lastActiveUnixNano: time.Now().UnixNano(),
+		config:             driver.ConfigSchema,
+		resourceID:         resourceID,
+		exportedFunctions:  exportedFunctions,
+		exportedSet:        exportedSet,
+		version:            version,
+		productKey:         productKey,
 	}
 
 	m.drivers[driver.ID] = wasmDriver
@@ -293,9 +293,7 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 		return nil, ErrDriverNotFound
 	}
 
-	driver.mu.Lock()
-	driver.lastActive = time.Now()
-	driver.mu.Unlock()
+	atomic.StoreInt64(&driver.lastActiveUnixNano, time.Now().UnixNano())
 
 	if !driver.hasFunction(function) {
 		return nil, fmt.Errorf("plugin function not found: %s", function)
@@ -442,20 +440,18 @@ func buildDriverRuntime(driver *WasmDriver) *DriverRuntime {
 		return nil
 	}
 
-	driver.mu.RLock()
 	runtime := &DriverRuntime{
 		ID:         driver.ID,
 		Name:       driver.Name,
 		Loaded:     true,
 		ResourceID: driver.resourceID,
-		LastActive: driver.lastActive,
+		LastActive: time.Unix(0, atomic.LoadInt64(&driver.lastActiveUnixNano)),
 		Version:    driver.version,
 		ProductKey: driver.productKey,
 	}
 	if len(driver.exportedFunctions) > 0 {
 		runtime.ExportedFunctions = append(make([]string, 0, len(driver.exportedFunctions)), driver.exportedFunctions...)
 	}
-	driver.mu.RUnlock()
 
 	return runtime
 }

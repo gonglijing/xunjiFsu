@@ -100,3 +100,23 @@ func BenchmarkWasmDriverHasFunction_Cached(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkBuildDriverRuntime_Cached(b *testing.B) {
+	driver := &WasmDriver{
+		ID:                 1,
+		Name:               "modbus_tcp",
+		resourceID:         8,
+		lastActiveUnixNano: time.Now().UnixNano(),
+		version:            "1.2.3",
+		productKey:         "pk-1",
+		exportedFunctions:  []string{"handle", "version"},
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		runtime := buildDriverRuntime(driver)
+		if runtime == nil || runtime.Version != "1.2.3" {
+			b.Fatal("unexpected runtime")
+		}
+	}
+}

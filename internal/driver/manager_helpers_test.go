@@ -270,11 +270,11 @@ func TestBuildDriverRuntimeUsesCachedExports(t *testing.T) {
 		ID:                1,
 		Name:              "modbus_tcp",
 		resourceID:        7,
-		lastActive:        time.Unix(1700000000, 0),
 		version:           "1.2.3",
 		productKey:        "pk-1",
 		exportedFunctions: []string{"handle", "version"},
 	}
+	driver.lastActiveUnixNano = time.Unix(1700000000, 0).UnixNano()
 
 	runtime := buildDriverRuntime(driver)
 	if runtime == nil {
