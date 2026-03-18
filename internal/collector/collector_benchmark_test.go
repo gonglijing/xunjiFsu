@@ -162,6 +162,7 @@ func BenchmarkNumericFieldLookupPointCached_100Rules(b *testing.B) {
 				b.Fatalf("unexpected lookup result for %s: (%v, %v)", field, value, ok)
 			}
 		}
+		lookup.release()
 	}
 }
 

@@ -4,11 +4,92 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
+
+var stringStringMapPool = sync.Pool{
+	New: func() any {
+		return make(map[string]string)
+	},
+}
+
+var stringFloatMapPool = sync.Pool{
+	New: func() any {
+		return make(map[string]float64)
+	},
+}
+
+var stringSetPool = sync.Pool{
+	New: func() any {
+		return make(map[string]struct{})
+	},
+}
+
+var pointValueMapPool = sync.Pool{
+	New: func() any {
+		return make(map[string]interface{})
+	},
+}
+
+func acquireStringStringMap() map[string]string {
+	return stringStringMapPool.Get().(map[string]string)
+}
+
+func releaseStringStringMap(m map[string]string) {
+	if m == nil {
+		return
+	}
+	for key := range m {
+		delete(m, key)
+	}
+	stringStringMapPool.Put(m)
+}
+
+func acquireStringFloatMap() map[string]float64 {
+	return stringFloatMapPool.Get().(map[string]float64)
+}
+
+func releaseStringFloatMap(m map[string]float64) {
+	if m == nil {
+		return
+	}
+	for key := range m {
+		delete(m, key)
+	}
+	stringFloatMapPool.Put(m)
+}
+
+func acquireStringSet() map[string]struct{} {
+	return stringSetPool.Get().(map[string]struct{})
+}
+
+func releaseStringSet(m map[string]struct{}) {
+	if m == nil {
+		return
+	}
+	for key := range m {
+		delete(m, key)
+	}
+	stringSetPool.Put(m)
+}
+
+func acquirePointValueMap() map[string]interface{} {
+	return pointValueMapPool.Get().(map[string]interface{})
+}
+
+func releasePointValueMap(m map[string]interface{}) {
+	if m == nil {
+		return
+	}
+	for key := range m {
+		delete(m, key)
+	}
+	pointValueMapPool.Put(m)
+}
 
 type numericFieldLookup struct {
 	raw        map[string]string
@@ -25,6 +106,22 @@ func newNumericFieldLookup(fields map[string]string, points []models.CollectPoin
 		raw:    fields,
 		points: points,
 	}
+}
+
+func (l *numericFieldLookup) release() {
+	if l == nil {
+		return
+	}
+	releaseStringStringMap(l.normalized)
+	releaseStringFloatMap(l.parsed)
+	releaseStringSet(l.invalid)
+	releasePointValueMap(l.pointRaw)
+	releasePointValueMap(l.pointNorm)
+	l.normalized = nil
+	l.parsed = nil
+	l.invalid = nil
+	l.pointRaw = nil
+	l.pointNorm = nil
 }
 
 func normalizeFieldName(field string) string {
@@ -81,7 +178,7 @@ func (l *numericFieldLookup) cacheParsedFloat(key string, value float64) {
 		return
 	}
 	if l.parsed == nil {
-		l.parsed = make(map[string]float64, 8)
+		l.parsed = acquireStringFloatMap()
 	}
 	l.parsed[key] = value
 }
@@ -91,7 +188,7 @@ func (l *numericFieldLookup) cacheInvalidFloat(key string) {
 		return
 	}
 	if l.invalid == nil {
-		l.invalid = make(map[string]struct{}, 4)
+		l.invalid = acquireStringSet()
 	}
 	l.invalid[key] = struct{}{}
 }
@@ -101,7 +198,7 @@ func (l *numericFieldLookup) ensurePointRaw() {
 		return
 	}
 
-	l.pointRaw = make(map[string]interface{}, len(l.points))
+	l.pointRaw = acquirePointValueMap()
 	for _, point := range l.points {
 		name := strings.TrimSpace(point.FieldName)
 		if name == "" {
@@ -119,7 +216,7 @@ func (l *numericFieldLookup) ensurePointNormalized() {
 	}
 
 	l.ensurePointRaw()
-	l.pointNorm = make(map[string]interface{}, len(l.pointRaw))
+	l.pointNorm = acquirePointValueMap()
 	for name, value := range l.pointRaw {
 		normalizedName := strings.ToLower(name)
 		if normalizedName == "" {
@@ -145,7 +242,7 @@ func (l *numericFieldLookup) getRawValueWithNormalized(field, normalized string)
 
 	if l != nil && len(l.raw) > 0 {
 		if l.normalized == nil {
-			l.normalized = make(map[string]string, len(l.raw))
+			l.normalized = acquireStringStringMap()
 			for key, candidate := range l.raw {
 				normalizedKey := normalizeFieldName(key)
 				if normalizedKey == "" {
@@ -301,6 +398,7 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 	repeatInterval := resolveAlarmRepeatInterval()
 	maybePruneAlarmStates(now, repeatInterval)
 	lookup := newNumericFieldLookup(data.Fields, data.Points)
+	defer lookup.release()
 	for _, rule := range rules {
 		threshold := rule.threshold
 		if threshold == nil {
