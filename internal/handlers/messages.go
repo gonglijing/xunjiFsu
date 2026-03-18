@@ -33,7 +33,6 @@ func newAPIError(code, message string) APIErrorDef {
 var (
 	apiErrInvalidID                       = newAPIError("E_INVALID_ID", "Invalid ID")
 	apiErrInvalidRequestBody              = newAPIError("E_INVALID_REQUEST_BODY", "Invalid request body")
-	apiErrInvalidDeviceID                 = newAPIError("E_INVALID_DEVICE_ID", errInvalidDeviceIDMessage)
 	apiErrDeviceNotFound                  = newAPIError("E_DEVICE_NOT_FOUND", errDeviceNotFoundMessage)
 	apiErrDriverNotFound                  = newAPIError("E_DRIVER_NOT_FOUND", errDriverNotFoundMessage)
 	apiErrNorthboundConfigNotFound        = newAPIError("E_NORTHBOUND_NOT_FOUND", errNorthboundConfigNotFoundMessage)
@@ -107,8 +106,6 @@ var (
 	apiErrExecuteDriverFailed             = newAPIError("E_EXECUTE_DRIVER_FAILED", "执行驱动函数失败")
 	apiErrExecuteDriverParamInvalid       = newAPIError("E_EXECUTE_DRIVER_PARAM_INVALID", "驱动执行参数无效")
 	apiErrStartCollectorFailed            = newAPIError("E_START_COLLECTOR_FAILED", "启动采集器失败")
-	apiErrListPaginatedDevicesFailed      = newAPIError("E_LIST_PAGINATED_DEVICES_FAILED", "分页查询设备失败")
-	apiErrListPaginatedDataPointsFailed   = newAPIError("E_LIST_PAGINATED_DATA_POINTS_FAILED", "分页查询历史数据失败")
 	apiErrHistoryDataQueryInvalid         = newAPIError("E_HISTORY_DATA_QUERY_INVALID", "历史数据查询参数无效")
 	apiErrHistoryPointQueryInvalid        = newAPIError("E_HISTORY_POINT_QUERY_INVALID", "历史测点参数无效")
 )

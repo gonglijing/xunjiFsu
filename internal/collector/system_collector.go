@@ -191,10 +191,6 @@ func cloneSystemStats(stats *models.SystemStats) *models.SystemStats {
 	return &clone
 }
 
-func (c *SystemStatsCollector) CollectSystemStatsFresh() *models.SystemStats {
-	return c.collectSystemStats()
-}
-
 // collectSystemStats 采集一次系统属性
 func (c *SystemStatsCollector) collectSystemStats() *models.SystemStats {
 	stats := &models.SystemStats{

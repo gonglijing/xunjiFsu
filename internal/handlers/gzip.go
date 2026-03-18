@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"compress/gzip"
 	"io"
 	"net/http"
@@ -67,28 +66,6 @@ func (w *gzipResponseWriter) Flush() {
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
-}
-
-// GzipResponse 压缩响应数据
-func GzipResponse(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	_, err := gz.Write(data)
-	if err != nil {
-		return nil, err
-	}
-	gz.Close()
-	return buf.Bytes(), nil
-}
-
-// GunzipRequest 解压请求数据
-func GunzipRequest(body io.Reader) ([]byte, error) {
-	gr, err := gzip.NewReader(body)
-	if err != nil {
-		return nil, err
-	}
-	defer gr.Close()
-	return io.ReadAll(gr)
 }
 
 func isGzipAccepted(acceptEncoding string) bool {

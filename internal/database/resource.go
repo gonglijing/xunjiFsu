@@ -65,11 +65,6 @@ func EnsureDeviceResourceColumn() {
 	ParamDB.Exec(`ALTER TABLE devices ADD COLUMN resource_id INTEGER REFERENCES resources(id)`)
 }
 
-func BindDeviceResource(deviceID, resourceID int64) error {
-	_, err := ParamDB.Exec(`UPDATE devices SET resource_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resourceID, deviceID)
-	return err
-}
-
 // GetResourceByID returns resource
 func GetResourceByID(id int64) (*models.Resource, error) {
 	resource := &models.Resource{}

@@ -80,11 +80,6 @@ func WriteDeleted(w http.ResponseWriter) {
 	WriteSuccess(w, nil)
 }
 
-// WriteError 错误响应
-func WriteError(w http.ResponseWriter, status int, message string) {
-	WriteErrorCode(w, status, "", message)
-}
-
 // WriteErrorCode 带错误码的错误响应
 func WriteErrorCode(w http.ResponseWriter, status int, code, message string) {
 	WriteJSON(w, status, APIResponse{
@@ -128,15 +123,11 @@ func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
 
 // WriteServerError 500 错误
 func WriteServerError(w http.ResponseWriter, message string) {
-	WriteServerErrorCode(w, defaultServerErrorCode, message)
+	WriteErrorCode(w, http.StatusInternalServerError, defaultServerErrorCode, message)
 }
 
 func WriteServerErrorDef(w http.ResponseWriter, def APIErrorDef) {
 	WriteErrorDef(w, http.StatusInternalServerError, def)
-}
-
-func WriteServerErrorCode(w http.ResponseWriter, code, message string) {
-	WriteErrorCode(w, http.StatusInternalServerError, code, message)
 }
 
 // ParseRequest 解析请求 JSON 或表单数据
