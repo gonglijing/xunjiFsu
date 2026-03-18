@@ -208,13 +208,16 @@ func BenchmarkBatchSaveDataPoints_32Fields(b *testing.B) {
 
 	oldSyncBatchTrigger := syncBatchTrigger
 	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
 	b.Cleanup(func() {
 		syncBatchTrigger = oldSyncBatchTrigger
 		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
 	})
 
 	syncBatchTrigger = int(^uint(0) >> 1)
 	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
 
 	entries := makeBenchmarkDataPointEntries(32)
 
@@ -234,6 +237,13 @@ func BenchmarkBatchSaveDataPoints_32Fields(b *testing.B) {
 func BenchmarkBatchSaveLatestDataPoints_32Fields(b *testing.B) {
 	prepareDataPointsBenchmarkDB(b)
 
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	b.Cleanup(func() {
+		maxDataPointsLimit = oldMaxDataPointsLimit
+	})
+
+	maxDataPointsLimit = int(^uint(0) >> 1)
+
 	entries := makeBenchmarkDataPointEntries(32)
 
 	b.ReportAllocs()
@@ -251,6 +261,13 @@ func BenchmarkBatchSaveLatestDataPoints_32Fields(b *testing.B) {
 
 func BenchmarkBatchSaveDataCacheEntries_32Fields(b *testing.B) {
 	prepareDataPointsBenchmarkDB(b)
+
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	maxDataCacheLimit = int(^uint(0) >> 1)
 
 	entries := makeBenchmarkDataPointEntries(32)
 	for i := range entries {

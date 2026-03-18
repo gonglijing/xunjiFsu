@@ -142,10 +142,7 @@ func resultFieldsForCollect(res *driver.DriverResult) (map[string]string, []mode
 		return nil, points
 	}
 
-	fields := normalizedDataFields(res.Data)
-	if fields == nil {
-		fields = make(map[string]string, len(points))
-	}
+	fields := normalizedDataFieldsWithExtraCap(res.Data, len(points))
 	for _, p := range points {
 		fields[p.FieldName] = models.CollectPointValueString(p.Value)
 	}
@@ -153,6 +150,10 @@ func resultFieldsForCollect(res *driver.DriverResult) (map[string]string, []mode
 }
 
 func normalizedDataFields(data map[string]string) map[string]string {
+	return normalizedDataFieldsWithExtraCap(data, 0)
+}
+
+func normalizedDataFieldsWithExtraCap(data map[string]string, extraCap int) map[string]string {
 	if len(data) == 0 {
 		return nil
 	}
@@ -167,7 +168,7 @@ func normalizedDataFields(data map[string]string) map[string]string {
 			continue
 		}
 		if fields == nil {
-			fields = make(map[string]string, len(data))
+			fields = make(map[string]string, len(data)+extraCap)
 		}
 		fields[name] = value
 	}
