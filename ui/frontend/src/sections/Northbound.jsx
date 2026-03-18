@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, Show, For } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import ConfirmDialog from '../components/ConfirmDialog';
 import CrudTable from '../components/CrudTable';
 import LoadErrorHint from '../components/LoadErrorHint';
 import Modal from '../components/Modal';
@@ -162,6 +163,7 @@ export function Northbound() {
   const [form, setForm] = createSignal(empty);
   const [editing, setEditing] = createSignal(null);
   const [showModal, setShowModal] = createSignal(false);
+  const [confirmState, setConfirmState] = createSignal(null);
   const [saving, setSaving] = createSignal(false);
 
   // Schema 状态
@@ -301,10 +303,18 @@ export function Northbound() {
   };
 
   const remove = (id) => {
-    if (!confirm('删除该配置？')) return;
-    api.northbound.deleteNorthboundConfig(id)
-      .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => showErrorToast(toast, err, '删除失败'));
+    setConfirmState({
+      title: '删除北向配置',
+      message: '删除该配置？',
+      confirmText: '删除',
+      variant: 'danger',
+      onConfirm: () => {
+        setConfirmState(null);
+        api.northbound.deleteNorthboundConfig(id)
+          .then(() => { toast.show('success', '已删除'); load(); })
+          .catch((err) => showErrorToast(toast, err, '删除失败'));
+      },
+    });
   };
 
   const openCreate = () => {
@@ -410,6 +420,18 @@ export function Northbound() {
 
   return (
     <div>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            onCancel={() => setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
       <Card
         title="北向配置列表"
         extra={

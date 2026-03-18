@@ -1,7 +1,8 @@
-import { createSignal, onMount } from 'solid-js';
+import { createSignal, onMount, Show } from 'solid-js';
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import ConfirmDialog from '../components/ConfirmDialog';
 import CrudTable from '../components/CrudTable';
 import { showErrorToast, withErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
@@ -11,6 +12,7 @@ export function Drivers() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
   const [busyId, setBusyId] = createSignal(0);
+  const [confirmState, setConfirmState] = createSignal(null);
   const {
     loading,
     error,
@@ -33,10 +35,18 @@ export function Drivers() {
   onMount(load);
 
   const remove = (id, name) => {
-    if (!confirm(`删除驱动 ${name} ？`)) return;
-    api.drivers.deleteDriver(id)
-      .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => showErrorToast(toast, err, '删除失败'));
+    setConfirmState({
+      title: '删除驱动',
+      message: `删除驱动 ${name}？`,
+      confirmText: '删除',
+      variant: 'danger',
+      onConfirm: () => {
+        setConfirmState(null);
+        api.drivers.deleteDriver(id)
+          .then(() => { toast.show('success', '已删除'); load(); })
+          .catch((err) => showErrorToast(toast, err, '删除失败'));
+      },
+    });
   };
 
   const upload = (e) => {
@@ -73,7 +83,20 @@ export function Drivers() {
   };
 
   return (
-    <Card
+    <>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            onCancel={() => setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
+      <Card
       title="驱动管理"
       extra={
         <div class="toolbar-actions">
@@ -149,5 +172,6 @@ export function Drivers() {
         />
       )}
     </Card>
+    </>
   );
 }

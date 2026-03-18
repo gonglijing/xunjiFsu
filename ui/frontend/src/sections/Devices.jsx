@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import ConfirmDialog from '../components/ConfirmDialog';
 import CrudTable from '../components/CrudTable';
 import DeviceDetailDrawer from '../components/DeviceDetailDrawer';
 import Modal from '../components/Modal';
@@ -38,6 +39,7 @@ export function Devices() {
   const [drivers, setDrivers] = createSignal([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
+  const [confirmState, setConfirmState] = createSignal(null);
   const [search, setSearch] = createSignal('');
   const [form, setForm] = createSignal(defaultForm);
   const [editing, setEditing] = createSignal(null);
@@ -191,10 +193,18 @@ export function Devices() {
   };
 
   const remove = (id) => {
-    if (!confirm('确定删除该设备？')) return;
-    api.devices.deleteDevice(id)
-      .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => showErrorToast(toast, err, '删除失败'));
+    setConfirmState({
+      title: '删除设备',
+      message: '确定删除该设备？',
+      confirmText: '删除',
+      variant: 'danger',
+      onConfirm: () => {
+        setConfirmState(null);
+        api.devices.deleteDevice(id)
+          .then(() => { toast.show('success', '已删除'); load(); })
+          .catch((err) => showErrorToast(toast, err, '删除失败'));
+      },
+    });
   };
 
   const openWrite = (device) => {
@@ -295,6 +305,18 @@ export function Devices() {
 
   return (
     <div>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            onCancel={() => setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
       <Card
         title="设备列表"
         extra={

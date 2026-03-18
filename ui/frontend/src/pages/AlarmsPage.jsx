@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
 import { showErrorToast } from '../utils/errors';
@@ -11,6 +12,7 @@ function AlarmsPage() {
   const [items, setItems] = createSignal([]);
   const [selectedIds, setSelectedIds] = createSignal([]);
   const [actionBusy, setActionBusy] = createSignal(false);
+  const [confirmState, setConfirmState] = createSignal(null);
   const { loading, run: runAlarmsLoad } = usePageLoader(async () => {
     const res = await api.alarms.listAlarms();
     setItems(res || []);
@@ -50,17 +52,25 @@ function AlarmsPage() {
   };
 
   const removeOne = async (id) => {
-    if (!window.confirm('确认删除这条告警吗？')) return;
-    setActionBusy(true);
-    try {
-      await api.alarms.deleteAlarm(id);
-      toast.show('success', '删除成功');
-      await load();
-    } catch (err) {
-      showErrorToast(toast, err, '删除失败');
-    } finally {
-      setActionBusy(false);
-    }
+    setConfirmState({
+      title: '删除告警',
+      message: '确认删除这条告警吗？',
+      confirmText: '删除',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmState(null);
+        setActionBusy(true);
+        try {
+          await api.alarms.deleteAlarm(id);
+          toast.show('success', '删除成功');
+          await load();
+        } catch (err) {
+          showErrorToast(toast, err, '删除失败');
+        } finally {
+          setActionBusy(false);
+        }
+      },
+    });
   };
 
   const removeBatch = async () => {
@@ -69,19 +79,26 @@ function AlarmsPage() {
       toast.show('warning', '请先选择要删除的告警');
       return;
     }
-    if (!window.confirm(`确认删除选中的 ${ids.length} 条告警吗？`)) return;
-
-    setActionBusy(true);
-    try {
-      const result = await api.alarms.batchDeleteAlarms(ids);
-      const deleted = result?.deleted ?? ids.length;
-      toast.show('success', `已删除 ${deleted} 条`);
-      await load();
-    } catch (err) {
-      showErrorToast(toast, err, '批量删除失败');
-    } finally {
-      setActionBusy(false);
-    }
+    setConfirmState({
+      title: '批量删除告警',
+      message: `确认删除选中的 ${ids.length} 条告警吗？`,
+      confirmText: '批量删除',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmState(null);
+        setActionBusy(true);
+        try {
+          const result = await api.alarms.batchDeleteAlarms(ids);
+          const deleted = result?.deleted ?? ids.length;
+          toast.show('success', `已删除 ${deleted} 条`);
+          await load();
+        } catch (err) {
+          showErrorToast(toast, err, '批量删除失败');
+        } finally {
+          setActionBusy(false);
+        }
+      },
+    });
   };
 
   const clearAll = async () => {
@@ -89,25 +106,46 @@ function AlarmsPage() {
       toast.show('info', '当前没有可清空的告警');
       return;
     }
-    if (!window.confirm('确认清空全部告警日志吗？此操作不可恢复。')) return;
-
-    setActionBusy(true);
-    try {
-      const result = await api.alarms.clearAlarms();
-      const deleted = result?.deleted ?? 0;
-      toast.show('success', `已清空 ${deleted} 条告警`);
-      await load();
-    } catch (err) {
-      showErrorToast(toast, err, '清空失败');
-    } finally {
-      setActionBusy(false);
-    }
+    setConfirmState({
+      title: '清空告警日志',
+      message: '确认清空全部告警日志吗？此操作不可恢复。',
+      confirmText: '确认清空',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmState(null);
+        setActionBusy(true);
+        try {
+          const result = await api.alarms.clearAlarms();
+          const deleted = result?.deleted ?? 0;
+          toast.show('success', `已清空 ${deleted} 条告警`);
+          await load();
+        } catch (err) {
+          showErrorToast(toast, err, '清空失败');
+        } finally {
+          setActionBusy(false);
+        }
+      },
+    });
   };
 
   const allSelected = () => items().length > 0 && selectedIds().length === items().length;
 
   return (
-    <Card
+    <>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            busy={actionBusy()}
+            onCancel={() => !actionBusy() && setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
+      <Card
       title="报警日志"
       extra={(
         <div class="toolbar-actions">
@@ -194,6 +232,7 @@ function AlarmsPage() {
         </table>
       </div>
     </Card>
+    </>
   );
 }
 

@@ -1,6 +1,7 @@
 import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import api from '../api/services';
 import Card from '../components/cards';
+import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { formatDateTime } from '../utils/time';
@@ -31,6 +32,7 @@ function Realtime() {
   const [historyDeviceName, setHistoryDeviceName] = createSignal('');
   const [historyStart, setHistoryStart] = createSignal('');
   const [historyEnd, setHistoryEnd] = createSignal('');
+  const [confirmState, setConfirmState] = createSignal(null);
 
   let pollTimer;
 
@@ -112,25 +114,30 @@ function Realtime() {
     const fieldName = historyField();
     if (!deviceID || !fieldName) return;
 
-    if (!window.confirm(`确认清除测点「${historyDeviceName()} / ${fieldName}」的全部历史数据吗？此操作不可恢复。`)) {
-      return;
-    }
-
-    setHistoryClearing(true);
-    try {
-      const result = await api.data.clearHistoryData({
-        device_id: deviceID,
-        field_name: fieldName,
-      });
-      const deleted = result?.deleted ?? 0;
-      toast.show('success', `已清除 ${deleted} 条历史数据`);
-      setHistoryData([]);
-      setHistoryError('');
-    } catch (err) {
-      showErrorToast(toast, err, '清除历史数据失败');
-    } finally {
-      setHistoryClearing(false);
-    }
+    setConfirmState({
+      title: '清除历史数据',
+      message: `确认清除测点「${historyDeviceName()} / ${fieldName}」的全部历史数据吗？此操作不可恢复。`,
+      confirmText: '确认清除',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmState(null);
+        setHistoryClearing(true);
+        try {
+          const result = await api.data.clearHistoryData({
+            device_id: deviceID,
+            field_name: fieldName,
+          });
+          const deleted = result?.deleted ?? 0;
+          toast.show('success', `已清除 ${deleted} 条历史数据`);
+          setHistoryData([]);
+          setHistoryError('');
+        } catch (err) {
+          showErrorToast(toast, err, '清除历史数据失败');
+        } finally {
+          setHistoryClearing(false);
+        }
+      },
+    });
   };
 
   const series = () => historyData()
@@ -246,7 +253,21 @@ function Realtime() {
   });
 
   return (
-    <Card title="实时数据">
+    <>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            busy={historyClearing()}
+            onCancel={() => !historyClearing() && setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
+      <Card title="实时数据">
       <div class="realtime-device-tabs">
         {devices().map((d) => (
           <button
@@ -426,6 +447,7 @@ function Realtime() {
         </Modal>
       </Show>
     </Card>
+    </>
   );
 }
 

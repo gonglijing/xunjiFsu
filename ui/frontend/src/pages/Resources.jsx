@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import LoadErrorHint from '../components/LoadErrorHint';
 import Modal from '../components/Modal';
 
@@ -30,6 +31,8 @@ function Resources() {
   const [showModal, setShowModal] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [err, setErr] = createSignal('');
+  const [confirmState, setConfirmState] = createSignal(null);
+  const [convertState, setConvertState] = createSignal(null);
 
   const load = () => {
     setLoadError('');
@@ -67,11 +70,18 @@ function Resources() {
   };
 
   const remove = (id) => {
-    if (!confirm('删除该资源？')) return;
-    if (!confirm('删除后关联设备可能需要重新绑定资源，确认继续？')) return;
-    api.resources.deleteResource(id)
-      .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((err) => showErrorToast(toast, err, '删除失败'));
+    setConfirmState({
+      title: '删除资源',
+      message: '删除该资源后，关联设备可能需要重新绑定资源，确认继续？',
+      confirmText: '确认删除',
+      variant: 'danger',
+      onConfirm: () => {
+        setConfirmState(null);
+        api.resources.deleteResource(id)
+          .then(() => { toast.show('success', '已删除'); load(); })
+          .catch((err) => showErrorToast(toast, err, '删除失败'));
+      },
+    });
   };
 
   const toggle = (item) => {
@@ -173,42 +183,110 @@ function Resources() {
 
     const candidate = normalizeModbusTCPEndpoint(item.path);
     const suggested = candidate.includes(':') ? candidate : '127.0.0.1:502';
-    const input = window.prompt('请输入 ModbusTCP 地址（IP:端口）', suggested);
-    if (input == null) return;
+    setConvertState({
+      item,
+      endpoint: suggested,
+    });
+  };
 
-    const endpoint = normalizeModbusTCPEndpoint(input);
+  const submitConvert = () => {
+    const current = convertState();
+    if (!current?.item) return;
+
+    const endpoint = normalizeModbusTCPEndpoint(current.endpoint);
     const endpointParsed = parseModbusTCPEndpoint(endpoint);
     if (!endpointParsed) {
       toast.show('error', '请输入正确的 ModbusTCP 地址，例如 192.168.1.100:502');
       return;
     }
 
-    if (!confirm(`将资源「${item.name}」从串口转换为 ModbusTCP（${endpoint}）？`)) {
-      return;
-    }
-
-    api.resources.updateResource(item.id, {
-      name: item.name,
-      type: 'net',
-      path: endpoint,
-      enabled: item.enabled,
-    })
-      .then(async () => {
-        const stats = await migrateBoundDevicesToModbusTCP(item.id, endpoint);
-        if (stats.failed > 0) {
-          toast.show('error', `资源已转换；设备联动成功 ${stats.migrated} 台，失败 ${stats.failed} 台，请检查设备配置`);
-        } else if (stats.migrated > 0) {
-          toast.show('success', `已转换为 ModbusTCP 资源，并联动更新 ${stats.migrated} 台设备`);
-        } else {
-          toast.show('success', '已转换为 ModbusTCP 资源');
-        }
-        load();
-      })
-      .catch((err) => showErrorToast(toast, err, '转换失败'));
+    setConfirmState({
+      title: '转换资源类型',
+      message: `将资源「${current.item.name}」从串口转换为 ModbusTCP（${endpoint}）？`,
+      confirmText: '确认转换',
+      onConfirm: () => {
+        const target = current.item;
+        setConfirmState(null);
+        setConvertState(null);
+        api.resources.updateResource(target.id, {
+          name: target.name,
+          type: 'net',
+          path: endpoint,
+          enabled: target.enabled,
+        })
+          .then(async () => {
+            const stats = await migrateBoundDevicesToModbusTCP(target.id, endpoint);
+            if (stats.failed > 0) {
+              toast.show('error', `资源已转换；设备联动成功 ${stats.migrated} 台，失败 ${stats.failed} 台，请检查设备配置`);
+            } else if (stats.migrated > 0) {
+              toast.show('success', `已转换为 ModbusTCP 资源，并联动更新 ${stats.migrated} 台设备`);
+            } else {
+              toast.show('success', '已转换为 ModbusTCP 资源');
+            }
+            load();
+          })
+          .catch((err) => showErrorToast(toast, err, '转换失败'));
+      },
+    });
   };
 
   return (
     <div>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            onCancel={() => setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
+      <Show when={convertState()}>
+        {(state) => (
+          <Modal
+            title="转换为 ModbusTCP"
+            onClose={() => setConvertState(null)}
+            closeOnBackdrop
+            contentStyle="width:460px; max-width:92vw;"
+          >
+            <form
+              class="form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitConvert();
+              }}
+              style="padding:12px 16px 16px;"
+            >
+              <div class="form-group">
+                <label class="form-label">资源名称</label>
+                <input class="form-input" value={state().item?.name || ''} readonly />
+              </div>
+              <div class="form-group">
+                <label class="form-label">ModbusTCP 地址</label>
+                <input
+                  class="form-input"
+                  value={state().endpoint}
+                  onInput={(e) => setConvertState((prev) => ({ ...prev, endpoint: e.target.value }))}
+                  placeholder="例如 192.168.1.100:502"
+                  required
+                />
+                <div class="form-hint">支持 `IP:端口`，例如 `192.168.1.100:502`</div>
+              </div>
+              <div class="modal-actions" style={{ marginTop: '8px' }}>
+                <button type="button" class="btn btn-outline-primary btn-sm" onClick={() => setConvertState(null)}>
+                  取消
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm">
+                  下一步
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+      </Show>
       <Card
         title="资源列表"
         extra={

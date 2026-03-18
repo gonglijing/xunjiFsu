@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, For, Show, createMemo } from 'soli
 import api from '../api/services';
 import { useToast } from '../components/Toast';
 import Card from '../components/cards';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
 import { usePageLoader } from '../utils/pageLoader';
@@ -49,6 +50,7 @@ export function Thresholds() {
   const [showModal, setShowModal] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [err, setErr] = createSignal('');
+  const [confirmState, setConfirmState] = createSignal(null);
 
   const deviceNameMap = createMemo(() => {
     const map = {};
@@ -133,14 +135,34 @@ export function Thresholds() {
   };
 
   const remove = (id) => {
-    if (!confirm('删除该阈值？')) return;
-    api.thresholds.deleteThreshold(id)
-      .then(() => { toast.show('success', '已删除'); load(); })
-      .catch((error) => showErrorToast(toast, error, '删除失败'));
+    setConfirmState({
+      title: '删除阈值',
+      message: '删除该阈值？',
+      confirmText: '删除',
+      variant: 'danger',
+      onConfirm: () => {
+        setConfirmState(null);
+        api.thresholds.deleteThreshold(id)
+          .then(() => { toast.show('success', '已删除'); load(); })
+          .catch((error) => showErrorToast(toast, error, '删除失败'));
+      },
+    });
   };
 
   return (
     <div>
+      <Show when={confirmState()}>
+        {(dialog) => (
+          <ConfirmDialog
+            title={dialog().title}
+            message={dialog().message}
+            confirmText={dialog().confirmText}
+            variant={dialog().variant}
+            onCancel={() => setConfirmState(null)}
+            onConfirm={dialog().onConfirm}
+          />
+        )}
+      </Show>
       <Card
         title="阈值配置列表"
         extra={(
