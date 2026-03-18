@@ -172,40 +172,6 @@ func TestJWTManager_RequireAuth_UnauthorizedAPI(t *testing.T) {
 	}
 }
 
-func TestJWTManager_RequireAdmin_ForbiddenForNonAdmin(t *testing.T) {
-	m := NewJWTManager([]byte("secret-1234567890"))
-
-	// 手工构造一个 user 角色的 token
-	user := &models.User{
-		ID:       1,
-		Username: "user",
-		Role:     "user",
-	}
-	token, err := m.GenerateToken(user)
-	if err != nil {
-		t.Fatalf("GenerateToken error: %v", err)
-	}
-
-	called := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-	})
-	handler := m.RequireAdmin(next)
-
-	req := httptest.NewRequest("GET", "/api/admin", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if called {
-		t.Fatalf("next handler should not be called for non-admin user")
-	}
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected status 403, got %d", rr.Code)
-	}
-}
-
 // 简单检查 token 过期字段设置是否大致正确（不过度依赖时间）
 func TestJWTManager_TokenTTL(t *testing.T) {
 	m := NewJWTManager([]byte("ttl-secret-key-123456"))

@@ -228,11 +228,6 @@ func SetOutput(writer io.Writer) {
 	log.SetOutput(writer)
 }
 
-// Output 返回当前日志输出目标
-func Output() io.Writer {
-	return globalOutput
-}
-
 // Debug 全局调试日志
 func Debug(msg string, keysAndValues ...interface{}) {
 	global.log(DEBUG, msg, keysAndValues...)
@@ -273,9 +268,4 @@ func Fatal(msg string, err error) {
 // Printf 格式化日志
 func Printf(format string, v ...interface{}) {
 	global.logger.Printf(format, v...)
-}
-
-// Println 日志
-func Println(v ...interface{}) {
-	global.logger.Println(v...)
 }

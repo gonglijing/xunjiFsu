@@ -100,11 +100,6 @@ func (m *JWTManager) RequireAuth(next http.Handler) http.Handler {
 	return m.requireSession(next, false)
 }
 
-// RequireAdmin 需要管理员权限中间件
-func (m *JWTManager) RequireAdmin(next http.Handler) http.Handler {
-	return m.requireSession(next, true)
-}
-
 func (m *JWTManager) requireSession(next http.Handler, adminOnly bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, err := m.GetSession(r)

@@ -10,7 +10,6 @@ var log = &nullLogger{}
 type nullLogger struct{}
 
 func (l *nullLogger) Printf(format string, v ...interface{}) {}
-func (l *nullLogger) Println(v ...interface{})              {}
 
 // CircuitState 熔断器状态
 type CircuitState int

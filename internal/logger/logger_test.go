@@ -365,7 +365,7 @@ func TestSetJSONOutput(t *testing.T) {
 }
 
 func TestSetOutput(t *testing.T) {
-	originalOutput := Output()
+	originalOutput := globalOutput
 	t.Cleanup(func() {
 		SetOutput(originalOutput)
 	})
@@ -381,14 +381,14 @@ func TestSetOutput(t *testing.T) {
 func TestOutput(t *testing.T) {
 	SetOutput(os.Stdout)
 
-	output := Output()
+	output := globalOutput
 	if output != os.Stdout {
-		t.Errorf("Output() = %v, want os.Stdout", output)
+		t.Errorf("globalOutput = %v, want os.Stdout", output)
 	}
 }
 
 func TestGlobalFunctions(t *testing.T) {
-	originalOutput := Output()
+	originalOutput := globalOutput
 	originalLevel := global.level
 	t.Cleanup(func() {
 		SetOutput(originalOutput)
@@ -424,7 +424,7 @@ func TestGlobalFunctions(t *testing.T) {
 }
 
 func TestPrintf(t *testing.T) {
-	originalOutput := Output()
+	originalOutput := globalOutput
 	t.Cleanup(func() {
 		SetOutput(originalOutput)
 	})
@@ -437,23 +437,6 @@ func TestPrintf(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "test format 123") {
 		t.Errorf("Printf() output = %s", output)
-	}
-}
-
-func TestPrintln(t *testing.T) {
-	originalOutput := Output()
-	t.Cleanup(func() {
-		SetOutput(originalOutput)
-	})
-
-	var buf bytes.Buffer
-	SetOutput(&buf)
-
-	Println("test message")
-
-	output := buf.String()
-	if !strings.Contains(output, "test message") {
-		t.Errorf("Println() output = %s", output)
 	}
 }
 

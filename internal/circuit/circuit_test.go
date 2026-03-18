@@ -420,7 +420,6 @@ func TestNullLogger(t *testing.T) {
 
 	// 应该不 panic
 	logger.Printf("test %s", "format")
-	logger.Println("test")
 }
 
 func TestConfig_String(t *testing.T) {
