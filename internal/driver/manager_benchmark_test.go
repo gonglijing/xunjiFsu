@@ -84,3 +84,19 @@ func BenchmarkReadWithTimeout_Chunked256(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkWasmDriverHasFunction_Cached(b *testing.B) {
+	driver := &WasmDriver{
+		exportedSet: map[string]struct{}{
+			"handle":  {},
+			"version": {},
+		},
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if !driver.hasFunction("handle") {
+			b.Fatal("expected cached handle export")
+		}
+	}
+}

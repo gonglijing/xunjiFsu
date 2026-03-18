@@ -39,3 +39,20 @@ func TestParseDriverVersionOutput_FailsOnDriverError(t *testing.T) {
 		t.Fatalf("parseDriverVersionOutput() error = %q, want %q", err.Error(), "version not available")
 	}
 }
+
+func TestGetDriverVersionUsesCachedVersion(t *testing.T) {
+	manager := NewDriverManager()
+	manager.drivers[1] = &WasmDriver{
+		ID:      1,
+		Name:    "drv",
+		version: "2.0.1",
+	}
+
+	version, err := manager.GetDriverVersion(1)
+	if err != nil {
+		t.Fatalf("GetDriverVersion() error = %v", err)
+	}
+	if version != "2.0.1" {
+		t.Fatalf("version = %q, want 2.0.1", version)
+	}
+}

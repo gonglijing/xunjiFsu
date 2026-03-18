@@ -114,6 +114,11 @@ func (m *DriverManager) GetDriverVersion(id int64) (string, error) {
 	if !exists {
 		return "", ErrDriverNotFound
 	}
-
+	driver.mu.RLock()
+	version := driver.version
+	driver.mu.RUnlock()
+	if version != "" {
+		return version, nil
+	}
 	return extractDriverVersionFromPlugin(driver.plugin)
 }

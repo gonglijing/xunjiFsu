@@ -249,6 +249,53 @@ func TestCloneDriverContextWithOverridesDoesNotMutateBase(t *testing.T) {
 	}
 }
 
+func TestWasmDriverHasFunctionUsesCachedExports(t *testing.T) {
+	driver := &WasmDriver{
+		exportedSet: map[string]struct{}{
+			"handle":  {},
+			"version": {},
+		},
+	}
+
+	if !driver.hasFunction("handle") {
+		t.Fatal("expected cached handle export")
+	}
+	if driver.hasFunction("missing") {
+		t.Fatal("did not expect missing export")
+	}
+}
+
+func TestBuildDriverRuntimeUsesCachedExports(t *testing.T) {
+	driver := &WasmDriver{
+		ID:                1,
+		Name:              "modbus_tcp",
+		resourceID:        7,
+		lastActive:        time.Unix(1700000000, 0),
+		version:           "1.2.3",
+		productKey:        "pk-1",
+		exportedFunctions: []string{"handle", "version"},
+	}
+
+	runtime := buildDriverRuntime(driver)
+	if runtime == nil {
+		t.Fatal("runtime should not be nil")
+	}
+	if runtime.Version != "1.2.3" {
+		t.Fatalf("runtime.Version = %q, want 1.2.3", runtime.Version)
+	}
+	if runtime.ProductKey != "pk-1" {
+		t.Fatalf("runtime.ProductKey = %q, want pk-1", runtime.ProductKey)
+	}
+	if len(runtime.ExportedFunctions) != 2 {
+		t.Fatalf("unexpected exported functions: %#v", runtime.ExportedFunctions)
+	}
+
+	runtime.ExportedFunctions[0] = "mutated"
+	if driver.exportedFunctions[0] != "handle" {
+		t.Fatalf("driver cached exports should not be mutated: %#v", driver.exportedFunctions)
+	}
+}
+
 func assertMapEqual(t *testing.T, got, want map[string]string) {
 	t.Helper()
 	if len(got) != len(want) {

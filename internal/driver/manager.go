@@ -125,13 +125,17 @@ type SerialPort interface {
 
 // WasmDriver WASM驱动实现
 type WasmDriver struct {
-	ID         int64
-	Name       string
-	plugin     *extism.Plugin
-	mu         sync.RWMutex
-	lastActive time.Time
-	config     string
-	resourceID int64 // 关联的串口资源ID
+	ID                int64
+	Name              string
+	plugin            *extism.Plugin
+	mu                sync.RWMutex
+	lastActive        time.Time
+	config            string
+	resourceID        int64 // 关联的串口资源ID
+	exportedFunctions []string
+	exportedSet       map[string]struct{}
+	version           string
+	productKey        string
 }
 
 // DriverManager 驱动管理器
@@ -205,27 +209,30 @@ func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resou
 	if err != nil {
 		return fmt.Errorf("failed to create plugin: %w", err)
 	}
+	exportedFunctions, exportedSet := cachedPluginExports(plugin)
+	version, productKey, err := extractDriverMetadataFromPlugin(plugin)
+	if err != nil {
+		_ = plugin.Close(context.Background())
+		return fmt.Errorf("failed to extract driver metadata: %w", err)
+	}
 
 	wasmDriver := &WasmDriver{
-		ID:         driver.ID,
-		Name:       driver.Name,
-		plugin:     plugin,
-		lastActive: time.Now(),
-		config:     driver.ConfigSchema,
-		resourceID: resourceID,
+		ID:                driver.ID,
+		Name:              driver.Name,
+		plugin:            plugin,
+		lastActive:        time.Now(),
+		config:            driver.ConfigSchema,
+		resourceID:        resourceID,
+		exportedFunctions: exportedFunctions,
+		exportedSet:       exportedSet,
+		version:           version,
+		productKey:        productKey,
 	}
 
 	m.drivers[driver.ID] = wasmDriver
 
-	if mod := plugin.Module(); mod != nil {
-		exports := mod.ExportedFunctions()
-		if len(exports) > 0 {
-			names := make([]string, 0, len(exports))
-			for name := range exports {
-				names = append(names, name)
-			}
-			logger.Debug("Driver exports", "driver", driver.Name, "count", len(names), "functions", names)
-		}
+	if len(exportedFunctions) > 0 {
+		logger.Debug("Driver exports", "driver", driver.Name, "count", len(exportedFunctions), "functions", exportedFunctions)
 	}
 	return nil
 }
@@ -290,7 +297,7 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 	driver.lastActive = time.Now()
 	driver.mu.Unlock()
 
-	if !driver.plugin.FunctionExists(function) {
+	if !driver.hasFunction(function) {
 		return nil, fmt.Errorf("plugin function not found: %s", function)
 	}
 
@@ -425,6 +432,8 @@ type DriverRuntime struct {
 	Loaded            bool      `json:"loaded"`
 	ResourceID        int64     `json:"resource_id"`
 	LastActive        time.Time `json:"last_active"`
+	Version           string    `json:"version,omitempty"`
+	ProductKey        string    `json:"product_key,omitempty"`
 	ExportedFunctions []string  `json:"exported_functions,omitempty"`
 }
 
@@ -440,23 +449,51 @@ func buildDriverRuntime(driver *WasmDriver) *DriverRuntime {
 		Loaded:     true,
 		ResourceID: driver.resourceID,
 		LastActive: driver.lastActive,
+		Version:    driver.version,
+		ProductKey: driver.productKey,
 	}
-	if driver.plugin != nil {
-		if mod := driver.plugin.Module(); mod != nil {
-			exports := mod.ExportedFunctions()
-			if len(exports) > 0 {
-				names := make([]string, 0, len(exports))
-				for name := range exports {
-					names = append(names, name)
-				}
-				sort.Strings(names)
-				runtime.ExportedFunctions = names
-			}
-		}
+	if len(driver.exportedFunctions) > 0 {
+		runtime.ExportedFunctions = append(make([]string, 0, len(driver.exportedFunctions)), driver.exportedFunctions...)
 	}
 	driver.mu.RUnlock()
 
 	return runtime
+}
+
+func (d *WasmDriver) hasFunction(name string) bool {
+	if d == nil {
+		return false
+	}
+	if len(d.exportedSet) > 0 {
+		_, ok := d.exportedSet[name]
+		return ok
+	}
+	if d.plugin == nil {
+		return false
+	}
+	return d.plugin.FunctionExists(name)
+}
+
+func cachedPluginExports(plugin *extism.Plugin) ([]string, map[string]struct{}) {
+	if plugin == nil {
+		return nil, nil
+	}
+	mod := plugin.Module()
+	if mod == nil {
+		return nil, nil
+	}
+	exports := mod.ExportedFunctions()
+	if len(exports) == 0 {
+		return nil, nil
+	}
+	names := make([]string, 0, len(exports))
+	set := make(map[string]struct{}, len(exports))
+	for name := range exports {
+		names = append(names, name)
+		set[name] = struct{}{}
+	}
+	sort.Strings(names)
+	return names, set
 }
 
 // GetRuntime 获取单个驱动运行时信息
