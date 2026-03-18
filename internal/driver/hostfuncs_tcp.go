@@ -55,7 +55,8 @@ func (m *DriverManager) createTCPHostFunctions(resourceID int64) []extism.HostFu
 				tout = executor.tcpReadTimeout()
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(tout))
-			buf := make([]byte, rCap)
+			buf := getModbusFrameBuffer(rCap)
+			defer putModbusFrameBuffer(buf)
 			n, err := readModbusTCPResponse(conn, buf)
 			if err != nil || n <= 0 {
 				if err != nil {

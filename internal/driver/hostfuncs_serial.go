@@ -26,7 +26,8 @@ func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.Hos
 				stack[0] = 0 // 返回 0 表示失败
 				return
 			}
-			buf := make([]byte, size)
+			buf := getModbusFrameBuffer(size)
+			defer putModbusFrameBuffer(buf)
 
 			port := executor.GetSerialPort(resourceID)
 			if port == nil {
@@ -134,7 +135,8 @@ func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.Hos
 			}
 			time.Sleep(3 * time.Millisecond)
 
-			buf := make([]byte, readCap)
+			buf := getModbusFrameBuffer(readCap)
+			defer putModbusFrameBuffer(buf)
 			tout := time.Duration(timeoutMs) * time.Millisecond
 			if tout <= 0 {
 				tout = executor.serialReadTimeout()

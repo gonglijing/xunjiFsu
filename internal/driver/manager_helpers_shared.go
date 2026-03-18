@@ -26,10 +26,18 @@ const (
 
 func resolveDeviceResource(device *models.Device) (int64, string) {
 	resourceID := resolveDeviceResourceID(device)
-	resourceType := resolveResourceTypeFromDeviceOrDatabase(device, resourceID)
-	if resourceType == "" {
-		resourceType = inferResourceType(device)
+	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
+	if resourceType != "" {
+		return resourceID, resourceType
 	}
+	if inferred := inferExplicitResourceType(device); inferred != "" {
+		return resourceID, inferred
+	}
+	resourceType = resolveResourceTypeFromDatabase(resourceID)
+	if resourceType != "" {
+		return resourceID, resourceType
+	}
+	resourceType = inferResourceType(device)
 
 	return resourceID, resourceType
 }
@@ -41,10 +49,9 @@ func resolveDeviceResourceID(device *models.Device) int64 {
 	return *device.ResourceID
 }
 
-func resolveResourceTypeFromDeviceOrDatabase(device *models.Device, resourceID int64) string {
-	resourceType := strings.ToLower(strings.TrimSpace(device.ResourceType))
-	if resourceType != "" || resourceID <= 0 || database.ParamDB == nil {
-		return resourceType
+func resolveResourceTypeFromDatabase(resourceID int64) string {
+	if resourceID <= 0 || database.ParamDB == nil {
+		return ""
 	}
 
 	resource, err := database.GetResourceByID(resourceID)
@@ -54,12 +61,9 @@ func resolveResourceTypeFromDeviceOrDatabase(device *models.Device, resourceID i
 	return strings.ToLower(strings.TrimSpace(resource.Type))
 }
 
-func inferResourceType(device *models.Device) string {
+func inferExplicitResourceType(device *models.Device) string {
 	if device == nil {
-		return "serial"
-	}
-	if device.ResourceType != "" {
-		return strings.ToLower(strings.TrimSpace(device.ResourceType))
+		return ""
 	}
 	driverType := strings.ToLower(strings.TrimSpace(device.DriverType))
 	switch {
@@ -67,12 +71,26 @@ func inferResourceType(device *models.Device) string {
 		return "net"
 	case strings.Contains(driverType, "serial"), strings.Contains(driverType, "rtu"):
 		return "serial"
+	case device.IPAddress != "", device.PortNum > 0:
+		return "net"
+	case device.SerialPort != "":
+		return "serial"
 	default:
-		if device.IPAddress != "" || device.PortNum > 0 {
-			return "net"
-		}
+		return ""
+	}
+}
+
+func inferResourceType(device *models.Device) string {
+	if device == nil {
 		return "serial"
 	}
+	if device.ResourceType != "" {
+		return strings.ToLower(strings.TrimSpace(device.ResourceType))
+	}
+	if inferred := inferExplicitResourceType(device); inferred != "" {
+		return inferred
+	}
+	return "serial"
 }
 
 func buildDeviceConfig(device *models.Device) map[string]string {

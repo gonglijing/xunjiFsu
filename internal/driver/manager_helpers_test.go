@@ -5,6 +5,8 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,6 +48,35 @@ func TestResolveDeviceResourceExplicitType(t *testing.T) {
 	_, resourceType := resolveDeviceResource(device)
 	if resourceType != "serial" {
 		t.Fatalf("expected resourceType serial, got %s", resourceType)
+	}
+}
+
+func TestResolveDeviceResourceModbusTypeSkipsDatabaseLookup(t *testing.T) {
+	id := int64(9)
+	device := &models.Device{
+		ResourceID: &id,
+		DriverType: "modbus_tcp",
+	}
+
+	tmpDir := t.TempDir()
+	paramPath := filepath.Join(tmpDir, "param.db")
+	originalParamDB := database.ParamDB
+	t.Cleanup(func() {
+		if database.ParamDB != nil {
+			_ = database.ParamDB.Close()
+		}
+		database.ParamDB = originalParamDB
+	})
+	if err := database.InitParamDBWithPath(paramPath); err != nil {
+		t.Fatalf("InitParamDBWithPath failed: %v", err)
+	}
+
+	resourceID, resourceType := resolveDeviceResource(device)
+	if resourceID != id {
+		t.Fatalf("expected resourceID %d, got %d", id, resourceID)
+	}
+	if resourceType != "net" {
+		t.Fatalf("expected resourceType net, got %s", resourceType)
 	}
 }
 
@@ -378,6 +409,67 @@ func TestGetTCPConnReturnsRegisteredConnectionWithoutProbeWrite(t *testing.T) {
 		t.Fatalf("expected no unsolicited probe write on existing TCP connection")
 	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+func TestGetTCPConnConcurrentDialReusesSingleConnection(t *testing.T) {
+	manager := NewDriverManager()
+	executor := NewDriverExecutor(manager)
+	executor.SetResourcePath(21, "127.0.0.1:502")
+
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+
+	var dialCount int32
+	start := make(chan struct{})
+	executor.tcpDialFn = func(network, address string, timeout time.Duration) (net.Conn, error) {
+		atomic.AddInt32(&dialCount, 1)
+		<-start
+		return clientConn, nil
+	}
+
+	const workers = 8
+	var wg sync.WaitGroup
+	results := make([]net.Conn, workers)
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx] = executor.GetTCPConn(21)
+		}(i)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	close(start)
+	wg.Wait()
+
+	if got := atomic.LoadInt32(&dialCount); got != 1 {
+		t.Fatalf("dial count = %d, want 1", got)
+	}
+	for i, conn := range results {
+		if conn != clientConn {
+			t.Fatalf("results[%d] did not reuse shared connection", i)
+		}
+	}
+}
+
+func TestModbusFrameBufferPool(t *testing.T) {
+	buf := getModbusFrameBuffer(128)
+	if len(buf) != 128 {
+		t.Fatalf("len(buf) = %d, want 128", len(buf))
+	}
+	if cap(buf) != pooledModbusFrameSize {
+		t.Fatalf("cap(buf) = %d, want %d", cap(buf), pooledModbusFrameSize)
+	}
+	putModbusFrameBuffer(buf)
+
+	large := getModbusFrameBuffer(pooledModbusFrameSize + 1)
+	if len(large) != pooledModbusFrameSize+1 {
+		t.Fatalf("len(large) = %d, want %d", len(large), pooledModbusFrameSize+1)
+	}
+	if cap(large) < pooledModbusFrameSize+1 {
+		t.Fatalf("cap(large) = %d, want >= %d", cap(large), pooledModbusFrameSize+1)
+	}
+	putModbusFrameBuffer(large)
 }
 
 func TestEnsureResourcePathLoadsFromResourcePath(t *testing.T) {

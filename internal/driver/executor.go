@@ -15,6 +15,8 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
+const pooledModbusFrameSize = 512
+
 // DriverExecutor 驱动执行器
 type DriverExecutor struct {
 	manager                   *DriverManager
@@ -31,6 +33,7 @@ type DriverExecutor struct {
 	tcpDialRetries            int
 	tcpDialBackoffOverride    time.Duration
 	tcpReadTimeoutOverride    time.Duration
+	tcpDialFn                 func(network, address string, timeout time.Duration) (net.Conn, error)
 }
 
 // NewDriverExecutor 创建驱动执行器
@@ -49,6 +52,40 @@ func NewDriverExecutor(manager *DriverManager) *DriverExecutor {
 	}
 
 	return executor
+}
+
+func (e *DriverExecutor) tcpDial(network, address string, timeout time.Duration) (net.Conn, error) {
+	if e != nil && e.tcpDialFn != nil {
+		return e.tcpDialFn(network, address, timeout)
+	}
+	return net.DialTimeout(network, address, timeout)
+}
+
+var modbusFrameBufferPool = sync.Pool{
+	New: func() any {
+		return make([]byte, pooledModbusFrameSize)
+	},
+}
+
+func getModbusFrameBuffer(size int) []byte {
+	if size <= 0 {
+		return nil
+	}
+	if size > pooledModbusFrameSize {
+		return make([]byte, size)
+	}
+	buf, _ := modbusFrameBufferPool.Get().([]byte)
+	if cap(buf) < pooledModbusFrameSize {
+		buf = make([]byte, pooledModbusFrameSize)
+	}
+	return buf[:size]
+}
+
+func putModbusFrameBuffer(buf []byte) {
+	if cap(buf) < pooledModbusFrameSize || cap(buf) > pooledModbusFrameSize {
+		return
+	}
+	modbusFrameBufferPool.Put(buf[:pooledModbusFrameSize])
 }
 
 // RegisterSerialPort 注册串口
@@ -179,6 +216,18 @@ func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
 		return nil
 	}
 
+	unlock := e.lockResource(resourceID)
+	if unlock != nil {
+		defer unlock()
+	}
+
+	e.mu.RLock()
+	conn, exists = e.tcpConns[resourceID]
+	e.mu.RUnlock()
+	if exists && conn != nil {
+		return conn
+	}
+
 	dialTimeout := e.tcpDialTimeout()
 	dialAttempts := e.tcpDialAttempts()
 	dialBackoff := e.tcpDialBackoff()
@@ -187,7 +236,7 @@ func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
 	var dialConn net.Conn
 	var err error
 	for i := 0; i < dialAttempts; i++ {
-		dialConn, err = net.DialTimeout("tcp", path, dialTimeout)
+		dialConn, err = e.tcpDial("tcp", path, dialTimeout)
 		if err == nil {
 			break
 		}
