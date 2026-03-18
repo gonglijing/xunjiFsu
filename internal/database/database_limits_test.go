@@ -402,6 +402,9 @@ func TestSaveDataCache_ThrottledCleanup(t *testing.T) {
 	if count != 5 {
 		t.Fatalf("expected throttled mode to keep 5 rows before cleanup, got %d", count)
 	}
+	if got := atomic.LoadInt64(&dataCacheLastCleanupNS); got != 0 {
+		t.Fatalf("expected last cleanup timestamp to remain unset before threshold cleanup, got %d", got)
+	}
 
 	dataCacheCleanupEveryWrites = 1
 	dataCacheCleanupMinInterval = 0
@@ -472,6 +475,9 @@ func TestSaveDataPoint_ThrottledCleanup(t *testing.T) {
 	}
 	if count != 5 {
 		t.Fatalf("expected throttled mode to keep 5 rows before cleanup, got %d", count)
+	}
+	if got := atomic.LoadInt64(&dataPointsLastCleanupNS); got != 0 {
+		t.Fatalf("expected last cleanup timestamp to remain unset before threshold cleanup, got %d", got)
 	}
 
 	dataPointsCleanupEveryWrites = 1

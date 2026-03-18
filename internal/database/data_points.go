@@ -295,6 +295,21 @@ func appendCollectDataHistoryArg(dst []any, deviceID int64, deviceName, field, v
 	return append(dst, deviceID, deviceName, field, value, collectDataValueTypeString)
 }
 
+func appendDataPointArg(dst []any, entry DataPointEntry, collectedAt time.Time) []any {
+	valueType := entry.ValueType
+	if valueType == "" {
+		valueType = collectDataValueTypeString
+	}
+	return append(dst,
+		entry.DeviceID,
+		normalizeDeviceName(entry.DeviceID, entry.DeviceName),
+		entry.FieldName,
+		entry.Value,
+		valueType,
+		collectedAt,
+	)
+}
+
 func getCollectDataArgs(capHint int) []any {
 	args, _ := collectDataArgsPool.Get().([]any)
 	if capHint <= 0 {
@@ -494,6 +509,14 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
+	if len(entries) <= collectDataHistoryBatchSize {
+		if err := batchSaveDataPointsDirect(entries); err != nil {
+			return err
+		}
+		maybeEnforceDataPointsLimit()
+		TriggerSyncIfNeeded()
+		return nil
+	}
 
 	// 使用事务批量插入
 	tx, err := DataDB.Begin()
@@ -514,14 +537,7 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 		if collectedAt.IsZero() {
 			collectedAt = now
 		}
-		args = append(args,
-			entry.DeviceID,
-			normalizeDeviceName(entry.DeviceID, entry.DeviceName),
-			entry.FieldName,
-			entry.Value,
-			entry.ValueType,
-			collectedAt,
-		)
+		args = appendDataPointArg(args, entry, collectedAt)
 		batchCount++
 		if batchCount < collectDataHistoryBatchSize {
 			continue
@@ -549,6 +565,29 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 	// 检查是否需要触发同步
 	TriggerSyncIfNeeded()
 
+	return nil
+}
+
+func batchSaveDataPointsDirect(entries []DataPointEntry) error {
+	args := getCollectDataArgs(len(entries) * 6)
+	defer putCollectDataArgs(args)
+
+	now := time.Now()
+	for _, entry := range entries {
+		collectedAt := entry.CollectedAt
+		if collectedAt.IsZero() {
+			collectedAt = now
+		}
+		args = appendDataPointArg(args, entry, collectedAt)
+	}
+
+	stmt, err := dataCacheExecStmtCache.get(DataDB, dataPointBatchSQLCache.get(len(entries)))
+	if err != nil {
+		return fmt.Errorf("failed to prepare data point batch statement: %w", err)
+	}
+	if _, err := stmt.Exec(args...); err != nil {
+		return fmt.Errorf("failed to insert data point batch: %w", err)
+	}
 	return nil
 }
 
@@ -726,11 +765,21 @@ func maybeEnforceDataPointsLimit() {
 	}
 
 	if dataPointsCleanupEveryWrites > 0 && writes%dataPointsCleanupEveryWrites != 0 {
+		if last == 0 {
+			return
+		}
+		now = time.Now().UnixNano()
 		if now-last < minIntervalNS {
 			return
 		}
+		if !atomic.CompareAndSwapInt64(&dataPointsLastCleanupNS, last, now) {
+			return
+		}
+		enforceDataPointsLimit()
+		return
 	}
 
+	now = time.Now().UnixNano()
 	if !atomic.CompareAndSwapInt64(&dataPointsLastCleanupNS, last, now) {
 		return
 	}
@@ -1116,6 +1165,9 @@ func BatchSaveLatestDataPoints(entries []DataPointEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
+	if len(entries) <= collectDataHistoryBatchSize {
+		return batchSaveLatestDataPointsDirect(entries)
+	}
 
 	tx, err := DataDB.Begin()
 	if err != nil {
@@ -1154,6 +1206,34 @@ func BatchSaveLatestDataPoints(entries []DataPointEntry) error {
 	}
 
 	return tx.Commit()
+}
+
+func batchSaveLatestDataPointsDirect(entries []DataPointEntry) error {
+	args := getCollectDataArgs(len(entries) * 5)
+	defer putCollectDataArgs(args)
+
+	for _, entry := range entries {
+		valueType := entry.ValueType
+		if valueType == "" {
+			valueType = collectDataValueTypeString
+		}
+		args = append(args,
+			entry.DeviceID,
+			normalizeDeviceName(entry.DeviceID, entry.DeviceName),
+			entry.FieldName,
+			entry.Value,
+			valueType,
+		)
+	}
+
+	stmt, err := dataCacheExecStmtCache.get(DataDB, latestDataPointBatchSQLCache.get(len(entries)))
+	if err != nil {
+		return fmt.Errorf("failed to prepare latest data point batch statement: %w", err)
+	}
+	if _, err := stmt.Exec(args...); err != nil {
+		return fmt.Errorf("failed to upsert data point batch: %w", err)
+	}
+	return nil
 }
 
 // InsertCollectDataWithOptions 写入实时缓存，并按需写入历史数据。

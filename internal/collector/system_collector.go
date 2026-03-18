@@ -19,6 +19,7 @@ import (
 type SystemStatsCollector struct {
 	northboundMgr *northbound.NorthboundManager
 	interval      time.Duration
+	diskPath      string
 	stopChan      chan struct{}
 	wg            sync.WaitGroup
 	running       bool
@@ -46,8 +47,22 @@ func NewSystemStatsCollector(interval ...time.Duration) *SystemStatsCollector {
 	}
 	return &SystemStatsCollector{
 		interval: collectInterval,
+		diskPath: resolveSystemStatsDiskPath(),
 		stopChan: make(chan struct{}),
 	}
+}
+
+func resolveSystemStatsDiskPath() string {
+	diskPath := "."
+	if len(os.Args) > 0 {
+		diskPath = filepath.Dir(os.Args[0])
+		if diskPath == "." {
+			if wd, err := os.Getwd(); err == nil && wd != "" {
+				diskPath = wd
+			}
+		}
+	}
+	return diskPath
 }
 
 // SetNorthboundManager 设置北向管理器
@@ -348,17 +363,8 @@ func (c *SystemStatsCollector) getMemoryInfo(stats *models.SystemStats) {
 
 // getDiskInfo 获取硬盘信息
 func (c *SystemStatsCollector) getDiskInfo(stats *models.SystemStats) {
-	// 获取当前工作目录所在磁盘
-	diskPath := "."
-	if len(os.Args) > 0 {
-		diskPath = filepath.Dir(os.Args[0])
-		if diskPath == "." {
-			diskPath, _ = os.Getwd()
-		}
-	}
-
 	var statfs syscall.Statfs_t
-	if err := syscall.Statfs(diskPath, &statfs); err != nil {
+	if err := syscall.Statfs(c.diskPath, &statfs); err != nil {
 		log.Printf("SystemStatsCollector: failed to get disk stats: %v", err)
 		stats.DiskTotal = 100 // GB
 		stats.DiskUsed = 20

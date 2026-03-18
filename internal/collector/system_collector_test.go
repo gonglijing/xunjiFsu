@@ -134,6 +134,13 @@ func TestFormatSystemMetricValue_TwoDecimalPlaces(t *testing.T) {
 	}
 }
 
+func TestNewSystemStatsCollector_SetsDiskPath(t *testing.T) {
+	collector := NewSystemStatsCollector()
+	if collector.diskPath == "" {
+		t.Fatal("expected non-empty diskPath")
+	}
+}
+
 func TestParseProcStatCPUTotalIdleBytes(t *testing.T) {
 	stat, ok := parseProcStatCPUTotalIdleBytes([]byte("cpu  100 20 30 40 5 6 7 8 0 0\ncpu0 1 2 3 4\n"))
 	if !ok {
@@ -183,5 +190,30 @@ func BenchmarkParseProcLoadAverage(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		parseProcLoadAverage(data, stats)
+	}
+}
+
+func BenchmarkStatsToCollectData(b *testing.B) {
+	collector := NewSystemStatsCollector()
+	stats := &models.SystemStats{
+		Timestamp:    1700000000,
+		CpuUsage:     12.3456,
+		MemTotal:     2048.4,
+		MemUsed:      1024.2,
+		MemUsage:     50.01,
+		MemAvailable: 1024.2,
+		DiskTotal:    100.0,
+		DiskUsed:     33.3,
+		DiskUsage:    33.3,
+		DiskFree:     66.7,
+		Uptime:       12345,
+		Load1:        0.12,
+		Load5:        0.34,
+		Load15:       0.56,
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = collector.statsToCollectData(stats)
 	}
 }

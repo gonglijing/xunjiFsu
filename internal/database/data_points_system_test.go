@@ -236,6 +236,51 @@ func TestBatchSaveDataPoints_NormalizesSystemDeviceNameAndTimestamp(t *testing.T
 	}
 }
 
+func TestBatchSaveLatestDataPoints_SmallBatchUpserts(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := []DataPointEntry{
+		{DeviceID: 1, DeviceName: "dev-1", FieldName: "humidity", Value: "50", ValueType: collectDataValueTypeString},
+		{DeviceID: 1, DeviceName: "dev-1", FieldName: "humidity", Value: "55", ValueType: collectDataValueTypeString},
+	}
+
+	if err := BatchSaveLatestDataPoints(entries); err != nil {
+		t.Fatalf("BatchSaveLatestDataPoints: %v", err)
+	}
+
+	var count int
+	var value string
+	if err := DataDB.QueryRow(`SELECT COUNT(*), MAX(value) FROM data_points WHERE device_id = ? AND field_name = ?`, 1, "humidity").Scan(&count, &value); err != nil {
+		t.Fatalf("query data_points: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	if value != "55" {
+		t.Fatalf("value = %q, want 55", value)
+	}
+}
+
+func TestBatchSaveDataCacheEntries_SmallBatchDefaultsValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := []DataPointEntry{
+		{DeviceID: 2, FieldName: "temperature", Value: "21.5"},
+	}
+
+	if err := BatchSaveDataCacheEntries(entries); err != nil {
+		t.Fatalf("BatchSaveDataCacheEntries: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_cache WHERE device_id = ? AND field_name = ?`, 2, "temperature").Scan(&valueType); err != nil {
+		t.Fatalf("query data_cache: %v", err)
+	}
+	if valueType != collectDataValueTypeString {
+		t.Fatalf("value_type = %q, want %q", valueType, collectDataValueTypeString)
+	}
+}
+
 func TestInsertCollectDataWithOptions_StoreHistoryFlag(t *testing.T) {
 	prepareDataPointsTestDB(t)
 

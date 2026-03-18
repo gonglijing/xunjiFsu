@@ -230,3 +230,43 @@ func BenchmarkBatchSaveDataPoints_32Fields(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkBatchSaveLatestDataPoints_32Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	entries := makeBenchmarkDataPointEntries(32)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		deviceID := int64(i + 1)
+		for j := range entries {
+			entries[j].DeviceID = deviceID
+		}
+		if err := BatchSaveLatestDataPoints(entries); err != nil {
+			b.Fatalf("BatchSaveLatestDataPoints error: %v", err)
+		}
+	}
+}
+
+func BenchmarkBatchSaveDataCacheEntries_32Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	entries := makeBenchmarkDataPointEntries(32)
+	for i := range entries {
+		entries[i].CollectedAt = time.Time{}
+		entries[i].DeviceName = ""
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		deviceID := int64(i + 1)
+		for j := range entries {
+			entries[j].DeviceID = deviceID
+		}
+		if err := BatchSaveDataCacheEntries(entries); err != nil {
+			b.Fatalf("BatchSaveDataCacheEntries error: %v", err)
+		}
+	}
+}

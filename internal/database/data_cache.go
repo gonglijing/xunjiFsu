@@ -90,6 +90,13 @@ func BatchSaveDataCacheEntries(entries []DataPointEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
+	if len(entries) <= collectDataCacheBatchSize {
+		if err := batchSaveDataCacheEntriesDirect(entries); err != nil {
+			return err
+		}
+		maybeEnforceDataCacheLimit()
+		return nil
+	}
 
 	tx, err := DataDB.Begin()
 	if err != nil {
@@ -131,6 +138,26 @@ func BatchSaveDataCacheEntries(entries []DataPointEntry) error {
 	return nil
 }
 
+func batchSaveDataCacheEntriesDirect(entries []DataPointEntry) error {
+	args := getCollectDataArgs(len(entries) * 4)
+	defer putCollectDataArgs(args)
+
+	for _, entry := range entries {
+		valueType := entry.ValueType
+		if valueType == "" {
+			valueType = collectDataValueTypeString
+		}
+		args = append(args, entry.DeviceID, entry.FieldName, entry.Value, valueType)
+	}
+
+	stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheBatchSQLCache.get(len(entries)))
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(args...)
+	return err
+}
+
 func maybeEnforceDataCacheLimit() {
 	if maxDataCacheLimit <= 0 {
 		return
@@ -145,11 +172,21 @@ func maybeEnforceDataCacheLimit() {
 	}
 
 	if dataCacheCleanupEveryWrites > 0 && writes%dataCacheCleanupEveryWrites != 0 {
+		if last == 0 {
+			return
+		}
+		now = time.Now().UnixNano()
 		if now-last < minIntervalNS {
 			return
 		}
+		if !atomic.CompareAndSwapInt64(&dataCacheLastCleanupNS, last, now) {
+			return
+		}
+		enforceDataCacheLimit()
+		return
 	}
 
+	now = time.Now().UnixNano()
 	if !atomic.CompareAndSwapInt64(&dataCacheLastCleanupNS, last, now) {
 		return
 	}
