@@ -179,11 +179,22 @@ Schema 接口：
 ### 采集链路当前结构
 
 - `internal/collector/collector.go`：设备任务调度、启停同步、任务堆管理。
-- `internal/collector/modbus_collect.go`：单次设备采集、结果落库、驱动 `productKey` 回写。
+- `internal/collector/modbus_collect.go`：单次设备采集、结果落库、驱动 `productKey` 回写，以及采集结果字段/测点规范化。
 - `internal/collector/collector_thresholds.go`：阈值匹配、报警落库、北向告警发送。
 - `internal/collector/collector_commands.go`：北向写命令轮询、执行与结果回传。
-- `internal/driver/executor.go`：设备执行入口、资源锁、串口/TCP 连接复用。
+- `internal/driver/executor.go`：设备执行入口、资源锁、串口/TCP 连接复用、执行结果字段提取。
 - `internal/driver/manager.go`：WASM 驱动生命周期与插件调用。
+
+### 当前热路径行为说明
+
+- 设备采集任务会缓存 `PreparedExecution`，避免正常轮询时重复构造驱动调用上下文。
+- `modbus_tcp` 连接按资源串行建立，同一资源并发采集时不会重复拨号。
+- `modbus` 串口/TCP 收包使用复用缓冲区，减少高频采集下的临时 `[]byte` 分配。
+- 串口分片读取只在“本轮未读到任何字节”时退避，不再对正常连续分片响应强制休眠。
+- 采集任务会缓存设备侧 `product_key` / `device_key` 的规范化结果，减少每轮采集重复 trim。
+- 驱动结果字段提取与采集结果规范化都带有 ASCII 快路径，优先复用已经干净的 `map` / `points` 数据。
+- `data.db` 读路径优先走内存满足 `limit` 的快路径；达到上限时不会继续探测磁盘库。
+- 最新历史点查询与按设备读取查询使用固定 SQL 分支和连续结构体缓冲区，降低读取分配。
 
 ### 最近的内存优化点
 
@@ -194,6 +205,26 @@ Schema 接口：
 - 历史同步触发已做去重，密集写入时不会重复排队多个同步协程。
 - 驱动执行输入改为强类型结构序列化，减少热路径上的 `map[string]interface{}` 分配和接口装箱。
 - 设备配置与空采集结果采用更保守的 map 分配策略，降低高频小对象分配。
+- `modbus_tcp` 懒连接建立增加资源级串行化，避免同一资源并发重复拨号。
+- `modbus` 串口/TCP 读响应改为缓冲池复用，降低高频收包分配抖动。
+- 串口 `readWithTimeout()` 去掉“读到部分数据后仍固定 sleep 2ms”的路径，分片响应时延显著下降。
+- 驱动结果字段判断改为 ASCII 快路径，减少 `TrimSpace` / `ToLower` 的重复成本。
+- `PreparedExecution` 的资源类型推断优先使用设备静态信息，仅在必要时查询资源表。
+- 采集结果测点在字段名已干净时直接复用原切片，不再每轮重写全部点位。
+- 历史数据查询新增内存命中快路径；时间范围与最新值读取在内存结果满足 `limit` 时直接返回。
+
+### 最近基准结论
+
+- `internal/driver`：
+  - `BenchmarkNewPreparedExecution_ModbusTCP` 约 `1225ns/op`，`1044 B/op`，`16 allocs/op`
+  - `BenchmarkReadWithTimeout_Chunked256` 约 `104ns/op`，`0 allocs/op`
+- `internal/collector`：
+  - `BenchmarkDriverResultToCollectData_10000Points` 约 `49.8us/op`，`1 alloc/op`
+  - `BenchmarkDriverResultToCollectDataMixedDeferred_10000Points` 约 `190us/op`，`1 alloc/op`
+- `internal/database`：
+  - `BenchmarkGetLatestDataPoints_1000Limit` 约 `2.98ms/op`，`507KB/op`，`17756 allocs/op`
+  - `BenchmarkGetDiskLatestDataPoints_1000Limit_Cached` 约 `2.93ms/op`，`507KB/op`，`17760 allocs/op`
+  - `BenchmarkGetAllDevicesLatestData_1000Fields` 约 `3.75ms/op`
 
 ---
 
