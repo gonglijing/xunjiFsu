@@ -64,6 +64,10 @@ func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateK
 }
 
 func resolveAlarmRepeatInterval() time.Duration {
+	if database.ParamDB == nil {
+		return defaultAlarmRepeatInterval
+	}
+
 	nowNS := time.Now().UnixNano()
 
 	cachedNS := atomic.LoadInt64(&alarmRepeatIntervalCache.valueNS)
@@ -153,16 +157,26 @@ func shouldEmitAlarm(deviceID int64, threshold *models.Threshold, matched bool, 
 
 	maybePruneAlarmStates(now, repeatInterval)
 
+	if !matched {
+		return false
+	}
+
 	key := buildAlarmStateKey(deviceID, threshold)
+	return shouldEmitAlarmForKey(key, now, repeatInterval)
+}
+
+func shouldEmitAlarmForKey(key alarmStateKey, now time.Time, repeatInterval time.Duration) bool {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if repeatInterval <= 0 {
+		repeatInterval = defaultAlarmRepeatInterval
+	}
 
 	alarmStates.mu.Lock()
 	defer alarmStates.mu.Unlock()
 
 	state, exists := alarmStates.data[key]
-
-	if !matched {
-		return false
-	}
 
 	emit := false
 	if !exists {

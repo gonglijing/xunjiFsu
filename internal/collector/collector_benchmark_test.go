@@ -3,6 +3,7 @@ package collector
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -136,6 +137,131 @@ func BenchmarkCollectDataEnsureFieldsRepeated_10000Points(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if got := collect.EnsureFields(); len(got) != 20000 {
 			b.Fatalf("unexpected fields size on repeat: %d", len(got))
+		}
+	}
+}
+
+func BenchmarkNumericFieldLookupPointCached_100Rules(b *testing.B) {
+	points := make([]models.CollectPoint, 0, 100)
+	fields := make([]string, 0, 100)
+	for i := 0; i < 100; i++ {
+		name := fmt.Sprintf("p_%d", i)
+		points = append(points, models.CollectPoint{
+			FieldName: " " + name + " ",
+			Value:     float64(i) + 0.5,
+		})
+		fields = append(fields, name)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		lookup := newNumericFieldLookup(nil, points)
+		for _, field := range fields {
+			if value, ok := lookup.getFloatWithNormalized(field, field); !ok || value < 0 {
+				b.Fatalf("unexpected lookup result for %s: (%v, %v)", field, value, ok)
+			}
+		}
+	}
+}
+
+func BenchmarkCheckThresholds_100RulesNoMatch(b *testing.B) {
+	resetThresholdCache()
+	deviceID := int64(9001)
+	device := &models.Device{ID: deviceID, Name: "bench-threshold-device"}
+	data := &models.CollectData{
+		DeviceID: deviceID,
+		Points:   make([]models.CollectPoint, 0, 100),
+	}
+	rules := make([]thresholdEvalRule, 0, 100)
+	for i := 0; i < 100; i++ {
+		name := fmt.Sprintf("p_%d", i)
+		threshold := &models.Threshold{
+			ID:        int64(i + 1),
+			DeviceID:  deviceID,
+			FieldName: name,
+			Operator:  ">",
+			Value:     1000,
+		}
+		rules = append(rules, buildThresholdEvalRule(threshold))
+		data.Points = append(data.Points, models.CollectPoint{
+			FieldName: name,
+			Value:     float64(i),
+		})
+	}
+
+	cache.mu.Lock()
+	cache.rules[deviceID] = rules
+	cache.thresholds[deviceID] = make([]*models.Threshold, 0, len(rules))
+	cache.lastRefresh = time.Now()
+	cache.mu.Unlock()
+	clearAlarmStateForDevice(deviceID)
+	defer func() {
+		clearAlarmStateForDevice(deviceID)
+		resetThresholdCache()
+	}()
+
+	collector := NewCollector(nil, nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := collector.checkThresholds(device, data); err != nil {
+			b.Fatalf("checkThresholds failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkCheckThresholds_100RulesMatchedSuppressed(b *testing.B) {
+	resetThresholdCache()
+	deviceID := int64(9002)
+	device := &models.Device{ID: deviceID, Name: "bench-threshold-device"}
+	data := &models.CollectData{
+		DeviceID: deviceID,
+		Points:   make([]models.CollectPoint, 0, 100),
+	}
+	rules := make([]thresholdEvalRule, 0, 100)
+	for i := 0; i < 100; i++ {
+		name := fmt.Sprintf("p_%d", i)
+		threshold := &models.Threshold{
+			ID:        int64(i + 1),
+			DeviceID:  deviceID,
+			FieldName: name,
+			Operator:  ">",
+			Value:     -1,
+		}
+		rules = append(rules, buildThresholdEvalRule(threshold))
+		data.Points = append(data.Points, models.CollectPoint{
+			FieldName: name,
+			Value:     float64(i),
+		})
+	}
+
+	cache.mu.Lock()
+	cache.rules[deviceID] = rules
+	cache.thresholds[deviceID] = make([]*models.Threshold, 0, len(rules))
+	cache.lastRefresh = time.Now()
+	cache.mu.Unlock()
+	clearAlarmStateForDevice(deviceID)
+	defer func() {
+		clearAlarmStateForDevice(deviceID)
+		resetThresholdCache()
+	}()
+
+	now := time.Now()
+	alarmStates.mu.Lock()
+	for _, rule := range rules {
+		key := rule.alarmKey
+		key.DeviceID = deviceID
+		alarmStates.data[key] = alarmState{LastTriggered: now}
+	}
+	alarmStates.mu.Unlock()
+
+	collector := NewCollector(nil, nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := collector.checkThresholds(device, data); err != nil {
+			b.Fatalf("checkThresholds failed: %v", err)
 		}
 	}
 }

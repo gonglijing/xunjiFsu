@@ -439,61 +439,6 @@ func (c *Collector) SetRuntimeIntervals(deviceSyncInterval, commandPollInterval 
 	}
 }
 
-// AddDevice 添加设备到采集任务
-func (c *Collector) AddDevice(device *models.Device) error {
-	if device == nil {
-		return fmt.Errorf("device is nil")
-	}
-
-	c.mu.Lock()
-
-	if _, exists := c.tasks[device.ID]; exists {
-		c.mu.Unlock()
-		return fmt.Errorf("device %d already in collector", device.ID)
-	}
-
-	action := c.upsertTaskLocked(device)
-	if action != deviceSyncActionNone {
-		c.notifyTaskChangedLocked()
-	}
-	c.mu.Unlock()
-	return nil
-}
-
-// RemoveDevice 从采集任务移除设备
-func (c *Collector) RemoveDevice(deviceID int64) error {
-	c.mu.Lock()
-	_, exists := c.tasks[deviceID]
-	c.removeTaskLocked(deviceID)
-	if exists {
-		c.notifyTaskChangedLocked()
-	}
-	c.mu.Unlock()
-
-	return nil
-}
-
-// UpdateDevice 更新设备采集配置
-func (c *Collector) UpdateDevice(device *models.Device) error {
-	if device == nil {
-		return fmt.Errorf("device is nil")
-	}
-
-	c.mu.Lock()
-	_, exists := c.tasks[device.ID]
-	if !exists {
-		c.mu.Unlock()
-		return fmt.Errorf("device %d not in collector", device.ID)
-	}
-
-	action := c.upsertTaskLocked(device)
-	if action != deviceSyncActionNone {
-		c.notifyTaskChangedLocked()
-	}
-	c.mu.Unlock()
-	return nil
-}
-
 func (c *Collector) upsertTaskLocked(device *models.Device) deviceSyncAction {
 	if device == nil {
 		return deviceSyncActionNone
@@ -732,12 +677,6 @@ func (c *Collector) isTaskCurrentLocked(task *collectTask) bool {
 	}
 	current, exists := c.tasks[task.device.ID]
 	return exists && current == task
-}
-
-func (c *Collector) isTaskCurrent(task *collectTask) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.isTaskCurrentLocked(task)
 }
 
 func (c *Collector) findTask(deviceID int64) *collectTask {

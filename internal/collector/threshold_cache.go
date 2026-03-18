@@ -25,6 +25,10 @@ type thresholdEvalRule struct {
 	threshold           *models.Threshold
 	fieldName           string
 	normalizedFieldName string
+	operator            string
+	alarmKey            alarmStateKey
+	shielded            bool
+	thresholdValue      float64
 }
 
 // 缓存实例
@@ -212,13 +216,23 @@ func normalizeThresholdForRuntime(threshold *models.Threshold) {
 func buildThresholdEvalRule(threshold *models.Threshold) thresholdEvalRule {
 	fieldName := ""
 	normalized := ""
+	operator := ""
+	thresholdValue := 0.0
+	shielded := false
 	if threshold != nil {
 		fieldName = strings.TrimSpace(threshold.FieldName)
 		normalized = normalizeFieldName(fieldName)
+		operator = strings.TrimSpace(threshold.Operator)
+		thresholdValue = threshold.Value
+		shielded = threshold.Shielded == 1
 	}
 	return thresholdEvalRule{
 		threshold:           threshold,
 		fieldName:           fieldName,
 		normalizedFieldName: normalized,
+		operator:            operator,
+		alarmKey:            buildAlarmStateKey(0, threshold),
+		shielded:            shielded,
+		thresholdValue:      thresholdValue,
 	}
 }

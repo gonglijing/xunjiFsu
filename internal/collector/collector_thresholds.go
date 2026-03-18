@@ -10,16 +10,12 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func parseFloatFieldValue(fields map[string]string, field string) (float64, bool) {
-	lookup := newNumericFieldLookup(fields, nil)
-	return lookup.getFloat(field)
-}
-
 type numericFieldLookup struct {
 	raw        map[string]string
 	points     []models.CollectPoint
 	normalized map[string]string
 	parsed     map[string]float64
+	invalid    map[string]struct{}
 	pointRaw   map[string]interface{}
 	pointNorm  map[string]interface{}
 }
@@ -35,13 +31,109 @@ func normalizeFieldName(field string) string {
 	return strings.ToLower(strings.TrimSpace(field))
 }
 
-func (l *numericFieldLookup) getRawValue(field string) (normalized string, value string, ok bool) {
-	return l.getRawValueWithNormalized(field, "")
+func prepareLookupKeys(field, normalized string) (trimmed string, normalizedKey string, ok bool) {
+	trimmed = strings.TrimSpace(field)
+	if trimmed == "" {
+		return "", "", false
+	}
+	if normalized == "" {
+		normalized = strings.ToLower(trimmed)
+	}
+	return trimmed, normalized, normalized != ""
+}
+
+func (l *numericFieldLookup) getCachedFloat(primaryKey, fallbackKey string) (float64, bool) {
+	if l == nil || l.parsed == nil {
+		return 0, false
+	}
+	if primaryKey != "" {
+		if value, exists := l.parsed[primaryKey]; exists {
+			return value, true
+		}
+	}
+	if fallbackKey != "" && fallbackKey != primaryKey {
+		if value, exists := l.parsed[fallbackKey]; exists {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func (l *numericFieldLookup) isKnownInvalid(primaryKey, fallbackKey string) bool {
+	if l == nil || l.invalid == nil {
+		return false
+	}
+	if primaryKey != "" {
+		if _, exists := l.invalid[primaryKey]; exists {
+			return true
+		}
+	}
+	if fallbackKey != "" && fallbackKey != primaryKey {
+		if _, exists := l.invalid[fallbackKey]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *numericFieldLookup) cacheParsedFloat(key string, value float64) {
+	if l == nil || key == "" {
+		return
+	}
+	if l.parsed == nil {
+		l.parsed = make(map[string]float64, 8)
+	}
+	l.parsed[key] = value
+}
+
+func (l *numericFieldLookup) cacheInvalidFloat(key string) {
+	if l == nil || key == "" {
+		return
+	}
+	if l.invalid == nil {
+		l.invalid = make(map[string]struct{}, 4)
+	}
+	l.invalid[key] = struct{}{}
+}
+
+func (l *numericFieldLookup) ensurePointRaw() {
+	if l == nil || len(l.points) == 0 || l.pointRaw != nil {
+		return
+	}
+
+	l.pointRaw = make(map[string]interface{}, len(l.points))
+	for _, point := range l.points {
+		name := strings.TrimSpace(point.FieldName)
+		if name == "" {
+			continue
+		}
+		if _, exists := l.pointRaw[name]; !exists {
+			l.pointRaw[name] = point.Value
+		}
+	}
+}
+
+func (l *numericFieldLookup) ensurePointNormalized() {
+	if l == nil || len(l.points) == 0 || l.pointNorm != nil {
+		return
+	}
+
+	l.ensurePointRaw()
+	l.pointNorm = make(map[string]interface{}, len(l.pointRaw))
+	for name, value := range l.pointRaw {
+		normalizedName := strings.ToLower(name)
+		if normalizedName == "" {
+			continue
+		}
+		if _, exists := l.pointNorm[normalizedName]; !exists {
+			l.pointNorm[normalizedName] = value
+		}
+	}
 }
 
 func (l *numericFieldLookup) getRawValueWithNormalized(field, normalized string) (cacheKey string, value string, ok bool) {
-	trimmed := strings.TrimSpace(field)
-	if trimmed == "" {
+	trimmed, normalizedKey, ok := prepareLookupKeys(field, normalized)
+	if !ok {
 		return "", "", false
 	}
 
@@ -49,13 +141,6 @@ func (l *numericFieldLookup) getRawValueWithNormalized(field, normalized string)
 		if value, ok = l.raw[trimmed]; ok {
 			return trimmed, value, true
 		}
-	}
-
-	if normalized == "" {
-		normalized = strings.ToLower(trimmed)
-	}
-	if normalized == "" {
-		return "", "", false
 	}
 
 	if l != nil && len(l.raw) > 0 {
@@ -73,12 +158,12 @@ func (l *numericFieldLookup) getRawValueWithNormalized(field, normalized string)
 			}
 		}
 
-		if value, ok = l.normalized[normalized]; ok {
-			return normalized, value, true
+		if value, ok = l.normalized[normalizedKey]; ok {
+			return normalizedKey, value, true
 		}
 	}
 
-	return l.getPointRawValue(trimmed, normalized)
+	return l.getPointRawValue(trimmed, normalizedKey)
 }
 
 func (l *numericFieldLookup) getPointRawValue(field, normalized string) (cacheKey string, value string, ok bool) {
@@ -86,30 +171,12 @@ func (l *numericFieldLookup) getPointRawValue(field, normalized string) (cacheKe
 		return "", "", false
 	}
 
-	if l.pointRaw == nil {
-		l.pointRaw = make(map[string]interface{}, len(l.points))
-		l.pointNorm = make(map[string]interface{}, len(l.points))
-		for _, point := range l.points {
-			name := strings.TrimSpace(point.FieldName)
-			if name == "" {
-				continue
-			}
-			if _, exists := l.pointRaw[name]; !exists {
-				l.pointRaw[name] = point.Value
-			}
-			normalizedName := normalizeFieldName(name)
-			if normalizedName == "" {
-				continue
-			}
-			if _, exists := l.pointNorm[normalizedName]; !exists {
-				l.pointNorm[normalizedName] = point.Value
-			}
-		}
-	}
-
+	l.ensurePointRaw()
 	if raw, exists := l.pointRaw[field]; exists {
 		return field, models.CollectPointValueString(raw), true
 	}
+
+	l.ensurePointNormalized()
 	raw, exists := l.pointNorm[normalized]
 	if !exists {
 		return "", "", false
@@ -117,92 +184,105 @@ func (l *numericFieldLookup) getPointRawValue(field, normalized string) (cacheKe
 	return normalized, models.CollectPointValueString(raw), true
 }
 
-func parseNumericPointValue(value interface{}) (float64, bool) {
+func parseNumericPointValue(value interface{}) (float64, bool, bool) {
 	switch v := value.(type) {
 	case float64:
-		return v, true
+		return v, true, false
 	case float32:
-		return float64(v), true
+		return float64(v), true, false
 	case int:
-		return float64(v), true
+		return float64(v), true, false
 	case int8:
-		return float64(v), true
+		return float64(v), true, false
 	case int16:
-		return float64(v), true
+		return float64(v), true, false
 	case int32:
-		return float64(v), true
+		return float64(v), true, false
 	case int64:
-		return float64(v), true
+		return float64(v), true, false
 	case uint:
-		return float64(v), true
+		return float64(v), true, false
 	case uint8:
-		return float64(v), true
+		return float64(v), true, false
 	case uint16:
-		return float64(v), true
+		return float64(v), true, false
 	case uint32:
-		return float64(v), true
+		return float64(v), true, false
 	case uint64:
-		return float64(v), true
+		return float64(v), true, false
 	case string:
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-		return parsed, err == nil
+		return parsed, err == nil, true
 	case []byte:
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(string(v)), 64)
-		return parsed, err == nil
+		return parsed, err == nil, true
 	default:
-		return 0, false
+		return 0, false, true
 	}
-}
-
-func (l *numericFieldLookup) getFloat(field string) (float64, bool) {
-	return l.getFloatWithNormalized(field, "")
 }
 
 func (l *numericFieldLookup) getFloatWithNormalized(field, normalized string) (float64, bool) {
-	if l != nil && len(l.points) > 0 {
-		if l.pointRaw == nil {
-			_, _, _ = l.getPointRawValue(strings.TrimSpace(field), normalized)
-		}
-		trimmed := strings.TrimSpace(field)
-		if trimmed != "" {
-			if raw, ok := l.pointRaw[trimmed]; ok {
-				if value, parsed := parseNumericPointValue(raw); parsed {
-					return value, true
-				}
-			}
-		}
-		if normalized == "" {
-			normalized = strings.ToLower(trimmed)
-		}
-		if normalized != "" {
-			if raw, ok := l.pointNorm[normalized]; ok {
-				if value, parsed := parseNumericPointValue(raw); parsed {
-					return value, true
-				}
-			}
-		}
-	}
-
-	cacheKey, valueStr, ok := l.getRawValueWithNormalized(field, normalized)
+	trimmed, normalizedKey, ok := prepareLookupKeys(field, normalized)
 	if !ok {
 		return 0, false
 	}
 
-	if l.parsed != nil {
-		if cached, exists := l.parsed[cacheKey]; exists {
-			return cached, true
+	if value, cached := l.getCachedFloat(trimmed, normalizedKey); cached {
+		return value, true
+	}
+	if l.isKnownInvalid(trimmed, normalizedKey) {
+		return 0, false
+	}
+
+	pointInvalidKey := ""
+	if l != nil && len(l.points) > 0 {
+		l.ensurePointRaw()
+		if raw, exists := l.pointRaw[trimmed]; exists {
+			if value, parsed, cacheable := parseNumericPointValue(raw); parsed {
+				if cacheable {
+					l.cacheParsedFloat(trimmed, value)
+				}
+				return value, true
+			}
+			pointInvalidKey = trimmed
 		}
+		l.ensurePointNormalized()
+		if raw, exists := l.pointNorm[normalizedKey]; exists {
+			if value, parsed, cacheable := parseNumericPointValue(raw); parsed {
+				if cacheable {
+					l.cacheParsedFloat(normalizedKey, value)
+				}
+				return value, true
+			}
+			if pointInvalidKey == "" {
+				pointInvalidKey = normalizedKey
+			}
+		}
+	}
+
+	cacheKey, valueStr, exists := l.getRawValueWithNormalized(trimmed, normalizedKey)
+	if !exists {
+		l.cacheInvalidFloat(pointInvalidKey)
+		return 0, false
+	}
+
+	if value, cached := l.getCachedFloat(cacheKey, normalizedKey); cached {
+		return value, true
+	}
+	if l.isKnownInvalid(cacheKey, normalizedKey) {
+		return 0, false
 	}
 
 	value, err := strconv.ParseFloat(strings.TrimSpace(valueStr), 64)
 	if err != nil {
+		if cacheKey == "" {
+			cacheKey = pointInvalidKey
+		}
+		l.cacheInvalidFloat(cacheKey)
 		return 0, false
 	}
 
-	if l.parsed == nil {
-		l.parsed = make(map[string]float64, 8)
-	}
-	l.parsed[cacheKey] = value
+	l.cacheParsedFloat(cacheKey, value)
 	return value, true
 }
 
@@ -219,25 +299,29 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 
 	now := time.Now()
 	repeatInterval := resolveAlarmRepeatInterval()
+	maybePruneAlarmStates(now, repeatInterval)
 	lookup := newNumericFieldLookup(data.Fields, data.Points)
 	for _, rule := range rules {
 		threshold := rule.threshold
 		if threshold == nil {
 			continue
 		}
-		if threshold.Shielded == 1 {
-			_ = shouldEmitAlarm(device.ID, threshold, false, now, repeatInterval)
+		if rule.shielded {
 			continue
 		}
 
 		value, ok := lookup.getFloatWithNormalized(rule.fieldName, rule.normalizedFieldName)
 		if !ok {
-			_ = shouldEmitAlarm(device.ID, threshold, false, now, repeatInterval)
 			continue
 		}
 
-		matched := thresholdMatch(value, threshold.Operator, threshold.Value)
-		if !shouldEmitAlarm(device.ID, threshold, matched, now, repeatInterval) {
+		matched := thresholdMatch(value, rule.operator, rule.thresholdValue)
+		if !matched {
+			continue
+		}
+		alarmKey := rule.alarmKey
+		alarmKey.DeviceID = device.ID
+		if !shouldEmitAlarmForKey(alarmKey, now, repeatInterval) {
 			continue
 		}
 

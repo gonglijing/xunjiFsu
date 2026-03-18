@@ -162,7 +162,10 @@ func TestCollectorTaskIdentityChecks(t *testing.T) {
 	c.tasks[device.ID] = task
 	c.mu.Unlock()
 
-	if !c.isTaskCurrent(task) {
+	c.mu.RLock()
+	current := c.isTaskCurrentLocked(task)
+	c.mu.RUnlock()
+	if !current {
 		t.Fatalf("expected task current")
 	}
 
@@ -171,10 +174,14 @@ func TestCollectorTaskIdentityChecks(t *testing.T) {
 	c.tasks[device.ID] = newTask
 	c.mu.Unlock()
 
-	if c.isTaskCurrent(task) {
+	c.mu.RLock()
+	oldCurrent := c.isTaskCurrentLocked(task)
+	newCurrent := c.isTaskCurrentLocked(newTask)
+	c.mu.RUnlock()
+	if oldCurrent {
 		t.Fatalf("expected old task stale")
 	}
-	if !c.isTaskCurrent(newTask) {
+	if !newCurrent {
 		t.Fatalf("expected new task current")
 	}
 }
@@ -354,7 +361,7 @@ func TestClassifyCollectError(t *testing.T) {
 }
 
 func TestParseFloatFieldValue(t *testing.T) {
-	if _, ok := parseFloatFieldValue(nil, "temp"); ok {
+	if _, ok := newNumericFieldLookup(nil, nil).getFloatWithNormalized("temp", ""); ok {
 		t.Fatalf("nil fields should return false")
 	}
 
@@ -363,22 +370,23 @@ func TestParseFloatFieldValue(t *testing.T) {
 		"bad":  "abc",
 	}
 
-	if v, ok := parseFloatFieldValue(fields, "temp"); !ok || v != 12.5 {
+	lookup := newNumericFieldLookup(fields, nil)
+	if v, ok := lookup.getFloatWithNormalized("temp", ""); !ok || v != 12.5 {
 		t.Fatalf("expected temp=12.5, got (%v, %v)", v, ok)
 	}
 
-	if _, ok := parseFloatFieldValue(fields, "missing"); ok {
+	if _, ok := lookup.getFloatWithNormalized("missing", ""); ok {
 		t.Fatalf("missing field should return false")
 	}
 
-	if _, ok := parseFloatFieldValue(fields, "bad"); ok {
+	if _, ok := lookup.getFloatWithNormalized("bad", ""); ok {
 		t.Fatalf("invalid float should return false")
 	}
 
 	fieldsWithSpacing := map[string]string{
 		" Humidity ": " 51.5 ",
 	}
-	if v, ok := parseFloatFieldValue(fieldsWithSpacing, "humidity"); !ok || v != 51.5 {
+	if v, ok := newNumericFieldLookup(fieldsWithSpacing, nil).getFloatWithNormalized("humidity", ""); !ok || v != 51.5 {
 		t.Fatalf("expected case/trim match humidity=51.5, got (%v, %v)", v, ok)
 	}
 }
@@ -391,14 +399,75 @@ func TestNumericFieldLookup_CacheParsedValue(t *testing.T) {
 		t.Fatalf("parsed cache should be lazily initialized")
 	}
 
-	v1, ok1 := lookup.getFloat("temperature")
-	v2, ok2 := lookup.getFloat(" temperature ")
+	v1, ok1 := lookup.getFloatWithNormalized("temperature", "")
+	v2, ok2 := lookup.getFloatWithNormalized(" temperature ", "")
 	if !ok1 || !ok2 || v1 != 42.1 || v2 != 42.1 {
 		t.Fatalf("expected cached parsed value 42.1, got (%v,%v) and (%v,%v)", v1, ok1, v2, ok2)
 	}
 
 	if len(lookup.parsed) != 1 {
 		t.Fatalf("expected parsed cache size 1, got %d", len(lookup.parsed))
+	}
+}
+
+func TestNumericFieldLookup_CachePointParsedValue(t *testing.T) {
+	lookup := newNumericFieldLookup(nil, []models.CollectPoint{
+		{FieldName: " temperature ", Value: "42.1"},
+	})
+
+	v1, ok1 := lookup.getFloatWithNormalized("temperature", "temperature")
+	v2, ok2 := lookup.getFloatWithNormalized(" temperature ", "temperature")
+	if !ok1 || !ok2 || v1 != 42.1 || v2 != 42.1 {
+		t.Fatalf("expected cached point value 42.1, got (%v,%v) and (%v,%v)", v1, ok1, v2, ok2)
+	}
+
+	if len(lookup.parsed) != 1 {
+		t.Fatalf("expected parsed cache size 1, got %d", len(lookup.parsed))
+	}
+}
+
+func TestNumericFieldLookup_PointNormalizedLazy(t *testing.T) {
+	lookup := newNumericFieldLookup(nil, []models.CollectPoint{
+		{FieldName: " Temp ", Value: float64(42.1)},
+	})
+
+	if v, ok := lookup.getFloatWithNormalized("Temp", "temp"); !ok || v != 42.1 {
+		t.Fatalf("expected exact point lookup to succeed, got (%v, %v)", v, ok)
+	}
+	if lookup.pointRaw == nil {
+		t.Fatalf("expected pointRaw initialized")
+	}
+	if lookup.pointNorm != nil {
+		t.Fatalf("expected pointNorm to stay lazy on exact hit")
+	}
+	if lookup.parsed != nil {
+		t.Fatalf("expected native numeric point to skip parsed cache")
+	}
+
+	if v, ok := lookup.getFloatWithNormalized("temp", "temp"); !ok || v != 42.1 {
+		t.Fatalf("expected normalized point lookup to succeed, got (%v, %v)", v, ok)
+	}
+	if lookup.pointNorm == nil {
+		t.Fatalf("expected pointNorm initialized after normalized fallback")
+	}
+}
+
+func TestNumericFieldLookup_CacheInvalidValue(t *testing.T) {
+	lookup := newNumericFieldLookup(map[string]string{
+		"bad": "abc",
+	}, nil)
+
+	if _, ok := lookup.getFloatWithNormalized("bad", "bad"); ok {
+		t.Fatalf("invalid float should return false on first lookup")
+	}
+	if lookup.invalid == nil {
+		t.Fatalf("expected invalid cache initialized")
+	}
+	if _, exists := lookup.invalid["bad"]; !exists {
+		t.Fatalf("expected invalid cache entry for bad")
+	}
+	if _, ok := lookup.getFloatWithNormalized(" bad ", "bad"); ok {
+		t.Fatalf("invalid float should return false on repeated lookup")
 	}
 }
 
