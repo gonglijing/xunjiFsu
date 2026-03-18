@@ -98,6 +98,10 @@ func BenchmarkInsertCollectDataWithOptions_CacheOnly_8Fields(b *testing.B) {
 	benchmarkInsertCollectDataWithOptions(b, 8, false)
 }
 
+func BenchmarkInsertCollectDataWithOptions_CacheOnly_1Field(b *testing.B) {
+	benchmarkInsertCollectDataWithOptions(b, 1, false)
+}
+
 func BenchmarkInsertCollectDataWithOptions_WithHistory_8Fields(b *testing.B) {
 	benchmarkInsertCollectDataWithOptions(b, 8, true)
 }
@@ -124,4 +128,61 @@ func BenchmarkInsertCollectDataWithOptions_CacheOnly_10000Fields(b *testing.B) {
 
 func BenchmarkInsertCollectDataWithOptions_WithHistory_10000Fields(b *testing.B) {
 	benchmarkInsertCollectDataWithOptions(b, 10000, true)
+}
+
+func BenchmarkWriteCollectDataBatch_SingleItem_CacheOnly_8Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	items := []collectWriteRequest{{data: makeBenchmarkCollectData(8), storeHistory: false}}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := writeCollectDataBatch(items); err != nil {
+			b.Fatalf("writeCollectDataBatch error: %v", err)
+		}
+	}
+}
+
+func BenchmarkWriteCollectDataBatch_TwoItems_CacheOnly_8Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	items := []collectWriteRequest{
+		{data: makeBenchmarkCollectData(8), storeHistory: false},
+		{data: makeBenchmarkCollectData(8), storeHistory: false},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := writeCollectDataBatch(items); err != nil {
+			b.Fatalf("writeCollectDataBatch error: %v", err)
+		}
+	}
 }

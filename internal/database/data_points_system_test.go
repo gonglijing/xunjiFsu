@@ -298,6 +298,53 @@ func TestInsertCollectDataWithOptions_LargeFieldSet(t *testing.T) {
 	}
 }
 
+func TestInsertCollectDataWithOptions_PointsCacheOnlySmallBatch(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	data := &models.CollectData{
+		DeviceID:   77,
+		DeviceName: "dev-77",
+		Timestamp:  time.Now(),
+		Points: []models.CollectPoint{
+			{FieldName: " temperature ", Value: 21.5},
+			{FieldName: "humidity", Value: 63},
+			{FieldName: "   ", Value: 0},
+		},
+	}
+
+	if err := InsertCollectDataWithOptions(data, false); err != nil {
+		t.Fatalf("InsertCollectDataWithOptions(points, storeHistory=false): %v", err)
+	}
+
+	rows, err := DataDB.Query("SELECT field_name, value FROM data_cache WHERE device_id = ? ORDER BY field_name", data.DeviceID)
+	if err != nil {
+		t.Fatalf("query data_cache: %v", err)
+	}
+	defer rows.Close()
+
+	got := make(map[string]string, 2)
+	for rows.Next() {
+		var field, value string
+		if err := rows.Scan(&field, &value); err != nil {
+			t.Fatalf("scan data_cache: %v", err)
+		}
+		got[field] = value
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate data_cache: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("expected 2 cached points, got %d", len(got))
+	}
+	if got["temperature"] != "21.5" {
+		t.Fatalf("expected trimmed temperature value 21.5, got %q", got["temperature"])
+	}
+	if got["humidity"] != "63" {
+		t.Fatalf("expected humidity value 63, got %q", got["humidity"])
+	}
+}
+
 func TestCollectDataWriter_StopFlushesPendingWrites(t *testing.T) {
 	prepareDataPointsTestDB(t)
 
