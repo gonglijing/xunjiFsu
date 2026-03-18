@@ -203,6 +203,39 @@ func TestBatchSaveDataCacheEntries_UpsertLatestValue(t *testing.T) {
 	}
 }
 
+func TestBatchSaveDataPoints_NormalizesSystemDeviceNameAndTimestamp(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	collectedAt := time.Date(2026, 3, 18, 12, 34, 56, 0, time.UTC)
+	entries := []DataPointEntry{
+		{
+			DeviceID:    models.SystemStatsDeviceID,
+			DeviceName:  "-1",
+			FieldName:   "cpu_usage",
+			Value:       "12.3",
+			ValueType:   collectDataValueTypeString,
+			CollectedAt: collectedAt,
+		},
+	}
+
+	if err := BatchSaveDataPoints(entries); err != nil {
+		t.Fatalf("BatchSaveDataPoints: %v", err)
+	}
+
+	var gotName string
+	var gotTime time.Time
+	if err := DataDB.QueryRow(`SELECT device_name, collected_at FROM data_points WHERE device_id = ? AND field_name = ?`,
+		models.SystemStatsDeviceID, "cpu_usage").Scan(&gotName, &gotTime); err != nil {
+		t.Fatalf("query data_points: %v", err)
+	}
+	if gotName != models.SystemStatsDeviceName {
+		t.Fatalf("device_name = %q, want %q", gotName, models.SystemStatsDeviceName)
+	}
+	if !gotTime.Equal(collectedAt) {
+		t.Fatalf("collected_at = %v, want %v", gotTime, collectedAt)
+	}
+}
+
 func TestInsertCollectDataWithOptions_StoreHistoryFlag(t *testing.T) {
 	prepareDataPointsTestDB(t)
 

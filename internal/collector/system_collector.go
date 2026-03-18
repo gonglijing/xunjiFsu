@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -218,39 +217,115 @@ func readProcStatCPUTotalIdle() (procCPUStat, bool) {
 	if err != nil {
 		return procCPUStat{}, false
 	}
+	return parseProcStatCPUTotalIdleBytes(data)
+}
 
-	line := firstLine(string(data))
-	if line == "" || !strings.HasPrefix(line, "cpu ") {
+func parseProcStatCPUTotalIdleBytes(data []byte) (procCPUStat, bool) {
+	line := firstLineBytes(data)
+	if len(line) < 5 || line[0] != 'c' || line[1] != 'p' || line[2] != 'u' || line[3] != ' ' {
 		return procCPUStat{}, false
 	}
 
-	fields := strings.Fields(line)
-	if len(fields) < 5 {
-		return procCPUStat{}, false
-	}
-
+	field := 0
+	i := 4
 	var total uint64
-	for i := 1; i < len(fields); i++ {
-		v, parseErr := strconv.ParseUint(fields[i], 10, 64)
-		if parseErr != nil {
+	var idle uint64
+	for i < len(line) {
+		for i < len(line) && line[i] == ' ' {
+			i++
+		}
+		if i >= len(line) {
+			break
+		}
+
+		value, next, ok := parseUintField(line, i)
+		if !ok {
 			return procCPUStat{}, false
 		}
-		total += v
+		field++
+		total += value
+		if field == 4 {
+			idle = value
+		}
+		i = next
 	}
-
-	idle, err := strconv.ParseUint(fields[4], 10, 64)
-	if err != nil {
+	if field < 4 {
 		return procCPUStat{}, false
 	}
 
 	return procCPUStat{total: total, idle: idle}, true
 }
 
-func firstLine(s string) string {
-	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
-		return strings.TrimSpace(s[:idx])
+func firstLineBytes(data []byte) []byte {
+	line := data
+	if idx := indexByte(data, '\n'); idx >= 0 {
+		line = data[:idx]
 	}
-	return strings.TrimSpace(s)
+	start := 0
+	for start < len(line) && (line[start] == ' ' || line[start] == '\t' || line[start] == '\r') {
+		start++
+	}
+	end := len(line)
+	for end > start && (line[end-1] == ' ' || line[end-1] == '\t' || line[end-1] == '\r') {
+		end--
+	}
+	return line[start:end]
+}
+
+func parseUintField(data []byte, start int) (uint64, int, bool) {
+	if start >= len(data) {
+		return 0, start, false
+	}
+	var value uint64
+	i := start
+	for i < len(data) {
+		ch := data[i]
+		if ch < '0' || ch > '9' {
+			break
+		}
+		value = value*10 + uint64(ch-'0')
+		i++
+	}
+	if i == start {
+		return 0, start, false
+	}
+	return value, i, true
+}
+
+func parseFloatField(data []byte, start int) (float64, int, bool) {
+	if start >= len(data) {
+		return 0, start, false
+	}
+	i := start
+	var whole uint64
+	digits := 0
+	for i < len(data) {
+		ch := data[i]
+		if ch < '0' || ch > '9' {
+			break
+		}
+		whole = whole*10 + uint64(ch-'0')
+		i++
+		digits++
+	}
+	if digits == 0 {
+		return 0, start, false
+	}
+	value := float64(whole)
+	if i < len(data) && data[i] == '.' {
+		i++
+		scale := 0.1
+		for i < len(data) {
+			ch := data[i]
+			if ch < '0' || ch > '9' {
+				break
+			}
+			value += float64(ch-'0') * scale
+			scale *= 0.1
+			i++
+		}
+	}
+	return value, i, true
 }
 
 // getMemoryInfo 获取内存信息
@@ -314,15 +389,23 @@ func (c *SystemStatsCollector) getUptime() int64 {
 	if err != nil {
 		return 0
 	}
+	return parseProcUptimeSeconds(data)
+}
 
-	parts := strings.Fields(string(data))
-	if len(parts) >= 1 {
-		uptime, err := strconv.ParseFloat(parts[0], 64)
-		if err == nil {
-			return int64(uptime)
+func parseProcUptimeSeconds(data []byte) int64 {
+	for i := 0; i < len(data); i++ {
+		if data[i] == ' ' || data[i] == '\n' || data[i] == '\t' || data[i] == '\r' {
+			value, _, ok := parseFloatField(data, 0)
+			if ok {
+				return int64(value)
+			}
+			return 0
 		}
 	}
-
+	value, _, ok := parseFloatField(data, 0)
+	if ok {
+		return int64(value)
+	}
 	return 0
 }
 
@@ -336,17 +419,49 @@ func (c *SystemStatsCollector) getLoadAverage(stats *models.SystemStats) {
 		stats.Load15 = 0
 		return
 	}
+	parseProcLoadAverage(data, stats)
+}
 
-	parts := strings.Fields(string(data))
-	if len(parts) >= 3 {
-		load1, _ := strconv.ParseFloat(parts[0], 64)
-		load5, _ := strconv.ParseFloat(parts[1], 64)
-		load15, _ := strconv.ParseFloat(parts[2], 64)
-
-		stats.Load1 = load1
-		stats.Load5 = load5
-		stats.Load15 = load15
+func parseProcLoadAverage(data []byte, stats *models.SystemStats) {
+	if stats == nil {
+		return
 	}
+	load1, next, ok := parseFloatField(data, skipProcSpaces(data, 0))
+	if !ok {
+		stats.Load1 = 0
+		stats.Load5 = 0
+		stats.Load15 = 0
+		return
+	}
+	load5, next, ok := parseFloatField(data, skipProcSpaces(data, next))
+	if !ok {
+		stats.Load1 = 0
+		stats.Load5 = 0
+		stats.Load15 = 0
+		return
+	}
+	load15, _, ok := parseFloatField(data, skipProcSpaces(data, next))
+	if !ok {
+		stats.Load1 = 0
+		stats.Load5 = 0
+		stats.Load15 = 0
+		return
+	}
+	stats.Load1 = load1
+	stats.Load5 = load5
+	stats.Load15 = load15
+}
+
+func skipProcSpaces(data []byte, start int) int {
+	for start < len(data) {
+		switch data[start] {
+		case ' ', '\n', '\t', '\r':
+			start++
+		default:
+			return start
+		}
+	}
+	return start
 }
 
 // statsToCollectData 将系统属性转换为采集数据

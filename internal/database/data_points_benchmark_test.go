@@ -66,6 +66,22 @@ func makeBenchmarkCollectData(fieldCount int) *models.CollectData {
 	}
 }
 
+func makeBenchmarkDataPointEntries(fieldCount int) []DataPointEntry {
+	entries := make([]DataPointEntry, 0, fieldCount)
+	now := time.Now()
+	for i := 0; i < fieldCount; i++ {
+		entries = append(entries, DataPointEntry{
+			DeviceID:    1,
+			DeviceName:  "bench-device",
+			FieldName:   fmt.Sprintf("f_%d", i),
+			Value:       fmt.Sprintf("%d", i),
+			ValueType:   collectDataValueTypeString,
+			CollectedAt: now,
+		})
+	}
+	return entries
+}
+
 func benchmarkInsertCollectDataWithOptions(b *testing.B, fieldCount int, storeHistory bool) {
 	prepareDataPointsBenchmarkDB(b)
 
@@ -183,6 +199,34 @@ func BenchmarkWriteCollectDataBatch_TwoItems_CacheOnly_8Fields(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if err := writeCollectDataBatch(items); err != nil {
 			b.Fatalf("writeCollectDataBatch error: %v", err)
+		}
+	}
+}
+
+func BenchmarkBatchSaveDataPoints_32Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+
+	entries := makeBenchmarkDataPointEntries(32)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		deviceID := int64(i + 1)
+		for j := range entries {
+			entries[j].DeviceID = deviceID
+		}
+		if err := BatchSaveDataPoints(entries); err != nil {
+			b.Fatalf("BatchSaveDataPoints error: %v", err)
 		}
 	}
 }

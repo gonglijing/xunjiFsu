@@ -2,6 +2,7 @@ package collector
 
 import (
 	"database/sql"
+	"math"
 	"testing"
 	"time"
 
@@ -130,5 +131,57 @@ func TestFormatSystemMetricValue_TwoDecimalPlaces(t *testing.T) {
 	}
 	if got := formatSystemMetricValue(1); got != "1.00" {
 		t.Fatalf("formatSystemMetricValue() = %q, want 1.00", got)
+	}
+}
+
+func TestParseProcStatCPUTotalIdleBytes(t *testing.T) {
+	stat, ok := parseProcStatCPUTotalIdleBytes([]byte("cpu  100 20 30 40 5 6 7 8 0 0\ncpu0 1 2 3 4\n"))
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	if stat.total != 216 {
+		t.Fatalf("total = %d, want 216", stat.total)
+	}
+	if stat.idle != 40 {
+		t.Fatalf("idle = %d, want 40", stat.idle)
+	}
+}
+
+func TestParseProcUptimeSeconds(t *testing.T) {
+	if got := parseProcUptimeSeconds([]byte("12345.67 54321.00\n")); got != 12345 {
+		t.Fatalf("uptime = %d, want 12345", got)
+	}
+}
+
+func TestParseProcLoadAverage(t *testing.T) {
+	stats := &models.SystemStats{}
+	parseProcLoadAverage([]byte("0.12 0.34 0.56 1/100 123\n"), stats)
+	if math.Abs(stats.Load1-0.12) > 1e-9 || math.Abs(stats.Load5-0.34) > 1e-9 || math.Abs(stats.Load15-0.56) > 1e-9 {
+		t.Fatalf("unexpected load averages: %+v", stats)
+	}
+}
+
+func BenchmarkParseProcStatCPUTotalIdleBytes(b *testing.B) {
+	data := []byte("cpu  100 20 30 40 5 6 7 8 0 0\ncpu0 1 2 3 4\n")
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = parseProcStatCPUTotalIdleBytes(data)
+	}
+}
+
+func BenchmarkParseProcUptimeSeconds(b *testing.B) {
+	data := []byte("12345.67 54321.00\n")
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = parseProcUptimeSeconds(data)
+	}
+}
+
+func BenchmarkParseProcLoadAverage(b *testing.B) {
+	data := []byte("0.12 0.34 0.56 1/100 123\n")
+	stats := &models.SystemStats{}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		parseProcLoadAverage(data, stats)
 	}
 }

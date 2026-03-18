@@ -37,6 +37,7 @@ var (
 
 	collectDataCacheBatchSQLCache   = newCollectDataBatchSQLCache(buildCollectDataCacheBatchSQL)
 	collectDataHistoryBatchSQLCache = newCollectDataBatchSQLCache(buildCollectDataHistoryBatchSQL)
+	dataPointBatchSQLCache          = newCollectDataBatchSQLCache(buildDataPointBatchSQL)
 	latestDataPointBatchSQLCache    = newCollectDataBatchSQLCache(buildLatestDataPointBatchSQL)
 	collectDataArgsPool             = sync.Pool{
 		New: func() any {
@@ -235,6 +236,16 @@ func appendCollectDataHistoryValuesSQL(dst []byte, batchSize int) []byte {
 	return dst
 }
 
+func appendDataPointValuesSQL(dst []byte, batchSize int) []byte {
+	for i := 0; i < batchSize; i++ {
+		if i > 0 {
+			dst = append(dst, ',')
+		}
+		dst = append(dst, "(?, ?, ?, ?, ?, ?)"...)
+	}
+	return dst
+}
+
 func buildCollectDataCacheBatchSQL(batchSize int) string {
 	if batchSize <= 0 {
 		return ""
@@ -253,6 +264,16 @@ func buildCollectDataHistoryBatchSQL(batchSize int) string {
 	sqlText := make([]byte, 0, 96+batchSize*32)
 	sqlText = append(sqlText, "INSERT OR REPLACE INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES "...)
 	sqlText = appendCollectDataHistoryValuesSQL(sqlText, batchSize)
+	return string(sqlText)
+}
+
+func buildDataPointBatchSQL(batchSize int) string {
+	if batchSize <= 0 {
+		return ""
+	}
+	sqlText := make([]byte, 0, 96+batchSize*30)
+	sqlText = append(sqlText, "INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES "...)
+	sqlText = appendDataPointValuesSQL(sqlText, batchSize)
 	return string(sqlText)
 }
 
@@ -481,21 +502,39 @@ func BatchSaveDataPoints(entries []DataPointEntry) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT INTO data_points
-		(device_id, device_name, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
+	stmtCache := newCollectDataStmtCache(tx, dataPointBatchSQLCache.get)
+	defer stmtCache.close()
+	args := getCollectDataArgs(collectDataHistoryBatchSize * 6)
+	defer putCollectDataArgs(args)
+	batchCount := 0
+	now := time.Now()
 
 	for _, entry := range entries {
 		collectedAt := entry.CollectedAt
 		if collectedAt.IsZero() {
-			collectedAt = time.Now()
+			collectedAt = now
 		}
-		if _, err := stmt.Exec(entry.DeviceID, normalizeDeviceName(entry.DeviceID, entry.DeviceName), entry.FieldName,
-			entry.Value, entry.ValueType, collectedAt); err != nil {
+		args = append(args,
+			entry.DeviceID,
+			normalizeDeviceName(entry.DeviceID, entry.DeviceName),
+			entry.FieldName,
+			entry.Value,
+			entry.ValueType,
+			collectedAt,
+		)
+		batchCount++
+		if batchCount < collectDataHistoryBatchSize {
+			continue
+		}
+		if err := executeCollectDataHistoryBatchWithArgs(stmtCache, batchCount, args); err != nil {
+			return fmt.Errorf("failed to insert data point: %w", err)
+		}
+		args = args[:0]
+		batchCount = 0
+	}
+
+	if batchCount > 0 {
+		if err := executeCollectDataHistoryBatchWithArgs(stmtCache, batchCount, args); err != nil {
 			return fmt.Errorf("failed to insert data point: %w", err)
 		}
 	}
