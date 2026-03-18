@@ -13,16 +13,16 @@ import (
 
 // HealthStatus 健康检查状态
 type HealthStatus struct {
-	Status    string            `json:"status"`    // healthy, degraded, unhealthy
-	Timestamp time.Time         `json:"timestamp"`
-	Uptime    string            `json:"uptime"`
-	Checks    map[string]Check  `json:"checks"`
-	System    SystemInfo        `json:"system"`
+	Status    string           `json:"status"` // healthy, degraded, unhealthy
+	Timestamp time.Time        `json:"timestamp"`
+	Uptime    string           `json:"uptime"`
+	Checks    map[string]Check `json:"checks"`
+	System    SystemInfo       `json:"system"`
 }
 
 // Check 单个检查项
 type Check struct {
-	Status  string `json:"status"`  // pass, fail
+	Status  string `json:"status"` // pass, fail
 	Message string `json:"message,omitempty"`
 }
 
@@ -48,10 +48,7 @@ func Health(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// 获取内存使用
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	status.System.MemoryMB = float64(m.Alloc) / 1024 / 1024
+	status.System.MemoryMB = readProcessRSSMB()
 
 	// 检查数据库连接
 	if err := checkDatabase(); err != nil {

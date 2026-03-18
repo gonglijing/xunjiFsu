@@ -101,9 +101,13 @@ export function GatewayStatus() {
           </div>
           <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
             <div class="stat-card">
-              <div class="stat-card-label">内存占用</div>
+              <div class="stat-card-label">主程序内存</div>
               <div class="stat-card-value" style="font-size:1.75rem;">
-                {m()?.go?.memory_alloc_mb?.toFixed
+                {m()?.go?.process_rss_mb?.toFixed
+                  ? m().go.process_rss_mb.toFixed(1)
+                  : m()?.go?.ProcessRSS?.toFixed
+                  ? m().go.ProcessRSS.toFixed(1)
+                  : m()?.go?.memory_alloc_mb?.toFixed
                   ? m().go.memory_alloc_mb.toFixed(1)
                   : m()?.go?.MemoryAlloc?.toFixed
                   ? m().go.MemoryAlloc.toFixed(1)
@@ -111,8 +115,27 @@ export function GatewayStatus() {
                 <span style="font-size:0.9rem; margin-left:4px;">MB</span>
               </div>
               <div class="text-xs text-muted" style="margin-top:4px;">
-                总分配：{' '}
-                {m()?.go?.memory_total_mb ?? m()?.go?.MemoryTotal ?? '--'}
+                系统已用 / 总量：{' '}
+                {m()?.go?.system_memory_used_mb?.toFixed
+                  ? m().go.system_memory_used_mb.toFixed(0)
+                  : m()?.go?.SystemMemoryUsed?.toFixed
+                  ? m().go.SystemMemoryUsed.toFixed(0)
+                  : '--'}
+                {' / '}
+                {m()?.go?.system_memory_total_mb?.toFixed
+                  ? m().go.system_memory_total_mb.toFixed(0)
+                  : m()?.go?.SystemMemoryTotal?.toFixed
+                  ? m().go.SystemMemoryTotal.toFixed(0)
+                  : '--'}
+                MB
+              </div>
+              <div class="text-xs text-muted" style="margin-top:4px;">
+                Go 堆：{' '}
+                {m()?.go?.memory_alloc_mb?.toFixed
+                  ? m().go.memory_alloc_mb.toFixed(1)
+                  : m()?.go?.MemoryAlloc?.toFixed
+                  ? m().go.MemoryAlloc.toFixed(1)
+                  : '--'}
                 MB
               </div>
             </div>
