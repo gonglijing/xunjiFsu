@@ -94,6 +94,14 @@ fsu/
 
 未命中路由默认回到拓扑页。
 
+前端开发约束与整改方向见：
+
+- `docs/frontend-rules.md`
+
+后端开发约束与整改方向见：
+
+- `docs/backend-rules.md`
+
 ---
 
 ## 6. 北向类型与配置
