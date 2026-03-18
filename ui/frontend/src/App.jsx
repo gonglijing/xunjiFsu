@@ -1,73 +1,55 @@
 import { Show } from 'solid-js';
 import { usePath, navigate } from './router';
 import SidebarNav from './components/SidebarNav';
+import { useAuthGuard } from './utils/authGuard';
+import { isLoginRoute, resolveRoute } from './route-config';
 import Login from './pages/Login';
+import Topology from './pages/Topology';
+import AlarmsPage from './pages/AlarmsPage';
+import Realtime from './pages/Realtime';
 import GatewayPage from './pages/GatewayPage';
 import Resources from './pages/Resources';
 import { DevicesPage } from './pages/DevicesPage';
 import { DriversPage } from './pages/DriversPage';
 import { NorthboundPage } from './pages/NorthboundPage';
 import { ThresholdsPage } from './pages/ThresholdsPage';
+import ModbusSerialDebugPage from './pages/ModbusSerialDebugPage';
+import ModbusTCPDebugPage from './pages/ModbusTCPDebugPage';
 import { DebugToolsPage } from './pages/DebugToolsPage';
-import { ModbusSerialDebugPage } from './pages/ModbusSerialDebugPage';
-import { ModbusTCPDebugPage } from './pages/ModbusTCPDebugPage';
-import AlarmsPage from './pages/AlarmsPage';
-import Realtime from './pages/Realtime';
-import Topology from './pages/Topology';
-import { useAuthGuard } from './utils/authGuard';
+
+const routeComponentByKey = {
+  login: Login,
+  home: Topology,
+  alarms: AlarmsPage,
+  realtime: Realtime,
+  gateway: GatewayPage,
+  resources: Resources,
+  devices: DevicesPage,
+  drivers: DriversPage,
+  northbound: NorthboundPage,
+  thresholds: ThresholdsPage,
+  'debug-modbus-serial': ModbusSerialDebugPage,
+  'debug-modbus-tcp': ModbusTCPDebugPage,
+  'debug-tools': DebugToolsPage,
+};
 
 function App() {
   const [path, setNavigate] = usePath();
   useAuthGuard(path, navigate);
-
-  // 路由渲染
-  const render = () => {
-    const currentPath = path();
-    
-    switch (true) {
-      case currentPath === '/login':
-        return <Login onSuccess={() => setNavigate('/')} />;
-      case currentPath === '/':
-        return <Topology />;
-      case currentPath.startsWith('/gateway'):
-        return <GatewayPage />;
-      case currentPath.startsWith('/resources'):
-        return <Resources />;
-      case currentPath.startsWith('/devices'):
-        return <DevicesPage />;
-      case currentPath.startsWith('/drivers'):
-        return <DriversPage />;
-      case currentPath.startsWith('/northbound'):
-        return <NorthboundPage />;
-      case currentPath.startsWith('/thresholds'):
-        return <ThresholdsPage />;
-      case currentPath.startsWith('/debug/modbus-serial'):
-        return <ModbusSerialDebugPage />;
-      case currentPath.startsWith('/debug/modbus-tcp'):
-        return <ModbusTCPDebugPage />;
-      case currentPath.startsWith('/debug'):
-        return <DebugToolsPage />;
-      case currentPath.startsWith('/alarms'):
-        return <AlarmsPage />;
-      case currentPath.startsWith('/realtime'):
-        return <Realtime />;
-      case currentPath.startsWith('/topology'):
-        return <Topology />;
-      default:
-        return <Topology />;
-    }
-  };
+  const currentRoute = () => resolveRoute(path());
+  const isLogin = () => isLoginRoute(path());
+  const CurrentPage = () => routeComponentByKey[currentRoute().key] ?? Topology;
 
   return (
-    <div class={path() === '/login' ? '' : 'shell-layout'}>
-      <Show when={path() !== '/login'}>
+    <div class={isLogin() ? '' : 'shell-layout'}>
+      <Show when={!isLogin()}>
         <aside class="shell-sidebar">
           <SidebarNav path={path()} onNav={setNavigate} />
         </aside>
       </Show>
-      <main class={path() === '/login' ? 'container login-main' : 'shell-main'}>
-        <div class={path() === '/login' ? '' : 'container'} style="padding-top:24px; padding-bottom:32px;">
-          {render()}
+      <main class={isLogin() ? 'container login-main' : 'shell-main'}>
+        <div class={isLogin() ? '' : 'container'} style="padding-top:24px; padding-bottom:32px;">
+          <CurrentPage onSuccess={() => setNavigate('/')} />
         </div>
         <div id="toast-container" class="toast-container"></div>
       </main>

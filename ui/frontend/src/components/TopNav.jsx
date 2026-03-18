@@ -1,30 +1,12 @@
 import { createSignal, Show } from 'solid-js';
 import { isActive } from '../router';
-
-export const mainLinks = [
-  { to: '/', label: '拓扑视图', icon: '⛓' },
-  { to: '/alarms', label: '报警', icon: '⚠' },
-  { to: '/realtime', label: '实时', icon: '◈' },
-];
-
-export const settingsLinks = [
-  { to: '/gateway', label: '网关设置', icon: '⚙' },
-  { to: '/resources', label: '资源', icon: '◐' },
-  { to: '/devices', label: '设备', icon: '◑' },
-  { to: '/drivers', label: '驱动', icon: '▣' },
-  { to: '/northbound', label: '北向', icon: '◉' },
-  { to: '/thresholds', label: '阈值', icon: '◐' },
-];
-
-export const debugLinks = [
-  { to: '/debug/modbus-serial', label: '串口 Modbus', icon: '🧪' },
-  { to: '/debug/modbus-tcp', label: 'TCP Modbus', icon: '🌐' },
-];
+import { mainLinks, settingsLinks, debugLinks } from '../route-config';
 
 function TopNav(props) {
   const [dropdownOpen, setDropdownOpen] = createSignal(false);
   let dropdownRef;
   const dropdownLinks = [...settingsLinks, ...debugLinks];
+  const isSettingsActive = () => dropdownLinks.some((link) => isActive(props.path, link.path));
 
   const handleLogout = (e) => {
     localStorage.removeItem('gogw_jwt');
@@ -79,12 +61,12 @@ function TopNav(props) {
         <div class="nav-links" onClick={handleClickOutside}>
           {mainLinks.map((l) => (
             <a
-              key={l.to}
-              href={l.to}
-              class={`nav-btn ${isActive(props.path, l.to) ? 'active' : ''}`}
+              key={l.path}
+              href={l.path}
+              class={`nav-btn ${isActive(props.path, l.path) ? 'active' : ''}`}
               onClick={(e) => {
                 e.preventDefault();
-                props.onNav(l.to);
+                props.onNav(l.path);
                 closeDropdown();
               }}
             >
@@ -94,7 +76,7 @@ function TopNav(props) {
           ))}
           <div class="dropdown" ref={dropdownRef}>
             <button
-              class={`nav-btn dropdown-toggle ${isActive(props.path, '/resources') || isActive(props.path, '/devices') || isActive(props.path, '/drivers') || isActive(props.path, '/northbound') || isActive(props.path, '/thresholds') || isActive(props.path, '/debug') ? 'active' : ''}`}
+              class={`nav-btn dropdown-toggle ${isSettingsActive() ? 'active' : ''}`}
               onClick={() => setDropdownOpen(!dropdownOpen())}
             >
               <span class="nav-btn-icon">⚙</span>
@@ -105,12 +87,12 @@ function TopNav(props) {
               <div class="dropdown-menu">
                 {dropdownLinks.map((l) => (
                   <a
-                    key={l.to}
-                    href={l.to}
-                    class={`dropdown-item ${isActive(props.path, l.to) ? 'active' : ''}`}
+                    key={l.path}
+                    href={l.path}
+                    class={`dropdown-item ${isActive(props.path, l.path) ? 'active' : ''}`}
                     onClick={(e) => {
                       e.preventDefault();
-                      props.onNav(l.to);
+                      props.onNav(l.path);
                       closeDropdown();
                     }}
                   >

@@ -1,5 +1,5 @@
 import { isActive } from '../router';
-import { mainLinks, settingsLinks, debugLinks } from './TopNav';
+import { mainLinks, settingsLinks, debugLinks } from '../route-config';
 
 function SidebarNav(props) {
   return (
@@ -17,8 +17,8 @@ function SidebarNav(props) {
         {mainLinks.map((l) => (
           <button
             type="button"
-            class={`sidebar-link ${isActive(props.path, l.to) ? 'active' : ''}`}
-            onClick={() => props.onNav(l.to)}
+            class={`sidebar-link ${isActive(props.path, l.path) ? 'active' : ''}`}
+            onClick={() => props.onNav(l.path)}
           >
             <span class="sidebar-link-icon">{l.icon}</span>
             <span>{l.label}</span>
@@ -31,8 +31,8 @@ function SidebarNav(props) {
         {settingsLinks.map((l) => (
           <button
             type="button"
-            class={`sidebar-link ${isActive(props.path, l.to) ? 'active' : ''}`}
-            onClick={() => props.onNav(l.to)}
+            class={`sidebar-link ${isActive(props.path, l.path) ? 'active' : ''}`}
+            onClick={() => props.onNav(l.path)}
           >
             <span class="sidebar-link-icon">{l.icon}</span>
             <span>{l.label}</span>
@@ -45,8 +45,8 @@ function SidebarNav(props) {
         {debugLinks.map((l) => (
           <button
             type="button"
-            class={`sidebar-link ${isActive(props.path, l.to) ? 'active' : ''}`}
-            onClick={() => props.onNav(l.to)}
+            class={`sidebar-link ${isActive(props.path, l.path) ? 'active' : ''}`}
+            onClick={() => props.onNav(l.path)}
           >
             <span class="sidebar-link-icon">{l.icon}</span>
             <span>{l.label}</span>
