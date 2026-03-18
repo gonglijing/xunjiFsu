@@ -22,22 +22,22 @@ func TestShouldLoadNorthboundConfig(t *testing.T) {
 	}
 }
 
-func TestNorthboundConfigPayload(t *testing.T) {
+func TestBuildNorthboundConfigPayload(t *testing.T) {
 	config := &models.NorthboundConfig{
 		Type:      "mqtt",
 		ServerURL: "tcp://127.0.0.1:1883",
 		Topic:     "demo/topic",
 	}
 
-	got := northboundConfigPayload(config)
+	got := buildNorthboundConfigPayload(config)
 	if got == "" {
 		t.Fatal("expected payload from model, got empty string")
 	}
 
 	config.Config = `{"server":"tcp://127.0.0.1:1883","topic":"schema-topic"}`
-	got = northboundConfigPayload(config)
+	got = buildNorthboundConfigPayload(config)
 	if got != config.Config {
-		t.Fatalf("northboundConfigPayload() = %q, want schema config", got)
+		t.Fatalf("buildNorthboundConfigPayload() = %q, want schema config", got)
 	}
 }
 

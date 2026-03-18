@@ -50,7 +50,7 @@ func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, conf
 		return fmt.Errorf("unsupported northbound type: %s", config.Type)
 	}
 
-	if err := adapter.Initialize(northboundConfigPayload(config)); err != nil {
+	if err := adapter.Initialize(buildNorthboundConfigPayload(config)); err != nil {
 		return fmt.Errorf("initialize northbound adapter %s: %w", config.Name, err)
 	}
 
@@ -58,7 +58,7 @@ func registerNorthboundAdapter(northboundMgr *northbound.NorthboundManager, conf
 	interval := time.Duration(config.UploadInterval) * time.Millisecond
 	adapter.SetInterval(interval)
 
-	configurePandaxSystemStats(adapter, config, sysStatsCollector)
+	registerPandaxSystemStatsProvider(adapter, config, sysStatsCollector)
 
 	// 注册到管理器
 	northboundMgr.RegisterAdapter(config.Name, adapter)
@@ -70,7 +70,7 @@ func shouldLoadNorthboundConfig(config *models.NorthboundConfig) bool {
 	return config != nil && config.Enabled == 1
 }
 
-func northboundConfigPayload(config *models.NorthboundConfig) string {
+func buildNorthboundConfigPayload(config *models.NorthboundConfig) string {
 	if config == nil {
 		return ""
 	}
@@ -81,7 +81,7 @@ func northboundConfigPayload(config *models.NorthboundConfig) string {
 	return adapters.BuildConfigFromModel(config)
 }
 
-func configurePandaxSystemStats(adapter adapters.NorthboundAdapter, config *models.NorthboundConfig, sysStatsCollector *collector.SystemStatsCollector) {
+func registerPandaxSystemStatsProvider(adapter adapters.NorthboundAdapter, config *models.NorthboundConfig, sysStatsCollector *collector.SystemStatsCollector) {
 	if config == nil || sysStatsCollector == nil || config.Type != "pandax" {
 		return
 	}
