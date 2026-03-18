@@ -27,6 +27,11 @@ type alarmStateKey struct {
 	ThresholdValue float64
 }
 
+type alarmStateIDKey struct {
+	DeviceID    int64
+	ThresholdID int64
+}
+
 type alarmState struct {
 	LastTriggered time.Time
 }
@@ -34,8 +39,10 @@ type alarmState struct {
 var alarmStates = struct {
 	mu   sync.Mutex
 	data map[alarmStateKey]alarmState
+	byID map[alarmStateIDKey]alarmState
 }{
 	data: make(map[alarmStateKey]alarmState),
+	byID: make(map[alarmStateIDKey]alarmState),
 }
 
 var alarmStateCheckCounter uint64
@@ -61,6 +68,42 @@ func buildAlarmStateKey(deviceID int64, threshold *models.Threshold) alarmStateK
 		Operator:       strings.TrimSpace(threshold.Operator),
 		ThresholdValue: threshold.Value,
 	}
+}
+
+func alarmStateIDFromKey(key alarmStateKey) (alarmStateIDKey, bool) {
+	if key.ThresholdID <= 0 {
+		return alarmStateIDKey{}, false
+	}
+	return alarmStateIDKey{
+		DeviceID:    key.DeviceID,
+		ThresholdID: key.ThresholdID,
+	}, true
+}
+
+func getAlarmStateLocked(key alarmStateKey) (alarmState, bool) {
+	if idKey, ok := alarmStateIDFromKey(key); ok {
+		state, exists := alarmStates.byID[idKey]
+		return state, exists
+	}
+	state, exists := alarmStates.data[key]
+	return state, exists
+}
+
+func setAlarmStateLocked(key alarmStateKey, state alarmState) {
+	if idKey, ok := alarmStateIDFromKey(key); ok {
+		alarmStates.byID[idKey] = state
+		return
+	}
+	alarmStates.data[key] = state
+}
+
+func hasAlarmStateLocked(key alarmStateKey) bool {
+	if idKey, ok := alarmStateIDFromKey(key); ok {
+		_, exists := alarmStates.byID[idKey]
+		return exists
+	}
+	_, exists := alarmStates.data[key]
+	return exists
 }
 
 func resolveAlarmRepeatInterval() time.Duration {
@@ -130,6 +173,12 @@ func pruneAlarmStatesLocked(now time.Time, ttl time.Duration) int {
 			removed++
 		}
 	}
+	for key, state := range alarmStates.byID {
+		if state.LastTriggered.IsZero() || now.Sub(state.LastTriggered) > ttl {
+			delete(alarmStates.byID, key)
+			removed++
+		}
+	}
 	return removed
 }
 
@@ -173,10 +222,14 @@ func shouldEmitAlarmForKey(key alarmStateKey, now time.Time, repeatInterval time
 		repeatInterval = defaultAlarmRepeatInterval
 	}
 
+	if idKey, ok := alarmStateIDFromKey(key); ok {
+		return shouldEmitAlarmForIDKey(idKey, now, repeatInterval)
+	}
+
 	alarmStates.mu.Lock()
 	defer alarmStates.mu.Unlock()
 
-	state, exists := alarmStates.data[key]
+	state, exists := getAlarmStateLocked(key)
 
 	emit := false
 	if !exists {
@@ -185,12 +238,35 @@ func shouldEmitAlarmForKey(key alarmStateKey, now time.Time, repeatInterval time
 		emit = true
 	}
 
-	if emit {
-		state.LastTriggered = now
+	if !emit {
+		return false
 	}
-	alarmStates.data[key] = state
 
-	return emit
+	state.LastTriggered = now
+	setAlarmStateLocked(key, state)
+
+	return true
+}
+
+func shouldEmitAlarmForIDKey(key alarmStateIDKey, now time.Time, repeatInterval time.Duration) bool {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if repeatInterval <= 0 {
+		repeatInterval = defaultAlarmRepeatInterval
+	}
+
+	alarmStates.mu.Lock()
+	defer alarmStates.mu.Unlock()
+
+	state, exists := alarmStates.byID[key]
+	if exists && !state.LastTriggered.IsZero() && now.Sub(state.LastTriggered) < repeatInterval {
+		return false
+	}
+
+	state.LastTriggered = now
+	alarmStates.byID[key] = state
+	return true
 }
 
 func clearAlarmStateForDevice(deviceID int64) {
@@ -200,6 +276,11 @@ func clearAlarmStateForDevice(deviceID int64) {
 	for key := range alarmStates.data {
 		if key.DeviceID == deviceID {
 			delete(alarmStates.data, key)
+		}
+	}
+	for key := range alarmStates.byID {
+		if key.DeviceID == deviceID {
+			delete(alarmStates.byID, key)
 		}
 	}
 }

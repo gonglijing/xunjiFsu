@@ -36,7 +36,7 @@ func TestShouldEmitAlarm_EdgeAndRateLimit(t *testing.T) {
 
 	key := buildAlarmStateKey(deviceID, threshold)
 	alarmStates.mu.Lock()
-	_, exists := alarmStates.data[key]
+	exists := hasAlarmStateLocked(key)
 	alarmStates.mu.Unlock()
 	if !exists {
 		t.Fatal("state should be retained after recovery for repeat suppression")
@@ -109,13 +109,13 @@ func TestPruneAlarmStatesLocked(t *testing.T) {
 	key := buildAlarmStateKey(deviceID, threshold)
 
 	alarmStates.mu.Lock()
-	alarmStates.data[key] = alarmState{LastTriggered: time.Now().Add(-2 * time.Hour)}
+	setAlarmStateLocked(key, alarmState{LastTriggered: time.Now().Add(-2 * time.Hour)})
 	alarmStates.mu.Unlock()
 	defer clearAlarmStateForDevice(deviceID)
 
 	alarmStates.mu.Lock()
 	removed := pruneAlarmStatesLocked(time.Now(), time.Hour)
-	_, exists := alarmStates.data[key]
+	exists := hasAlarmStateLocked(key)
 	alarmStates.mu.Unlock()
 
 	if removed == 0 {

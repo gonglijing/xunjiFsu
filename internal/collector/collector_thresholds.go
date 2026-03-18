@@ -125,11 +125,15 @@ func (l *numericFieldLookup) release() {
 }
 
 func normalizeFieldName(field string) string {
-	return strings.ToLower(strings.TrimSpace(field))
+	field = trimCollectorText(field)
+	if field == "" {
+		return ""
+	}
+	return strings.ToLower(field)
 }
 
 func prepareLookupKeys(field, normalized string) (trimmed string, normalizedKey string, ok bool) {
-	trimmed = strings.TrimSpace(field)
+	trimmed = trimCollectorText(field)
 	if trimmed == "" {
 		return "", "", false
 	}
@@ -200,7 +204,7 @@ func (l *numericFieldLookup) ensurePointRaw() {
 
 	l.pointRaw = acquirePointValueMap()
 	for _, point := range l.points {
-		name := strings.TrimSpace(point.FieldName)
+		name := trimCollectorText(point.FieldName)
 		if name == "" {
 			continue
 		}
@@ -323,7 +327,10 @@ func (l *numericFieldLookup) getFloatWithNormalized(field, normalized string) (f
 	if !ok {
 		return 0, false
 	}
+	return l.getFloatByPreparedKeys(trimmed, normalizedKey)
+}
 
+func (l *numericFieldLookup) getFloatByPreparedKeys(trimmed, normalizedKey string) (float64, bool) {
 	if value, cached := l.getCachedFloat(trimmed, normalizedKey); cached {
 		return value, true
 	}
@@ -408,7 +415,7 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 			continue
 		}
 
-		value, ok := lookup.getFloatWithNormalized(rule.fieldName, rule.normalizedFieldName)
+		value, ok := lookup.getFloatByPreparedKeys(rule.fieldName, rule.normalizedFieldName)
 		if !ok {
 			continue
 		}
@@ -417,9 +424,17 @@ func (c *Collector) checkThresholds(device *models.Device, data *models.CollectD
 		if !matched {
 			continue
 		}
-		alarmKey := rule.alarmKey
-		alarmKey.DeviceID = device.ID
-		if !shouldEmitAlarmForKey(alarmKey, now, repeatInterval) {
+		emit := false
+		if rule.hasAlarmIDKey {
+			alarmIDKey := rule.alarmIDKey
+			alarmIDKey.DeviceID = device.ID
+			emit = shouldEmitAlarmForIDKey(alarmIDKey, now, repeatInterval)
+		} else {
+			alarmKey := rule.alarmKey
+			alarmKey.DeviceID = device.ID
+			emit = shouldEmitAlarmForKey(alarmKey, now, repeatInterval)
+		}
+		if !emit {
 			continue
 		}
 

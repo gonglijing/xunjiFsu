@@ -27,6 +27,8 @@ type thresholdEvalRule struct {
 	normalizedFieldName string
 	operator            string
 	alarmKey            alarmStateKey
+	alarmIDKey          alarmStateIDKey
+	hasAlarmIDKey       bool
 	shielded            bool
 	thresholdValue      float64
 }
@@ -226,12 +228,16 @@ func buildThresholdEvalRule(threshold *models.Threshold) thresholdEvalRule {
 		thresholdValue = threshold.Value
 		shielded = threshold.Shielded == 1
 	}
+	alarmKey := buildAlarmStateKey(0, threshold)
+	alarmIDKey, hasAlarmIDKey := alarmStateIDFromKey(alarmKey)
 	return thresholdEvalRule{
 		threshold:           threshold,
 		fieldName:           fieldName,
 		normalizedFieldName: normalized,
 		operator:            operator,
-		alarmKey:            buildAlarmStateKey(0, threshold),
+		alarmKey:            alarmKey,
+		alarmIDKey:          alarmIDKey,
+		hasAlarmIDKey:       hasAlarmIDKey,
 		shielded:            shielded,
 		thresholdValue:      thresholdValue,
 	}

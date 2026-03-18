@@ -253,7 +253,7 @@ func BenchmarkCheckThresholds_100RulesMatchedSuppressed(b *testing.B) {
 	for _, rule := range rules {
 		key := rule.alarmKey
 		key.DeviceID = deviceID
-		alarmStates.data[key] = alarmState{LastTriggered: now}
+		setAlarmStateLocked(key, alarmState{LastTriggered: now})
 	}
 	alarmStates.mu.Unlock()
 
