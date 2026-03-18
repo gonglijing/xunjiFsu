@@ -1,4 +1,4 @@
-export const routeTable = [
+const routeTable = [
   { key: 'login', path: '/login', layout: 'login' },
   { key: 'home', path: '/', layout: 'shell', navGroup: 'main', label: '拓扑视图', icon: '⛓' },
   { key: 'alarms', path: '/alarms', layout: 'shell', navGroup: 'main', label: '报警', icon: '⚠' },
@@ -14,7 +14,7 @@ export const routeTable = [
   { key: 'thresholds', path: '/thresholds', layout: 'shell', navGroup: 'settings', label: '阈值', icon: '◐' },
 ];
 
-export const fallbackRoute = routeTable.find((route) => route.key === 'home');
+const fallbackRoute = routeTable.find((route) => route.key === 'home');
 export const mainLinks = routeTable.filter((route) => route.navGroup === 'main');
 export const settingsLinks = routeTable.filter((route) => route.navGroup === 'settings');
 export const debugLinks = routeTable.filter((route) => route.navGroup === 'debug');

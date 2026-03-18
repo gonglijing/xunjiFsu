@@ -44,11 +44,6 @@ export function usePath() {
   return [path, navigate, query];
 }
 
-// 获取当前路径（简化版）
-export function getPath() {
-  return path();
-}
-
 // 路由匹配工具
 export function isActive(current, target) {
   if (target === '/') return current === '/';

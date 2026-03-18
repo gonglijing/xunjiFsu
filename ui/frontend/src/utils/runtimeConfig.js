@@ -97,7 +97,7 @@ function buildRuntimeConfig() {
   };
 }
 
-export function validateAndWarnConfig() {
+function validateAndWarnConfig() {
   if (!cachedRuntimeConfig) {
     cachedRuntimeConfig = buildRuntimeConfig();
   }
@@ -116,7 +116,7 @@ export function getNorthboundDefaultUploadIntervalMs() {
   return validateAndWarnConfig().northbound_default_upload_interval_ms;
 }
 
-export function getFrontendRuntimeConfig() {
+function getFrontendRuntimeConfig() {
   return validateAndWarnConfig();
 }
 
