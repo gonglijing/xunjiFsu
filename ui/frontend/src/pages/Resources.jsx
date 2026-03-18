@@ -298,7 +298,7 @@ function Resources() {
         }
       >
         <LoadErrorHint error={loadError()} onRetry={load} />
-        <div class="table-container" style="max-height:520px; overflow:auto;">
+        <div class="table-container table-scroll-md">
           <table class="table">
             <thead>
               <tr>
@@ -344,7 +344,7 @@ function Resources() {
               </For>
               <Show when={items().length === 0}>
                 <tr>
-                  <td colSpan={6} style="text-align:center; padding:24px; color:var(--text-muted);">
+                  <td colSpan={6} class="table-cell-empty">
                     {loading() ? '加载中...' : '暂无资源'}
                   </td>
                 </tr>
@@ -405,7 +405,7 @@ function Resources() {
               </Show>
             </div>
             <Show when={err()}>
-              <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
+              <div class="form-error">{err()}</div>
             </Show>
             <div class="modal-actions" style={{ marginTop: '8px' }}>
               <button 

@@ -146,16 +146,16 @@ function AlarmsPage() {
         )}
       </Show>
       <Card
-      title="报警日志"
-      extra={(
-        <div class="toolbar-actions">
-          <button class="btn btn-ghost btn-sm" onClick={load} disabled={loading() || actionBusy()}>刷新</button>
-          <button class="btn btn-outline-danger btn-sm" onClick={removeBatch} disabled={loading() || actionBusy() || selectedIds().length === 0}>批量删除</button>
-          <button class="btn btn-outline-danger btn-sm" onClick={clearAll} disabled={loading() || actionBusy() || items().length === 0}>清空</button>
-        </div>
-      )}
-    >
-      <div class="table-container" style="max-height:600px; overflow:auto;">
+        title="报警日志"
+        extra={(
+          <div class="toolbar-actions">
+            <button class="btn btn-ghost btn-sm" onClick={load} disabled={loading() || actionBusy()}>刷新</button>
+            <button class="btn btn-outline-danger btn-sm" onClick={removeBatch} disabled={loading() || actionBusy() || selectedIds().length === 0}>批量删除</button>
+            <button class="btn btn-outline-danger btn-sm" onClick={clearAll} disabled={loading() || actionBusy() || items().length === 0}>清空</button>
+          </div>
+        )}
+      >
+      <div class="table-container table-scroll-lg">
         <table class="table">
           <thead>
             <tr>
@@ -222,7 +222,7 @@ function AlarmsPage() {
             <For each={items().length === 0 ? [1] : []}>
               {() => (
                 <tr>
-                  <td colSpan={10} style="text-align:center; padding:24px; color:var(--text-muted);">
+                  <td colSpan={10} class="table-cell-empty">
                     {loading() ? '加载中...' : '暂无告警'}
                   </td>
                 </tr>

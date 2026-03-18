@@ -97,28 +97,28 @@ export function Drivers() {
         )}
       </Show>
       <Card
-      title="驱动管理"
-      extra={
-        <div class="toolbar-actions">
-          <button class="btn btn-ghost btn-sm" onClick={load} disabled={loading()}>
-            刷新
-          </button>
-          <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-            上传驱动
-            <input type="file" accept=".wasm" style="display:none" onChange={upload} />
-          </label>
-        </div>
-      }
-    >
+        title="驱动管理"
+        extra={
+          <div class="toolbar-actions">
+            <button class="btn btn-ghost btn-sm" onClick={load} disabled={loading()}>
+              刷新
+            </button>
+            <label class="btn btn-primary btn-sm upload-trigger">
+              上传驱动
+              <input type="file" accept=".wasm" style="display:none" onChange={upload} />
+            </label>
+          </div>
+        }
+      >
       <LoadErrorHint error={error()} onRetry={load} />
       {loading() ? (
-        <div class="text-center" style="padding:48px; color:var(--text-muted);">
-          <div class="loading-spinner" style="margin:0 auto 16px;"></div>
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
           <div>加载中...</div>
         </div>
       ) : (
         <CrudTable
-          style="max-height:520px; overflow:auto;"
+          containerClass="table-scroll-md"
           loading={loading()}
           items={items()}
           emptyText="暂无驱动"

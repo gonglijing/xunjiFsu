@@ -1078,6 +1078,131 @@ tbody tr:last-child td {
 .text-xs { font-size: 0.75rem; }
 .text-muted { color: var(--text-muted); }
 
+.table-scroll-sm {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.table-scroll-md {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.table-scroll-lg {
+  max-height: 600px;
+  overflow: auto;
+}
+
+.table-cell-loading,
+.table-cell-empty {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.table-cell-loading {
+  padding: 32px;
+}
+
+.table-cell-empty {
+  padding: 24px;
+}
+
+.loading-state {
+  padding: 48px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.loading-state .loading-spinner {
+  margin: 0 auto 16px;
+}
+
+.form-error {
+  color: var(--accent-red);
+  padding: 4px 0;
+}
+
+.upload-trigger {
+  cursor: pointer;
+}
+
+.inline-error {
+  color: var(--accent-red);
+}
+
+.inline-error-block {
+  color: var(--accent-red);
+  padding: 16px 0;
+}
+
+.section-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.skeleton-value {
+  opacity: 0.6;
+}
+
+.load-error-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.device-drawer {
+  justify-content: flex-end;
+  z-index: 1002;
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.device-drawer-panel {
+  width: 420px;
+  max-width: 90vw;
+  height: 100vh;
+  border-radius: 0;
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.device-drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px 16px;
+}
+
+.device-drawer-section {
+  margin-bottom: 16px;
+}
+
+.device-drawer-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.device-drawer-summary {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.device-drawer-summary-status {
+  margin-top: 4px;
+}
+
+.table-scroll-xs {
+  max-height: 160px;
+  overflow: auto;
+}
+
 /* 模态框 */
 .modal-backdrop {
   position: fixed;

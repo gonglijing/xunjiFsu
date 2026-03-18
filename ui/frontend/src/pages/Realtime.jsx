@@ -283,9 +283,9 @@ function Realtime() {
         )}
       </div>
       {loading() ? (
-        <div style="padding:24px;">加载中...</div>
+        <div class="table-cell-empty">加载中...</div>
       ) : (
-        <div class="table-container" style="max-height:520px; overflow:auto;">
+        <div class="table-container table-scroll-md">
           <table class="table">
             <thead>
               <tr>
@@ -315,7 +315,7 @@ function Realtime() {
               })}
               {points().length === 0 && (
                 <tr>
-                  <td colSpan={5} style="text-align:center; padding:24px; color:var(--text-muted);">暂无数据</td>
+                  <td colSpan={5} class="table-cell-empty">暂无数据</td>
                 </tr>
               )}
             </tbody>

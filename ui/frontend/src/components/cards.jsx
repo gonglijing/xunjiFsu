@@ -1,5 +1,3 @@
-import { createSignal, createEffect, onCleanup } from 'solid-js';
-
 function Card(props) {
   return (
     <div class="card" style={props.style || ''}>
@@ -18,7 +16,7 @@ function Card(props) {
 
 export function SectionTabs(props) {
   return (
-    <div class="section-tabs" style="display:flex; gap:4px; margin-bottom:16px;">
+    <div class="section-tabs">
       {props.tabs?.map((tab, index) => (
         <button
           key={index}
@@ -37,7 +35,7 @@ export function StatusCards(props) {
     <div class="stat-card">
       <div class={`stat-card-icon ${iconClass}`}>⏳</div>
       <div class="stat-card-label">{label}</div>
-      <div class="stat-card-value" style="opacity:0.6">--</div>
+      <div class="stat-card-value skeleton-value">--</div>
     </div>
   );
 

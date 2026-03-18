@@ -193,7 +193,7 @@ export function Thresholds() {
         )}
       >
         <LoadErrorHint error={loadError()} onRetry={load} />
-        <div class="table-container" style="max-height:520px; overflow:auto;">
+        <div class="table-container table-scroll-md">
           <table class="table">
             <thead>
               <tr>
@@ -237,7 +237,7 @@ export function Thresholds() {
               <For each={items().length === 0 ? [1] : []}>
                 {() => (
                   <tr>
-                    <td colSpan={7} style="text-align:center; padding:24px; color:var(--text-muted);">
+                    <td colSpan={7} class="table-cell-empty">
                       {loading() ? '加载中...' : '暂无阈值'}
                     </td>
                   </tr>
@@ -327,7 +327,7 @@ export function Thresholds() {
               />
             </div>
             <Show when={err()}>
-              <div style="color:var(--accent-red); padding:4px 0;">{err()}</div>
+              <div class="form-error">{err()}</div>
             </Show>
             <div class="modal-actions" style={{ marginTop: '8px' }}>
               <button

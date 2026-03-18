@@ -9,7 +9,7 @@ function CrudTable(props) {
   const emptyText = () => props.emptyText || '暂无数据';
 
   return (
-    <div class="table-container" style={props.style || ''}>
+    <div class={`table-container ${props.containerClass || ''}`.trim()} style={props.style || ''}>
       <table class="table">
         <thead>
           <tr>
@@ -26,7 +26,7 @@ function CrudTable(props) {
             when={!loading()}
             fallback={
               <tr>
-                <td colSpan={columns().length + (hasActions() ? 1 : 0)} style="text-align:center; padding:32px;">
+                <td colSpan={columns().length + (hasActions() ? 1 : 0)} class="table-cell-loading">
                   <div class="loading-spinner" style="margin:0 auto 12px;"></div>
                   <div class="text-muted">加载中...</div>
                 </td>
@@ -37,7 +37,7 @@ function CrudTable(props) {
               when={rows().length > 0}
               fallback={
                 <tr>
-                  <td colSpan={columns().length + (hasActions() ? 1 : 0)} style="text-align:center; padding:24px; color:var(--text-muted);">
+                  <td colSpan={columns().length + (hasActions() ? 1 : 0)} class="table-cell-empty">
                     {emptyText()}
                   </td>
                 </tr>
@@ -70,4 +70,3 @@ function CrudTable(props) {
 }
 
 export default CrudTable;
-
