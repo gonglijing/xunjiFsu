@@ -204,19 +204,3 @@ type ConnectionInfo struct {
 	AlarmTopic string `json:"alarm_topic,omitempty"`
 	Connected  bool   `json:"connected"`
 }
-
-// BuildConnectionInfoFromModel 从模型构建连接信息
-func BuildConnectionInfoFromModel(cfg *models.NorthboundConfig) *ConnectionInfo {
-	info := &ConnectionInfo{
-		Type:       cfg.Type,
-		Server:     cfg.ServerURL,
-		Port:       cfg.Port,
-		Path:       cfg.Path,
-		Username:   cfg.Username,
-		ClientID:   cfg.ClientID,
-		Topic:      cfg.Topic,
-		AlarmTopic: cfg.AlarmTopic,
-		Connected:  cfg.Connected,
-	}
-	return info
-}

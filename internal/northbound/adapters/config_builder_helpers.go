@@ -124,7 +124,3 @@ func applySharedModelFields(builder *NorthboundConfigBuilder, cfg *models.Northb
 	}
 	builder.SetExtConfig(cfg.ExtConfig)
 }
-
-func configServerURL(config map[string]interface{}) string {
-	return pickConfigString(config, "serverUrl", "broker")
-}
