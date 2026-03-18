@@ -67,6 +67,24 @@ func TestHeaderContainsToken(t *testing.T) {
 	}
 }
 
+func TestIsGzipAccepted(t *testing.T) {
+	if !isGzipAccepted("br, gzip") {
+		t.Fatal("isGzipAccepted(br, gzip) = false, want true")
+	}
+	if isGzipAccepted("br, deflate") {
+		t.Fatal("isGzipAccepted(br, deflate) = true, want false")
+	}
+}
+
+func TestHasUpgradeConnection(t *testing.T) {
+	if !hasUpgradeConnection("keep-alive, Upgrade") {
+		t.Fatal("hasUpgradeConnection() = false, want true")
+	}
+	if hasUpgradeConnection("keep-alive") {
+		t.Fatal("hasUpgradeConnection() = true, want false")
+	}
+}
+
 func TestAppendVaryToken_NoDuplicate(t *testing.T) {
 	got := appendVaryToken("Accept-Encoding", "accept-encoding")
 	if got != "Accept-Encoding" {

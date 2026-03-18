@@ -18,7 +18,7 @@ var gzipWriterPool = sync.Pool{
 // GzipMiddleware Gzip压缩中间件
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !acceptGzip(r.Header.Get("Accept-Encoding")) || hasUpgradeConnection(r.Header.Get("Connection")) {
+		if !isGzipAccepted(r.Header.Get("Accept-Encoding")) || hasUpgradeConnection(r.Header.Get("Connection")) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -91,7 +91,7 @@ func GunzipRequest(body io.Reader) ([]byte, error) {
 	return io.ReadAll(gr)
 }
 
-func acceptGzip(acceptEncoding string) bool {
+func isGzipAccepted(acceptEncoding string) bool {
 	return headerContainsToken(acceptEncoding, "gzip")
 }
 
