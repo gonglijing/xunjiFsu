@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { usePath, navigate } from './router';
 import SidebarNav from './components/SidebarNav';
 import { useAuthGuard } from './utils/authGuard';
@@ -9,13 +10,13 @@ import AlarmsPage from './pages/AlarmsPage';
 import Realtime from './pages/Realtime';
 import GatewayPage from './pages/GatewayPage';
 import Resources from './pages/Resources';
-import { DevicesPage } from './pages/DevicesPage';
-import { DriversPage } from './pages/DriversPage';
-import { NorthboundPage } from './pages/NorthboundPage';
-import { ThresholdsPage } from './pages/ThresholdsPage';
 import ModbusSerialDebugPage from './pages/ModbusSerialDebugPage';
 import ModbusTCPDebugPage from './pages/ModbusTCPDebugPage';
 import { DebugToolsPage } from './pages/DebugToolsPage';
+import { Devices } from './sections/Devices';
+import { Drivers } from './sections/Drivers';
+import { Northbound } from './sections/Northbound';
+import { Thresholds } from './sections/Thresholds';
 
 const routeComponentByKey = {
   login: Login,
@@ -24,10 +25,10 @@ const routeComponentByKey = {
   realtime: Realtime,
   gateway: GatewayPage,
   resources: Resources,
-  devices: DevicesPage,
-  drivers: DriversPage,
-  northbound: NorthboundPage,
-  thresholds: ThresholdsPage,
+  devices: Devices,
+  drivers: Drivers,
+  northbound: Northbound,
+  thresholds: Thresholds,
   'debug-modbus-serial': ModbusSerialDebugPage,
   'debug-modbus-tcp': ModbusTCPDebugPage,
   'debug-tools': DebugToolsPage,
@@ -38,7 +39,7 @@ function App() {
   useAuthGuard(path, navigate);
   const currentRoute = () => resolveRoute(path());
   const isLogin = () => isLoginRoute(path());
-  const CurrentPage = () => routeComponentByKey[currentRoute().key] ?? Topology;
+  const currentPage = () => routeComponentByKey[currentRoute().key] ?? Topology;
 
   return (
     <div class={isLogin() ? '' : 'shell-layout'}>
@@ -49,7 +50,7 @@ function App() {
       </Show>
       <main class={isLogin() ? 'container login-main' : 'shell-main'}>
         <div class={isLogin() ? '' : 'container'} style="padding-top:24px; padding-bottom:32px;">
-          <CurrentPage onSuccess={() => setNavigate('/')} />
+          <Dynamic component={currentPage()} onSuccess={() => setNavigate('/')} />
         </div>
         <div id="toast-container" class="toast-container"></div>
       </main>

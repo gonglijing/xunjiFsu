@@ -8,17 +8,40 @@ function Login(props) {
   const [error, setError] = createSignal('');
   const [loading, setLoading] = createSignal(false);
 
-  const submit = (e) => {
+  const redirectToHome = () => {
+    try {
+      props.onSuccess?.();
+      return;
+    } catch (err) {
+      console.error('login navigation failed, fallback to hard redirect', err);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.replace('/');
+    }
+  };
+
+  const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    api.auth.login({ username: username(), password: password() })
-      .then((res) => {
-        storeToken(res.token);
-        props.onSuccess?.();
-      })
-      .catch(() => setError('用户名或密码错误'))
-      .finally(() => setLoading(false));
+
+    let token = '';
+    try {
+      const res = await api.auth.login({ username: username(), password: password() });
+      token = typeof res?.token === 'string' ? res.token : '';
+      if (!token) {
+        throw new Error('missing token');
+      }
+      storeToken(token);
+    } catch {
+      setError('用户名或密码错误');
+      setLoading(false);
+      return;
+    }
+
+    redirectToHome();
+    setLoading(false);
   };
 
   return (

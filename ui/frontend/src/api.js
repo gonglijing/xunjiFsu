@@ -123,10 +123,6 @@ export function storeToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
 }
 
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
 export function onUnauthorized(listener) {
   if (typeof listener !== 'function') {
     return () => {};
@@ -196,36 +192,4 @@ export function unwrapData(value, fallback = null) {
     return value.data ?? fallback;
   }
   return value;
-}
-
-// SolidJS 资源获取辅助函数
-import { createResource, createSignal } from 'solid-js';
-
-export function useFetch(url, options = {}) {
-  const [data, { mutate, refetch }] = createResource(
-    () => url,
-    (url) => getJSON(url, options)
-  );
-  return { data, mutate, refetch, loading: () => data.loading, error: () => data.error };
-}
-
-export function useMutation(fn) {
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal(null);
-
-  async function mutate(...args) {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await fn(...args);
-      return result;
-    } catch (e) {
-      setError(e);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return { mutate, loading, error };
 }

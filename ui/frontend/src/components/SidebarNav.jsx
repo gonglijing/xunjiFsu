@@ -2,6 +2,19 @@ import { isActive } from '../router';
 import { mainLinks, settingsLinks, debugLinks } from '../route-config';
 
 function SidebarNav(props) {
+  const navigateTo = (path) => {
+    try {
+      props.onNav(path);
+      return;
+    } catch (err) {
+      console.error('sidebar navigation failed, fallback to hard redirect', err);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.assign(path);
+    }
+  };
+
   return (
     <div class="sidebar-nav">
       <div class="sidebar-brand">
@@ -18,7 +31,7 @@ function SidebarNav(props) {
           <button
             type="button"
             class={`sidebar-link ${isActive(props.path, l.path) ? 'active' : ''}`}
-            onClick={() => props.onNav(l.path)}
+            onClick={() => navigateTo(l.path)}
           >
             <span class="sidebar-link-icon">{l.icon}</span>
             <span>{l.label}</span>
@@ -32,7 +45,7 @@ function SidebarNav(props) {
           <button
             type="button"
             class={`sidebar-link ${isActive(props.path, l.path) ? 'active' : ''}`}
-            onClick={() => props.onNav(l.path)}
+            onClick={() => navigateTo(l.path)}
           >
             <span class="sidebar-link-icon">{l.icon}</span>
             <span>{l.label}</span>
@@ -46,7 +59,7 @@ function SidebarNav(props) {
           <button
             type="button"
             class={`sidebar-link ${isActive(props.path, l.path) ? 'active' : ''}`}
-            onClick={() => props.onNav(l.path)}
+            onClick={() => navigateTo(l.path)}
           >
             <span class="sidebar-link-icon">{l.icon}</span>
             <span>{l.label}</span>
@@ -60,7 +73,7 @@ function SidebarNav(props) {
           class="sidebar-link danger"
           onClick={() => {
             localStorage.removeItem('gogw_jwt');
-            props.onNav('/login');
+            navigateTo('/login');
           }}
         >
           <span class="sidebar-link-icon">⏻</span>
