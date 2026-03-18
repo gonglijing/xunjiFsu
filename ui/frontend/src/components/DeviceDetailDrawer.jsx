@@ -2,7 +2,7 @@ import { Show, For } from 'solid-js';
 import { formatDateTime } from '../utils/time';
 
 function DeviceDetailDrawer(props) {
-  const { visible, device, cache, alarms, loading, onClose } = props;
+  const { visible, device, cache, alarms, loading, onClose, onWrite } = props;
 
   return (
     <Show when={visible}>
@@ -16,7 +16,14 @@ function DeviceDetailDrawer(props) {
             <h3 class="card-title">
               设备详情 {device() ? `- ${device().name}` : ''}
             </h3>
-            <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={onClose}>✕</button>
+            <div class="toolbar-actions">
+              <Show when={device()}>
+                <button class="btn btn-soft-primary btn-sm" onClick={() => onWrite && onWrite(device())}>
+                  单点写入
+                </button>
+              </Show>
+              <button class="btn btn-ghost btn-no-icon btn-only-icon btn-close-lite" onClick={onClose}>✕</button>
+            </div>
           </div>
 
           <div class="device-drawer-body">

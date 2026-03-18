@@ -32,6 +32,73 @@ const defaultForm = {
   enabled: 1,
 };
 
+function includesWriteAccess(rw) {
+  return String(rw || '').toUpperCase().includes('W');
+}
+
+function normalizeWritableItem(item) {
+  if (!item) return null;
+  if (typeof item === 'string') {
+    const field = item.trim();
+    if (!field) return null;
+    return { field, label: field, unit: '', rw: 'RW' };
+  }
+  if (typeof item !== 'object') return null;
+
+  const field = String(item.field || item.field_name || item.fieldName || item.name || '').trim();
+  if (!field) return null;
+
+  return {
+    field,
+    label: String(item.label || item.title || field).trim() || field,
+    unit: String(item.unit || '').trim(),
+    rw: String(item.rw || item.RW || 'RW').trim() || 'RW',
+  };
+}
+
+function normalizeDriverPoint(point) {
+  if (!point || typeof point !== 'object') return null;
+
+  const field = String(point.field_name || point.FieldName || '').trim();
+  if (!field) return null;
+
+  return {
+    field,
+    label: String(point.label || point.Label || field).trim() || field,
+    unit: String(point.unit || point.Unit || '').trim(),
+    rw: String(point.rw || point.RW || '').trim(),
+    value: String(point.value || point.Value || '').trim(),
+  };
+}
+
+function buildWritableOptions(schemaItems, driverPoints) {
+  const optionByField = new Map();
+
+  const upsertOption = (item) => {
+    if (!item || !item.field) return;
+    const key = item.field.toLowerCase();
+    const current = optionByField.get(key) || {};
+    optionByField.set(key, {
+      field: item.field,
+      label: item.label || current.label || item.field,
+      unit: item.unit || current.unit || '',
+      rw: item.rw || current.rw || 'RW',
+      value: item.value || current.value || '',
+    });
+  };
+
+  (Array.isArray(schemaItems) ? schemaItems : [])
+    .map(normalizeWritableItem)
+    .forEach(upsertOption);
+
+  (Array.isArray(driverPoints) ? driverPoints : [])
+    .map(normalizeDriverPoint)
+    .filter((point) => point && includesWriteAccess(point.rw))
+    .forEach(upsertOption);
+
+  return Array.from(optionByField.values()).sort((left, right) => left.field.localeCompare(right.field));
+}
+
 export function Devices() {
   const toast = useToast();
   const [items, setItems] = createSignal([]);
@@ -50,6 +117,8 @@ export function Devices() {
   const [writeForm, setWriteForm] = createSignal({ field: '', value: '' });
   const [writeError, setWriteError] = createSignal('');
   const [writeTarget, setWriteTarget] = createSignal(null);
+  const [writeLoading, setWriteLoading] = createSignal(false);
+  const [writeSubmitting, setWriteSubmitting] = createSignal(false);
   const [detailVisible, setDetailVisible] = createSignal(false);
   const [detailDevice, setDetailDevice] = createSignal(null);
   const [detailCache, setDetailCache] = createSignal([]);
@@ -207,38 +276,85 @@ export function Devices() {
     });
   };
 
-  const openWrite = (device) => {
+  const closeWrite = () => {
+    setShowWriteModal(false);
+    setWriteTarget(null);
+    setWriteMeta([]);
+    setWriteForm({ field: '', value: '' });
+    setWriteError('');
+    setWriteLoading(false);
+    setWriteSubmitting(false);
+  };
+
+  const openWrite = async (device) => {
     setWriteTarget(device);
-    api.devices.listWritables(device.id)
-      .then((res) => {
-        const ws = Array.isArray(res) ? res : (res && res.writable) || [];
-        setWriteMeta(ws);
-        if (ws.length) {
-          setWriteForm({ field: ws[0].field, value: '' });
-        }
-      })
-      .catch(() => {
-        setWriteMeta([]);
-        setWriteForm({ field: '', value: '' });
-      });
+    setWriteMeta([]);
+    setWriteForm({ field: '', value: '' });
+    setWriteError('');
+    setWriteLoading(true);
     setShowWriteModal(true);
+
+    const [schemaResult, liveResult] = await Promise.allSettled([
+      api.devices.listWritables(device.id),
+      api.devices.executeDeviceFunction(device.id, { function: 'collect', params: {} }),
+    ]);
+
+    const schemaItems = schemaResult.status === 'fulfilled'
+      ? (Array.isArray(schemaResult.value) ? schemaResult.value : schemaResult.value?.writable || [])
+      : [];
+    const livePoints =
+      liveResult.status === 'fulfilled' && Array.isArray(liveResult.value?.points)
+        ? liveResult.value.points
+        : [];
+
+    const options = buildWritableOptions(schemaItems, livePoints);
+    setWriteMeta(options);
+    setWriteForm((prev) => ({
+      field: options[0]?.field || prev.field || '',
+      value: '',
+    }));
+
+    if (!options.length && liveResult.status === 'rejected') {
+      setWriteError(getErrorMessage(liveResult.reason, '未获取到可写测点'));
+    }
+
+    setWriteLoading(false);
   };
 
   const submitWrite = (e) => {
     e.preventDefault();
+    const target = writeTarget();
+    const field = writeForm().field.trim();
+    const value = writeForm().value.trim();
+
     setWriteError('');
-    const payload = {
+    if (!target) {
+      setWriteError('未选择设备');
+      return;
+    }
+    if (!field) {
+      setWriteError('请输入字段名');
+      return;
+    }
+    if (!value) {
+      setWriteError('请输入写入值');
+      return;
+    }
+
+    setWriteSubmitting(true);
+    api.devices.executeDeviceFunction(target.id, {
       function: 'write',
       params: {
-        [writeForm().field]: writeForm().value,
+        field_name: field,
+        value,
       },
-    };
-    api.devices.executeDeviceFunction(writeTarget().id, payload)
+    })
       .then(() => {
         toast.show('success', '写入成功');
-        setShowWriteModal(false);
+        closeWrite();
       })
-	      .catch((err) => setWriteError(getErrorMessage(err, '写入失败')));
+      .catch((err) => setWriteError(getErrorMessage(err, '写入失败')))
+      .finally(() => setWriteSubmitting(false));
   };
 
   const openDetail = async (device) => {
@@ -658,30 +774,63 @@ export function Devices() {
       <Show when={showWriteModal()}>
         <Modal
           title={`写入数据 - ${writeTarget()?.name}`}
-          onClose={() => setShowWriteModal(false)}
+          onClose={closeWrite}
           backdropStyle="z-index:1001;"
           contentStyle="width:400px; max-width:90vw;"
         >
             <form class="form" onSubmit={submitWrite} style="padding:16px;">
+              <div class="text-muted text-xs" style="margin-bottom:12px;">
+                单次调用只写一个测点。优先使用驱动实时返回的可写字段。
+              </div>
+              <Show when={writeLoading()}>
+                <div class="loading-state" style="padding:12px 0;">
+                  <div class="loading-spinner"></div>
+                  <div>正在加载可写测点...</div>
+                </div>
+              </Show>
               <div class="form-group">
                 <label class="form-label">字段</label>
-                <select 
-                  class="form-select" 
-                  value={writeForm().field} 
-                  onChange={(e) => setWriteForm({ ...writeForm(), field: e.target.value })}
+                <Show
+                  when={writeMeta().length > 0}
+                  fallback={
+                    <input
+                      class="form-input"
+                      value={writeForm().field}
+                      onInput={(e) => setWriteForm({ ...writeForm(), field: e.target.value })}
+                      placeholder="例如 TEMSET"
+                      disabled={writeLoading() || writeSubmitting()}
+                    />
+                  }
                 >
-                  <For each={writeMeta()}>
-                    {(w) => <option value={w.field}>{w.label || w.field}</option>}
-                  </For>
-                </select>
+                  <select
+                    class="form-select"
+                    value={writeForm().field}
+                    onChange={(e) => setWriteForm({ ...writeForm(), field: e.target.value })}
+                    disabled={writeLoading() || writeSubmitting()}
+                  >
+                    <For each={writeMeta()}>
+                      {(w) => (
+                        <option value={w.field}>
+                          {w.label || w.field}{w.unit ? ` (${w.unit})` : ''}
+                        </option>
+                      )}
+                    </For>
+                  </select>
+                </Show>
+                <Show when={!writeLoading() && writeMeta().length === 0}>
+                  <div class="text-muted text-xs" style="margin-top:6px;">
+                    当前未发现驱动声明的可写点，可手工输入字段名后单点写入。
+                  </div>
+                </Show>
               </div>
               <div class="form-group">
                 <label class="form-label">值</label>
                 <input 
                   class="form-input" 
-                  type="number" 
                   value={writeForm().value} 
                   onInput={(e) => setWriteForm({ ...writeForm(), value: e.target.value })} 
+                  placeholder="请输入要写入的值"
+                  disabled={writeLoading() || writeSubmitting()}
                   required 
                 />
               </div>
@@ -689,8 +838,10 @@ export function Devices() {
                 <div style="color:var(--accent-red); padding:4px 0;">{writeError()}</div>
               </Show>
               <div class="modal-actions modal-actions-fill" style={{ marginTop: '12px' }}>
-                <button type="button" class="btn btn-outline-primary btn-sm" onClick={() => setShowWriteModal(false)}>取消</button>
-                <button type="submit" class="btn btn-primary btn-sm">写入</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" onClick={closeWrite} disabled={writeSubmitting()}>取消</button>
+                <button type="submit" class="btn btn-primary btn-sm" disabled={writeLoading() || writeSubmitting()}>
+                  {writeSubmitting() ? '写入中...' : '写入'}
+                </button>
               </div>
             </form>
         </Modal>
@@ -702,6 +853,7 @@ export function Devices() {
         cache={detailCache}
         alarms={detailAlarms}
         loading={detailLoading}
+        onWrite={openWrite}
         onClose={closeDetail}
       />
     </div>
