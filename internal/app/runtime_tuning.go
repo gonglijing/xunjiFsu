@@ -12,17 +12,33 @@ func applyRuntimeTuning(cfg *config.Config, collect *collector.Collector, driver
 		return
 	}
 
-	if collect != nil {
-		collect.SetRuntimeIntervals(cfg.CollectorDeviceSyncInterval, cfg.CollectorCommandPollInterval)
-		collect.SetMaxConcurrentCollects(cfg.CollectorWorkers)
+	applyCollectorRuntimeTuning(cfg, collect)
+	applyDriverRuntimeTuning(cfg, driverExecutor)
+	applyNorthboundRuntimeTuning(cfg, northboundMgr)
+}
+
+func applyCollectorRuntimeTuning(cfg *config.Config, collect *collector.Collector) {
+	if cfg == nil || collect == nil {
+		return
 	}
 
-	if driverExecutor != nil {
-		driverExecutor.SetTimeouts(cfg.DriverSerialReadTimeout, cfg.DriverTCPDialTimeout, cfg.DriverTCPReadTimeout)
-		driverExecutor.SetRetries(cfg.DriverSerialOpenRetries, cfg.DriverTCPDialRetries, cfg.DriverSerialOpenBackoff, cfg.DriverTCPDialBackoff)
+	collect.SetRuntimeIntervals(cfg.CollectorDeviceSyncInterval, cfg.CollectorCommandPollInterval)
+	collect.SetMaxConcurrentCollects(cfg.CollectorWorkers)
+}
+
+func applyDriverRuntimeTuning(cfg *config.Config, driverExecutor *driver.DriverExecutor) {
+	if cfg == nil || driverExecutor == nil {
+		return
 	}
 
-	if northboundMgr != nil {
-		applyNorthboundRuntimeConfig(cfg, northboundMgr)
+	driverExecutor.SetTimeouts(cfg.DriverSerialReadTimeout, cfg.DriverTCPDialTimeout, cfg.DriverTCPReadTimeout)
+	driverExecutor.SetRetries(cfg.DriverSerialOpenRetries, cfg.DriverTCPDialRetries, cfg.DriverSerialOpenBackoff, cfg.DriverTCPDialBackoff)
+}
+
+func applyNorthboundRuntimeTuning(cfg *config.Config, northboundMgr *northbound.NorthboundManager) {
+	if cfg == nil || northboundMgr == nil {
+		return
 	}
+
+	applyNorthboundRuntimeConfig(cfg, northboundMgr)
 }
