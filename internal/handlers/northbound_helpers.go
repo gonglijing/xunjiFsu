@@ -3,11 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/nbtype"
@@ -370,27 +368,4 @@ func northboundAdapterConfig(config *models.NorthboundConfig) string {
 		return config.Config
 	}
 	return adapters.BuildConfigFromModel(config)
-}
-
-// GetNorthboundSupportedTypes 获取支持的北向类型
-func (h *Handler) GetNorthboundSupportedTypes(w http.ResponseWriter, r *http.Request) {
-	types := adapters.GetSupportedTypes()
-	WriteSuccess(w, types)
-}
-
-// GetNorthboundConnectionInfo 获取单个北向的连接信息
-func (h *Handler) GetNorthboundConnectionInfo(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseIDOrWriteBadRequestDefault(w, r)
-	if !ok {
-		return
-	}
-
-	config, err := database.GetNorthboundConfigByID(id)
-	if err != nil {
-		WriteNotFoundDef(w, apiErrNorthboundConfigNotFound)
-		return
-	}
-
-	connInfo := adapters.BuildConnectionInfoFromModel(config)
-	WriteSuccess(w, connInfo)
 }

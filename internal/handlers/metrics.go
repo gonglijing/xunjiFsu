@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/gonglijing/xunjiFsu/internal/collector"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 )
 
@@ -104,30 +103,6 @@ func Metrics(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(metrics)
-}
-
-// CollectMetrics 收集器指标收集器
-type CollectMetrics struct {
-	lastUptime time.Time
-}
-
-// NewCollectMetrics 创建指标收集器
-func NewCollectMetrics() *CollectMetrics {
-	return &CollectMetrics{
-		lastUptime: time.Now(),
-	}
-}
-
-// Record 记录指标
-func (m *CollectMetrics) Record(collector *collector.Collector) {
-	// 可以在这里记录历史指标
-	_ = collector
-	_ = m.lastUptime
-}
-
-// ResetUptime 重置运行时间计数
-func ResetMetricsUptime() {
-	metricsStartTime = time.Now()
 }
 
 func readLastGCPauseMS(memStats *runtime.MemStats) float64 {

@@ -9,21 +9,6 @@ import (
 
 // ==================== 页面渲染 ====================
 
-// Dashboard 仪表盘页面
-func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	h.SPA(w, r)
-}
-
-// RealTime 实时数据页面
-func (h *Handler) RealTime(w http.ResponseWriter, r *http.Request) {
-	h.SPA(w, r)
-}
-
-// History 历史数据页面
-func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
-	h.SPA(w, r)
-}
-
 // SPA 统一入口，返回最小 HTML，由前端 Preact 接管路由
 func (h *Handler) SPA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

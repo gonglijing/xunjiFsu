@@ -147,37 +147,3 @@ func buildDataPointsPage(points []*database.DataPoint, params PaginationParams) 
 		"has_next":  len(points) == params.PageSize,
 	}
 }
-
-// GetPaginatedDevices 获取分页设备列表
-func GetPaginatedDevices(w http.ResponseWriter, r *http.Request) {
-	params := GetPagination(r, 20)
-
-	devices, err := database.GetAllDevices()
-	if err != nil {
-		writeServerErrorWithLog(w, apiErrListPaginatedDevicesFailed, err)
-		return
-	}
-
-	paginatedItems, totalItems := paginateDevices(devices, params)
-
-	WriteSuccess(w, NewPaginatedResponse(paginatedItems, params, totalItems))
-}
-
-// GetPaginatedDataPoints 获取分页历史数据
-func GetPaginatedDataPoints(w http.ResponseWriter, r *http.Request) {
-	params := GetPagination(r, 100)
-
-	deviceID, err := parsePaginatedDeviceID(r)
-	if err != nil {
-		WriteBadRequestDef(w, apiErrInvalidDeviceID)
-		return
-	}
-
-	points, err := queryPaginatedDataPoints(deviceID, params.PageSize)
-	if err != nil {
-		writeServerErrorWithLog(w, apiErrListPaginatedDataPointsFailed, err)
-		return
-	}
-
-	WriteSuccess(w, buildDataPointsPage(points, params))
-}
