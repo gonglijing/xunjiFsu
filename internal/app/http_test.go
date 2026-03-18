@@ -79,6 +79,12 @@ func TestBuildAllowedOriginSet(t *testing.T) {
 	if _, ok := allowSet["http://b.example"]; !ok {
 		t.Fatalf("missing second origin in allowSet: %#v", allowSet)
 	}
+	if !isAllowedOrigin("http://a.example", allowSet, allowAll) {
+		t.Fatal("isAllowedOrigin(http://a.example) = false, want true")
+	}
+	if isAllowedOrigin("", allowSet, allowAll) {
+		t.Fatal("isAllowedOrigin(\"\") = true, want false")
+	}
 }
 
 func TestShouldServeSPA(t *testing.T) {

@@ -158,7 +158,7 @@ func decodeJSONRequest(r *http.Request, v interface{}) error {
 }
 
 func decodeFormRequest(r *http.Request, v interface{}) error {
-	formData, err := formRequestData(r)
+	formData, err := parseFormRequestData(r)
 	if err != nil {
 		return err
 	}
@@ -170,25 +170,25 @@ func decodeFormRequest(r *http.Request, v interface{}) error {
 	return json.Unmarshal(jsonData, v)
 }
 
-func formRequestData(r *http.Request) (map[string]interface{}, error) {
+func parseFormRequestData(r *http.Request) (map[string]interface{}, error) {
 	if err := r.ParseForm(); err != nil {
 		return nil, err
 	}
 
 	formData := make(map[string]interface{}, len(r.Form))
 	for key, values := range r.Form {
-		value, ok := firstFormValue(values)
+		value, ok := resolveFirstFormValue(values)
 		if !ok {
 			continue
 		}
-		formData[key] = parseFormValue(key, value)
+		formData[key] = parseFormFieldValue(key, value)
 	}
 
-	applyFormDefaults(formData)
+	applyFormRequestDefaults(formData)
 	return formData, nil
 }
 
-func firstFormValue(values []string) (string, bool) {
+func resolveFirstFormValue(values []string) (string, bool) {
 	if len(values) == 0 {
 		return "", false
 	}
@@ -242,7 +242,7 @@ func parseRequestOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request
 	return true
 }
 
-func parseFormValue(key, value string) interface{} {
+func parseFormFieldValue(key, value string) interface{} {
 	if isStringOnlyFormField(key) {
 		return value
 	}
@@ -272,7 +272,7 @@ func isStringOnlyFormField(key string) bool {
 	return ok
 }
 
-func applyFormDefaults(formData map[string]interface{}) {
+func applyFormRequestDefaults(formData map[string]interface{}) {
 	for key, defaultValue := range formDefaultValues {
 		if _, exists := formData[key]; !exists {
 			formData[key] = defaultValue

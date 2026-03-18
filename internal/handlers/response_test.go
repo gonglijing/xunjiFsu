@@ -16,7 +16,7 @@ type parsedErrorResponse struct {
 }
 
 func TestParseFormValue_StringOnlyField(t *testing.T) {
-	value := parseFormValue("device_address", "001")
+	value := parseFormFieldValue("device_address", "001")
 	stringValue, ok := value.(string)
 	if !ok {
 		t.Fatalf("value type = %T, want string", value)
@@ -43,9 +43,9 @@ func TestParseFormValue_NumberAndBool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseFormValue("any", tt.input)
+			got := parseFormFieldValue("any", tt.input)
 			if got != tt.want {
-				t.Fatalf("parseFormValue(any, %q) = %#v, want %#v", tt.input, got, tt.want)
+				t.Fatalf("parseFormFieldValue(any, %q) = %#v, want %#v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -56,7 +56,7 @@ func TestApplyFormDefaults(t *testing.T) {
 		"parity": "E",
 	}
 
-	applyFormDefaults(formData)
+	applyFormRequestDefaults(formData)
 
 	if got := formData["parity"]; got != "E" {
 		t.Fatalf("parity = %#v, want %#v", got, "E")
@@ -136,9 +136,9 @@ func TestFormRequestData_SkipsEmptyValueList(t *testing.T) {
 		"unused": {},
 	}
 
-	formData, err := formRequestData(req)
+	formData, err := parseFormRequestData(req)
 	if err != nil {
-		t.Fatalf("formRequestData returned error: %v", err)
+		t.Fatalf("parseFormRequestData returned error: %v", err)
 	}
 	if formData["name"] != "demo" {
 		t.Fatalf("formData[name] = %#v, want demo", formData["name"])

@@ -74,7 +74,7 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := strings.TrimSpace(r.Header.Get("Origin"))
-			if allowedOrigin(origin, allowSet, allowAll) {
+			if isAllowedOrigin(origin, allowSet, allowAll) {
 				header := w.Header()
 				header.Set("Access-Control-Allow-Origin", origin)
 				header.Set("Access-Control-Allow-Methods", corsAllowMethods)
@@ -112,7 +112,7 @@ func buildAllowedOriginSet(origins []string) (map[string]struct{}, bool) {
 	return allowSet, allowAll
 }
 
-func allowedOrigin(origin string, allowSet map[string]struct{}, allowAll bool) bool {
+func isAllowedOrigin(origin string, allowSet map[string]struct{}, allowAll bool) bool {
 	if origin == "" {
 		return false
 	}
