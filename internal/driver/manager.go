@@ -295,7 +295,8 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 
 	atomic.StoreInt64(&driver.lastActiveUnixNano, time.Now().UnixNano())
 
-	if !driver.hasFunction(function) {
+	callFunction := resolvePluginCallFunction(driver, function, driverCtx)
+	if !driver.hasFunction(callFunction) {
 		return nil, fmt.Errorf("plugin function not found: %s", function)
 	}
 
@@ -309,7 +310,7 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 	}
 
 	// 调用插件函数
-	rc, output, err := callPlugin(ctx, driver, function, inputJSON)
+	rc, output, err := callPlugin(ctx, driver, callFunction, inputJSON)
 	if err != nil {
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
@@ -319,12 +320,12 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 		case errors.Is(err, ErrPluginEmptyOutput):
 			return nil, fmt.Errorf("%w: %v", ErrDriverBadOutput, err)
 		}
-		logger.Warn("Plugin call failed", "driver_id", id, "function", function, "error", err, "rc", rc, "input_len", len(inputJSON))
+		logger.Warn("Plugin call failed", "driver_id", id, "function", function, "call_function", callFunction, "error", err, "rc", rc, "input_len", len(inputJSON))
 		return nil, fmt.Errorf("%w: %v", ErrDriverExecutionFailed, err)
 	}
 
 	if rc != 0 {
-		logger.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "rc", rc)
+		logger.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "call_function", callFunction, "rc", rc)
 	}
 
 	if isReadFunction(function, driverCtx) && logger.Enabled(logger.DEBUG) {

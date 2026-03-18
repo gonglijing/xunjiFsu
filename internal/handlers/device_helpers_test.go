@@ -83,8 +83,66 @@ func TestNormalizeWriteParams_Ambiguous(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "ambiguous") {
-		t.Fatalf("error = %q, want contains ambiguous", err.Error())
+	if !strings.Contains(err.Error(), "one field per call") {
+		t.Fatalf("error = %q, want contains one field per call", err.Error())
+	}
+}
+
+func TestNormalizeWriteParams_RejectsMultipleFieldsEvenWithExplicitFieldName(t *testing.T) {
+	config := map[string]string{
+		"field_name": "temperature",
+		"value":      "25",
+	}
+	params := map[string]interface{}{
+		"temperature": 25,
+		"humidity":    60,
+	}
+
+	err := normalizeWriteParams(config, params)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "one field per call") {
+		t.Fatalf("error = %q, want contains one field per call", err.Error())
+	}
+}
+
+func TestNormalizeWriteParams_RejectsMultipleSubDevices(t *testing.T) {
+	config := map[string]string{}
+	params := map[string]interface{}{
+		"subDevices": []interface{}{
+			map[string]interface{}{
+				"properties": map[string]interface{}{"temperature": 25},
+			},
+			map[string]interface{}{
+				"properties": map[string]interface{}{"humidity": 60},
+			},
+		},
+	}
+
+	err := normalizeWriteParams(config, params)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "one sub device per call") {
+		t.Fatalf("error = %q, want contains one sub device per call", err.Error())
+	}
+}
+
+func TestNormalizeWriteParams_RejectsCompositeValue(t *testing.T) {
+	config := map[string]string{
+		"field_name": "temperature",
+	}
+	params := map[string]interface{}{
+		"value": []interface{}{25},
+	}
+
+	err := normalizeWriteParams(config, params)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "value must be a scalar") {
+		t.Fatalf("error = %q, want contains value must be a scalar", err.Error())
 	}
 }
 

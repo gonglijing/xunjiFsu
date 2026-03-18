@@ -224,6 +224,52 @@ func TestResolveExecutionFunction(t *testing.T) {
 	}
 }
 
+func TestResolvePluginCallFunctionFallsBackToHandleForWrite(t *testing.T) {
+	driver := &WasmDriver{
+		exportedSet: map[string]struct{}{
+			"handle": {},
+		},
+	}
+	driverCtx := &DriverContext{
+		Config: map[string]string{"func_name": "write"},
+	}
+
+	if got := resolvePluginCallFunction(driver, "write", driverCtx); got != "handle" {
+		t.Fatalf("resolvePluginCallFunction(write) = %q, want handle", got)
+	}
+}
+
+func TestResolvePluginCallFunctionKeepsExplicitWriteExport(t *testing.T) {
+	driver := &WasmDriver{
+		exportedSet: map[string]struct{}{
+			"handle": {},
+			"write":  {},
+		},
+	}
+	driverCtx := &DriverContext{
+		Config: map[string]string{"func_name": "write"},
+	}
+
+	if got := resolvePluginCallFunction(driver, "write", driverCtx); got != "write" {
+		t.Fatalf("resolvePluginCallFunction(write) = %q, want write", got)
+	}
+}
+
+func TestResolvePluginCallFunctionFallsBackToHandleForReadAlias(t *testing.T) {
+	driver := &WasmDriver{
+		exportedSet: map[string]struct{}{
+			"handle": {},
+		},
+	}
+	driverCtx := &DriverContext{
+		Config: map[string]string{"func_name": "read"},
+	}
+
+	if got := resolvePluginCallFunction(driver, "read", driverCtx); got != "handle" {
+		t.Fatalf("resolvePluginCallFunction(read) = %q, want handle", got)
+	}
+}
+
 func TestCloneDriverContextWithOverridesDoesNotMutateBase(t *testing.T) {
 	baseConfig := map[string]string{
 		"func_name": "read",

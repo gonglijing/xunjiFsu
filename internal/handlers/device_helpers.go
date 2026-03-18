@@ -178,6 +178,9 @@ func normalizeWriteParams(config map[string]string, params map[string]interface{
 	if config == nil {
 		return fmt.Errorf("write params are empty")
 	}
+	if err := validateSingleWriteRequest(config, params); err != nil {
+		return err
+	}
 
 	fieldName := firstNonEmpty(
 		config["field_name"],
@@ -225,6 +228,124 @@ func normalizeWriteParams(config map[string]string, params map[string]interface{
 	delete(config, "fieldName")
 	delete(config, "val")
 	return nil
+}
+
+func validateSingleWriteRequest(config map[string]string, params map[string]interface{}) error {
+	if len(params) == 0 {
+		return nil
+	}
+
+	explicitField := strings.TrimSpace(firstNonEmpty(
+		config["field_name"],
+		config["fieldName"],
+		config["field"],
+	))
+
+	candidateFields, err := collectWriteCandidateFields(params)
+	if err != nil {
+		return err
+	}
+	if len(candidateFields) > 1 {
+		return fmt.Errorf("write only supports one field per call")
+	}
+	if explicitField != "" && len(candidateFields) == 1 && !strings.EqualFold(explicitField, candidateFields[0]) {
+		return fmt.Errorf("write params field_name %q does not match payload field %q", explicitField, candidateFields[0])
+	}
+
+	if raw, ok := firstPresentValue(params, "value", "val"); ok {
+		switch raw.(type) {
+		case map[string]interface{}, []interface{}:
+			return fmt.Errorf("write params value must be a scalar")
+		}
+	}
+
+	return nil
+}
+
+func collectWriteCandidateFields(params map[string]interface{}) ([]string, error) {
+	if len(params) == 0 {
+		return nil, nil
+	}
+
+	fields := make(map[string]string)
+	addWriteCandidateFields(fields, params)
+
+	if properties, ok := resolveMapValue(params["properties"]); ok {
+		addWriteCandidateFields(fields, properties)
+	}
+
+	for _, key := range []string{"sub_device", "subDevice"} {
+		sub, ok := resolveMapValue(params[key])
+		if !ok {
+			continue
+		}
+		if properties, ok := resolveMapValue(sub["properties"]); ok {
+			addWriteCandidateFields(fields, properties)
+		}
+	}
+
+	for _, key := range []string{"sub_devices", "subDevices"} {
+		raw, exists := params[key]
+		if !exists {
+			continue
+		}
+		list, ok := raw.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("write params %s must be an array", key)
+		}
+		if len(list) > 1 {
+			return nil, fmt.Errorf("write only supports one sub device per call")
+		}
+		if len(list) == 0 {
+			continue
+		}
+		item, ok := resolveMapValue(list[0])
+		if !ok {
+			return nil, fmt.Errorf("write params %s[0] must be an object", key)
+		}
+		if properties, ok := resolveMapValue(item["properties"]); ok {
+			addWriteCandidateFields(fields, properties)
+		}
+	}
+
+	names := make([]string, 0, len(fields))
+	for _, field := range fields {
+		names = append(names, field)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func addWriteCandidateFields(dst map[string]string, values map[string]interface{}) {
+	if len(values) == 0 {
+		return
+	}
+	for key, raw := range values {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" || isReservedWriteKey(trimmedKey) {
+			continue
+		}
+		switch raw.(type) {
+		case map[string]interface{}, []interface{}:
+			continue
+		}
+		normalized := strings.ToLower(trimmedKey)
+		if _, exists := dst[normalized]; !exists {
+			dst[normalized] = trimmedKey
+		}
+	}
+}
+
+func firstPresentValue(values map[string]interface{}, keys ...string) (interface{}, bool) {
+	if len(values) == 0 {
+		return nil, false
+	}
+	for _, key := range keys {
+		if raw, ok := values[key]; ok {
+			return raw, true
+		}
+	}
+	return nil, false
 }
 
 func resolveSingleWriteCandidate(params map[string]interface{}) (field string, value string, err error) {

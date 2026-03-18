@@ -99,6 +99,40 @@ func buildDeviceConfig(device *models.Device) map[string]string {
 	return buildDeviceConfigForResourceType(device, resourceType)
 }
 
+func shouldFallbackToHandle(function string, driverCtx *DriverContext) bool {
+	switch strings.ToLower(strings.TrimSpace(function)) {
+	case "", defaultDriverFunction:
+		return false
+	case "read", "collect", "write":
+		return true
+	}
+
+	if driverCtx == nil || driverCtx.Config == nil {
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(driverCtx.Config["func_name"])) {
+	case "read", "collect", "write":
+		return true
+	default:
+		return false
+	}
+}
+
+func resolvePluginCallFunction(driver *WasmDriver, function string, driverCtx *DriverContext) string {
+	resolved := resolveExecutionFunction(function)
+	if driver == nil {
+		return resolved
+	}
+	if driver.hasFunction(resolved) {
+		return resolved
+	}
+	if shouldFallbackToHandle(resolved, driverCtx) && driver.hasFunction(defaultDriverFunction) {
+		return defaultDriverFunction
+	}
+	return resolved
+}
+
 func buildDeviceConfigForResourceType(device *models.Device, resourceType string) map[string]string {
 	capHint := 4
 	if device != nil && device.DeviceAddress != "" {
