@@ -38,72 +38,13 @@ var startTime = time.Now()
 
 // Health 健康检查接口
 func Health(w http.ResponseWriter, r *http.Request) {
-	status := HealthStatus{
-		Timestamp: time.Now(),
-		Uptime:    time.Since(startTime).String(),
-		Checks:    make(map[string]Check),
-		System: SystemInfo{
-			GoVersion:  runtime.Version(),
-			Goroutines: runtime.NumGoroutine(),
-		},
-	}
+	status := buildHealthStatus(time.Now())
+	addDatabaseHealthCheck(&status)
+	addDataPointHealthCheck(&status)
+	status.Status = resolveOverallHealthStatus(status.Checks, status.Status)
 
-	status.System.MemoryMB = readProcessRSSMB()
-
-	// 检查数据库连接
-	if err := checkDatabase(); err != nil {
-		status.Checks["database"] = Check{
-			Status:  "fail",
-			Message: err.Error(),
-		}
-		status.Status = "degraded"
-	} else {
-		status.Checks["database"] = Check{
-			Status:  "pass",
-			Message: "Connected",
-		}
-	}
-
-	// 检查数据库数据量
-	if dataPoints, err := getDataPointsCount(); err != nil {
-		status.Checks["data_points"] = Check{
-			Status:  "fail",
-			Message: err.Error(),
-		}
-	} else {
-		status.Checks["data_points"] = Check{
-			Status:  "pass",
-			Message: dataPoints,
-		}
-	}
-
-	// 确定总体状态
-	if status.Status == "" {
-		// 如果没有设置为degraded，检查是否有fail
-		hasFail := false
-		for _, check := range status.Checks {
-			if check.Status == "fail" {
-				hasFail = true
-				break
-			}
-		}
-		if hasFail {
-			status.Status = "degraded"
-		} else {
-			status.Status = "healthy"
-		}
-	}
-
-	// 设置响应
 	w.Header().Set("Content-Type", "application/json")
-
-	// 健康检查端点返回200（即使部分检查失败也返回200，使用status字段表示）
-	statusCode := http.StatusOK
-	if status.Status == "unhealthy" {
-		statusCode = http.StatusServiceUnavailable
-	}
-
-	w.WriteHeader(statusCode)
+	w.WriteHeader(healthHTTPStatus(status.Status))
 	json.NewEncoder(w).Encode(status)
 }
 
@@ -123,6 +64,74 @@ func Readiness(w http.ResponseWriter, r *http.Request) {
 func Liveness(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+func buildHealthStatus(now time.Time) HealthStatus {
+	return HealthStatus{
+		Timestamp: now,
+		Uptime:    now.Sub(startTime).String(),
+		Checks:    make(map[string]Check),
+		System: SystemInfo{
+			GoVersion:  runtime.Version(),
+			Goroutines: runtime.NumGoroutine(),
+			MemoryMB:   readProcessRSSMB(),
+		},
+	}
+}
+
+func addDatabaseHealthCheck(status *HealthStatus) {
+	if status == nil {
+		return
+	}
+	if err := checkDatabase(); err != nil {
+		status.Checks["database"] = Check{
+			Status:  "fail",
+			Message: err.Error(),
+		}
+		status.Status = "degraded"
+		return
+	}
+	status.Checks["database"] = Check{
+		Status:  "pass",
+		Message: "Connected",
+	}
+}
+
+func addDataPointHealthCheck(status *HealthStatus) {
+	if status == nil {
+		return
+	}
+	dataPointCount, err := getDataPointsCount()
+	if err != nil {
+		status.Checks["data_points"] = Check{
+			Status:  "fail",
+			Message: err.Error(),
+		}
+		return
+	}
+	status.Checks["data_points"] = Check{
+		Status:  "pass",
+		Message: dataPointCount,
+	}
+}
+
+func resolveOverallHealthStatus(checks map[string]Check, currentStatus string) string {
+	if currentStatus != "" {
+		return currentStatus
+	}
+	for _, check := range checks {
+		if check.Status == "fail" {
+			return "degraded"
+		}
+	}
+	return "healthy"
+}
+
+func healthHTTPStatus(status string) int {
+	if status == "unhealthy" {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusOK
 }
 
 // checkDatabase 检查数据库连接
