@@ -3,9 +3,6 @@ const PROD_DEFAULT_AUTH_CHECK_INTERVAL_MS = 1200;
 const MIN_AUTH_CHECK_INTERVAL_MS = 200;
 const MAX_AUTH_CHECK_INTERVAL_MS = 30000;
 
-const DEV_DEFAULT_GATEWAY_METRICS_POLL_MS = 5000;
-const PROD_DEFAULT_GATEWAY_METRICS_POLL_MS = 8000;
-
 const DEV_DEFAULT_REALTIME_MINI_POLL_MS = 3000;
 const PROD_DEFAULT_REALTIME_MINI_POLL_MS = 4000;
 
@@ -72,9 +69,6 @@ function resolveIntervalFromEnv(envKey, fallback, min = MIN_POLL_INTERVAL_MS, ma
 
 function buildRuntimeConfig() {
   const authFallback = defaultAuthCheckInterval();
-  const gatewayFallback = import.meta.env.DEV
-    ? DEV_DEFAULT_GATEWAY_METRICS_POLL_MS
-    : PROD_DEFAULT_GATEWAY_METRICS_POLL_MS;
   const realtimeFallback = import.meta.env.DEV
     ? DEV_DEFAULT_REALTIME_MINI_POLL_MS
     : PROD_DEFAULT_REALTIME_MINI_POLL_MS;
@@ -89,10 +83,6 @@ function buildRuntimeConfig() {
       authFallback,
       MIN_AUTH_CHECK_INTERVAL_MS,
       MAX_AUTH_CHECK_INTERVAL_MS,
-    ),
-    gateway_metrics_poll_ms: resolveIntervalFromEnv(
-      'VITE_GATEWAY_METRICS_POLL_MS',
-      gatewayFallback,
     ),
     realtime_mini_poll_ms: resolveIntervalFromEnv(
       'VITE_REALTIME_MINI_POLL_MS',
@@ -116,10 +106,6 @@ export function validateAndWarnConfig() {
 
 export function getAuthCheckIntervalMs() {
   return validateAndWarnConfig().auth_check_interval_ms;
-}
-
-export function getGatewayMetricsPollIntervalMs() {
-  return validateAndWarnConfig().gateway_metrics_poll_ms;
 }
 
 export function getRealtimeMiniPollIntervalMs() {

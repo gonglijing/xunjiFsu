@@ -14,22 +14,6 @@ function Card(props) {
   );
 }
 
-export function SectionTabs(props) {
-  return (
-    <div class="section-tabs">
-      {props.tabs?.map((tab, index) => (
-        <button
-          key={index}
-          class={`btn ${props.active === index ? 'btn-primary' : ''}`}
-          onClick={() => props.onChange(index)}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export function StatusCards(props) {
   const skeleton = (label, iconClass) => (
     <div class="stat-card">

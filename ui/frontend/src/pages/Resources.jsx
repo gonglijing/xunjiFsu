@@ -1,6 +1,6 @@
 import { createSignal, createEffect, onCleanup, onMount, Show, For } from 'solid-js';
 import api from '../api/services';
-import Card, { SectionTabs } from '../components/cards';
+import Card from '../components/cards';
 import { useToast } from '../components/Toast';
 import { getErrorMessage } from '../api/errorMessages';
 import { showErrorToast } from '../utils/errors';
