@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"log"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 var (
 	dataCacheCleanupCounter uint64
 	dataCacheLastCleanupNS  int64
+	dataCacheExecStmtCache  dbStmtCache
 
 	// 允许在测试中覆盖
 	dataCacheCleanupEveryWrites uint64        = 128
@@ -22,17 +24,58 @@ var (
 
 const selectDataCacheFields = `SELECT id, device_id, field_name, value, value_type, collected_at FROM data_cache`
 
+type dbStmtCache struct {
+	mu    sync.RWMutex
+	db    *sql.DB
+	stmts map[string]*sql.Stmt
+}
+
+func (c *dbStmtCache) get(db *sql.DB, sqlText string) (*sql.Stmt, error) {
+	if c == nil || db == nil || sqlText == "" {
+		return nil, nil
+	}
+
+	c.mu.RLock()
+	if c.db == db && c.stmts != nil {
+		if stmt, ok := c.stmts[sqlText]; ok {
+			c.mu.RUnlock()
+			return stmt, nil
+		}
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.db != db {
+		for _, stmt := range c.stmts {
+			if stmt != nil {
+				_ = stmt.Close()
+			}
+		}
+		c.db = db
+		c.stmts = make(map[string]*sql.Stmt, 4)
+	} else if c.stmts == nil {
+		c.stmts = make(map[string]*sql.Stmt, 4)
+	} else if stmt, ok := c.stmts[sqlText]; ok {
+		return stmt, nil
+	}
+
+	stmt, err := db.Prepare(sqlText)
+	if err != nil {
+		return nil, err
+	}
+	c.stmts[sqlText] = stmt
+	return stmt, nil
+}
+
 // SaveDataCache 保存实时数据缓存（内存）
 func SaveDataCache(deviceID int64, deviceName, fieldName, value, valueType string) error {
-	_, err := DataDB.Exec(
-		`INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(device_id, field_name) DO UPDATE SET
-			value = excluded.value,
-			value_type = excluded.value_type,
-			collected_at = CURRENT_TIMESTAMP`,
-		deviceID, fieldName, value, valueType,
-	)
+	stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheSingleSQL)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(deviceID, fieldName, value, valueType)
 	if err != nil {
 		return err
 	}
@@ -54,19 +97,28 @@ func BatchSaveDataCacheEntries(entries []DataPointEntry) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(device_id, field_name) DO UPDATE SET
-			value = excluded.value,
-			value_type = excluded.value_type,
-			collected_at = CURRENT_TIMESTAMP`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
+	stmtCache := newCollectDataStmtCache(tx, collectDataCacheBatchSQLCache.get)
+	defer stmtCache.close()
 
+	args := getCollectDataArgs(collectDataCacheBatchSize * 4)
+	defer putCollectDataArgs(args)
+
+	batchCount := 0
 	for _, entry := range entries {
-		if _, err := stmt.Exec(entry.DeviceID, entry.FieldName, entry.Value, entry.ValueType); err != nil {
+		args = append(args, entry.DeviceID, entry.FieldName, entry.Value, entry.ValueType)
+		batchCount++
+		if batchCount < collectDataCacheBatchSize {
+			continue
+		}
+		if err := executeCollectDataCacheBatchWithArgs(stmtCache, batchCount, args); err != nil {
+			return err
+		}
+		args = args[:0]
+		batchCount = 0
+	}
+
+	if batchCount > 0 {
+		if err := executeCollectDataCacheBatchWithArgs(stmtCache, batchCount, args); err != nil {
 			return err
 		}
 	}

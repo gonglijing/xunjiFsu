@@ -80,21 +80,6 @@ func runCollectDataWriter(ch <-chan collectWriteRequest) {
 	defer collectWriteWG.Done()
 
 	batch := make([]collectWriteRequest, 0, collectWriteMaxBatchItems)
-	flush := func() {
-		if len(batch) == 0 {
-			return
-		}
-		if err := writeCollectDataBatch(batch); err != nil {
-			log.Printf("collect data async batch write failed: %v", err)
-			for _, item := range batch {
-				if err := InsertCollectDataWithOptions(item.data, item.storeHistory); err != nil {
-					log.Printf("collect data fallback write failed: %v", err)
-				}
-			}
-		}
-		clear(batch)
-		batch = batch[:0]
-	}
 
 	for item := range ch {
 		batch = append(batch, item)
@@ -102,24 +87,46 @@ func runCollectDataWriter(ch <-chan collectWriteRequest) {
 			select {
 			case next, ok := <-ch:
 				if !ok {
-					flush()
+					flushCollectDataBatch(batch)
 					return
 				}
 				batch = append(batch, next)
 			default:
-				flush()
+				flushCollectDataBatch(batch)
+				clear(batch)
+				batch = batch[:0]
 				goto nextLoop
 			}
 		}
-		flush()
+		flushCollectDataBatch(batch)
+		clear(batch)
+		batch = batch[:0]
 	nextLoop:
 	}
-	flush()
+	flushCollectDataBatch(batch)
+}
+
+func flushCollectDataBatch(batch []collectWriteRequest) {
+	if len(batch) == 0 {
+		return
+	}
+	if err := writeCollectDataBatch(batch); err != nil {
+		log.Printf("collect data async batch write failed: %v", err)
+		for _, item := range batch {
+			if err := InsertCollectDataWithOptions(item.data, item.storeHistory); err != nil {
+				log.Printf("collect data fallback write failed: %v", err)
+			}
+		}
+	}
+	clear(batch)
 }
 
 func writeCollectDataBatch(items []collectWriteRequest) error {
 	if len(items) == 0 {
 		return nil
+	}
+	if len(items) == 1 {
+		return InsertCollectDataWithOptions(items[0].data, items[0].storeHistory)
 	}
 
 	tx, err := DataDB.Begin()
@@ -128,19 +135,9 @@ func writeCollectDataBatch(items []collectWriteRequest) error {
 	}
 	defer tx.Rollback()
 
-	cacheStmtCache := newCollectDataStmtCache(tx, collectDataCacheBatchSQLCache.get)
-	defer cacheStmtCache.close()
-	historyStmtCache := newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
-	defer historyStmtCache.close()
-
 	storedHistory := false
-	for _, item := range items {
-		if err := insertCollectDataWithOptionsTx(tx, item.data, item.storeHistory, cacheStmtCache, historyStmtCache); err != nil {
-			return err
-		}
-		if item.storeHistory {
-			storedHistory = true
-		}
+	if err := writeCollectDataBatchItemsWithTx(tx, items, &storedHistory); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -162,16 +159,31 @@ func collectWriteQueueRunning() bool {
 }
 
 func writeCollectDataBatchWithTx(tx *sql.Tx, items []collectWriteRequest) error {
+	return writeCollectDataBatchItemsWithTx(tx, items, nil)
+}
+
+func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, storedHistory *bool) error {
 	if tx == nil {
 		return fmt.Errorf("nil tx")
 	}
 	cacheStmtCache := newCollectDataStmtCache(tx, collectDataCacheBatchSQLCache.get)
 	defer cacheStmtCache.close()
-	historyStmtCache := newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
-	defer historyStmtCache.close()
+
+	var historyStmtCache *collectDataStmtCache
+	defer func() {
+		if historyStmtCache != nil {
+			historyStmtCache.close()
+		}
+	}()
 	for _, item := range items {
+		if item.storeHistory && historyStmtCache == nil {
+			historyStmtCache = newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
+		}
 		if err := insertCollectDataWithOptionsTx(tx, item.data, item.storeHistory, cacheStmtCache, historyStmtCache); err != nil {
 			return err
+		}
+		if storedHistory != nil && item.storeHistory {
+			*storedHistory = true
 		}
 	}
 	return nil

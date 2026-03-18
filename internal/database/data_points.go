@@ -37,10 +37,24 @@ var (
 
 	collectDataCacheBatchSQLCache   = newCollectDataBatchSQLCache(buildCollectDataCacheBatchSQL)
 	collectDataHistoryBatchSQLCache = newCollectDataBatchSQLCache(buildCollectDataHistoryBatchSQL)
+	latestDataPointBatchSQLCache    = newCollectDataBatchSQLCache(buildLatestDataPointBatchSQL)
+	collectDataArgsPool             = sync.Pool{
+		New: func() any {
+			return make([]any, 0, collectDataCacheBatchSize*5)
+		},
+	}
 )
 
 const collectDataValueTypeString = "string"
 const selectDataPointFields = `SELECT id, device_id, device_name, field_name, value, value_type, collected_at FROM data_points`
+const latestDataPointSingleSQL = `INSERT OR REPLACE INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
+	VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+const collectDataCacheSingleSQL = `INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
+	VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	ON CONFLICT(device_id, field_name) DO UPDATE SET
+		value = excluded.value,
+		value_type = excluded.value_type,
+		collected_at = CURRENT_TIMESTAMP`
 
 func normalizeDeviceName(deviceID int64, deviceName string) string {
 	if deviceID == models.SystemStatsDeviceID {
@@ -242,12 +256,145 @@ func buildCollectDataHistoryBatchSQL(batchSize int) string {
 	return string(sqlText)
 }
 
+func buildLatestDataPointBatchSQL(batchSize int) string {
+	if batchSize <= 0 {
+		return ""
+	}
+	sqlText := make([]byte, 0, 96+batchSize*32)
+	sqlText = append(sqlText, "INSERT OR REPLACE INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES "...)
+	sqlText = appendCollectDataHistoryValuesSQL(sqlText, batchSize)
+	return string(sqlText)
+}
+
 func appendCollectDataCacheArg(dst []any, deviceID int64, field, value string) []any {
 	return append(dst, deviceID, field, value, collectDataValueTypeString)
 }
 
 func appendCollectDataHistoryArg(dst []any, deviceID int64, deviceName, field, value string) []any {
 	return append(dst, deviceID, deviceName, field, value, collectDataValueTypeString)
+}
+
+func getCollectDataArgs(capHint int) []any {
+	args, _ := collectDataArgsPool.Get().([]any)
+	if capHint <= 0 {
+		return args[:0]
+	}
+	if cap(args) < capHint {
+		return make([]any, 0, capHint)
+	}
+	return args[:0]
+}
+
+func putCollectDataArgs(args []any) {
+	if args == nil {
+		return
+	}
+	clear(args)
+	collectDataArgsPool.Put(args[:0])
+}
+
+func flushCollectDataArgs(cacheStmtCache, historyStmtCache *collectDataStmtCache, batchCount int, cacheArgs, historyArgs []any, storeHistory bool) error {
+	if batchCount <= 0 {
+		return nil
+	}
+	if err := executeCollectDataCacheBatchWithArgs(cacheStmtCache, batchCount, cacheArgs); err != nil {
+		return err
+	}
+	if storeHistory {
+		if err := executeCollectDataHistoryBatchWithArgs(historyStmtCache, batchCount, historyArgs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertCollectDataCacheDirect(data *models.CollectData) error {
+	if data == nil {
+		return nil
+	}
+	if len(data.Fields) == 1 {
+		for field, value := range data.Fields {
+			stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheSingleSQL)
+			if err != nil {
+				return fmt.Errorf("failed to prepare data cache statement: %w", err)
+			}
+			_, err = stmt.Exec(data.DeviceID, field, value, collectDataValueTypeString)
+			if err != nil {
+				return fmt.Errorf("failed to upsert data cache batch: %w", err)
+			}
+			return nil
+		}
+	}
+
+	fieldCount := len(data.Fields)
+	if fieldCount == 0 {
+		fieldCount = len(data.Points)
+	}
+	if fieldCount == 0 {
+		return nil
+	}
+
+	if len(data.Fields) == 0 {
+		validPoints := 0
+		var singleField string
+		var singleValue string
+		for _, point := range data.Points {
+			field := strings.TrimSpace(point.FieldName)
+			if field == "" {
+				continue
+			}
+			validPoints++
+			if validPoints == 1 {
+				singleField = field
+				singleValue = models.CollectPointValueString(point.Value)
+			}
+			if validPoints > 1 {
+				break
+			}
+		}
+		if validPoints == 0 {
+			return nil
+		}
+		if validPoints == 1 {
+			stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheSingleSQL)
+			if err != nil {
+				return fmt.Errorf("failed to prepare data cache statement: %w", err)
+			}
+			_, err = stmt.Exec(data.DeviceID, singleField, singleValue, collectDataValueTypeString)
+			if err != nil {
+				return fmt.Errorf("failed to upsert data cache batch: %w", err)
+			}
+			return nil
+		}
+	}
+
+	args := getCollectDataArgs(fieldCount * 4)
+	defer putCollectDataArgs(args)
+	if len(data.Fields) > 0 {
+		for field, value := range data.Fields {
+			args = appendCollectDataCacheArg(args, data.DeviceID, field, value)
+		}
+	} else {
+		for _, point := range data.Points {
+			field := strings.TrimSpace(point.FieldName)
+			if field == "" {
+				continue
+			}
+			args = appendCollectDataCacheArg(args, data.DeviceID, field, models.CollectPointValueString(point.Value))
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+
+	stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheBatchSQLCache.get(len(args)/4))
+	if err != nil {
+		return fmt.Errorf("failed to prepare data cache batch statement: %w", err)
+	}
+	if _, err := stmt.Exec(args...); err != nil {
+		return fmt.Errorf("failed to upsert data cache batch: %w", err)
+	}
+	return nil
 }
 
 type collectDataStmtCache struct {
@@ -260,13 +407,15 @@ func newCollectDataStmtCache(tx *sql.Tx, sqlFor func(int) string) *collectDataSt
 	return &collectDataStmtCache{
 		tx:     tx,
 		sqlFor: sqlFor,
-		stmts:  make(map[int]*sql.Stmt, 2),
 	}
 }
 
 func (c *collectDataStmtCache) get(batchSize int) (*sql.Stmt, error) {
 	if c == nil || c.tx == nil || batchSize <= 0 {
 		return nil, nil
+	}
+	if c.stmts == nil {
+		c.stmts = make(map[int]*sql.Stmt, 2)
 	}
 	if stmt, ok := c.stmts[batchSize]; ok {
 		return stmt, nil
@@ -857,28 +1006,15 @@ func insertCollectDataWithOptionsTx(tx *sql.Tx, data *models.CollectData, storeH
 		batchSize = collectDataHistoryBatchSize
 	}
 
-	cacheArgs := make([]any, 0, batchSize*4)
+	cacheArgs := getCollectDataArgs(batchSize * 4)
+	defer putCollectDataArgs(cacheArgs)
 	var historyArgs []any
 	if storeHistory {
-		historyArgs = make([]any, 0, batchSize*5)
-	}
-	flushBatch := func(batchCount int) error {
-		if batchCount == 0 {
-			return nil
-		}
-		if err := executeCollectDataCacheBatchWithArgs(cacheStmtCache, batchCount, cacheArgs); err != nil {
-			return err
-		}
-		cacheArgs = cacheArgs[:0]
-		if storeHistory {
-			if err := executeCollectDataHistoryBatchWithArgs(historyStmtCache, batchCount, historyArgs); err != nil {
-				return err
-			}
-			historyArgs = historyArgs[:0]
-		}
-		return nil
+		historyArgs = getCollectDataArgs(batchSize * 5)
+		defer putCollectDataArgs(historyArgs)
 	}
 	batchCount := 0
+
 	appendField := func(field, value string) error {
 		cacheArgs = appendCollectDataCacheArg(cacheArgs, data.DeviceID, field, value)
 		if storeHistory {
@@ -888,8 +1024,12 @@ func insertCollectDataWithOptionsTx(tx *sql.Tx, data *models.CollectData, storeH
 		if batchCount < batchSize {
 			return nil
 		}
-		if err := flushBatch(batchCount); err != nil {
+		if err := flushCollectDataArgs(cacheStmtCache, historyStmtCache, batchCount, cacheArgs, historyArgs, storeHistory); err != nil {
 			return err
+		}
+		cacheArgs = cacheArgs[:0]
+		if storeHistory {
+			historyArgs = historyArgs[:0]
 		}
 		batchCount = 0
 		return nil
@@ -913,7 +1053,7 @@ func insertCollectDataWithOptionsTx(tx *sql.Tx, data *models.CollectData, storeH
 		}
 	}
 	if batchCount > 0 {
-		if err := flushBatch(batchCount); err != nil {
+		if err := flushCollectDataArgs(cacheStmtCache, historyStmtCache, batchCount, cacheArgs, historyArgs, storeHistory); err != nil {
 			return err
 		}
 	}
@@ -924,11 +1064,11 @@ func insertCollectDataWithOptionsTx(tx *sql.Tx, data *models.CollectData, storeH
 // SaveLatestDataPoint 保存最新数据点（使用 upsert，只保留最新值）
 func SaveLatestDataPoint(deviceID int64, deviceName, fieldName, value string) error {
 	deviceName = normalizeDeviceName(deviceID, deviceName)
-	_, err := DataDB.Exec(
-		`INSERT OR REPLACE INTO data_points (device_id, device_name, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		deviceID, deviceName, fieldName, value, "string",
-	)
+	stmt, err := dataCacheExecStmtCache.get(DataDB, latestDataPointSingleSQL)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(deviceID, deviceName, fieldName, value, collectDataValueTypeString)
 	return err
 }
 
@@ -944,17 +1084,32 @@ func BatchSaveLatestDataPoints(entries []DataPointEntry) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO data_points
-		(device_id, device_name, field_name, value, value_type, collected_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
+	stmtCache := newCollectDataStmtCache(tx, latestDataPointBatchSQLCache.get)
+	defer stmtCache.close()
+	args := getCollectDataArgs(collectDataHistoryBatchSize * 5)
+	defer putCollectDataArgs(args)
+	batchCount := 0
 	for _, entry := range entries {
-		if _, err := stmt.Exec(entry.DeviceID, normalizeDeviceName(entry.DeviceID, entry.DeviceName), entry.FieldName,
-			entry.Value, entry.ValueType); err != nil {
+		args = append(args,
+			entry.DeviceID,
+			normalizeDeviceName(entry.DeviceID, entry.DeviceName),
+			entry.FieldName,
+			entry.Value,
+			entry.ValueType,
+		)
+		batchCount++
+		if batchCount < collectDataHistoryBatchSize {
+			continue
+		}
+		if err := executeCollectDataHistoryBatchWithArgs(stmtCache, batchCount, args); err != nil {
+			return fmt.Errorf("failed to upsert data point: %w", err)
+		}
+		args = args[:0]
+		batchCount = 0
+	}
+
+	if batchCount > 0 {
+		if err := executeCollectDataHistoryBatchWithArgs(stmtCache, batchCount, args); err != nil {
 			return fmt.Errorf("failed to upsert data point: %w", err)
 		}
 	}
@@ -970,6 +1125,13 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 	if len(data.Fields) == 0 && len(data.Points) == 0 {
 		return nil
 	}
+	if !storeHistory && ((len(data.Fields) > 0 && len(data.Fields) <= collectDataCacheBatchSize) || (len(data.Fields) == 0 && len(data.Points) <= collectDataCacheBatchSize)) {
+		if err := insertCollectDataCacheDirect(data); err != nil {
+			return err
+		}
+		maybeEnforceDataCacheLimit()
+		return nil
+	}
 
 	tx, err := DataDB.Begin()
 	if err != nil {
@@ -978,8 +1140,11 @@ func InsertCollectDataWithOptions(data *models.CollectData, storeHistory bool) e
 	defer tx.Rollback()
 	cacheStmtCache := newCollectDataStmtCache(tx, collectDataCacheBatchSQLCache.get)
 	defer cacheStmtCache.close()
-	historyStmtCache := newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
-	defer historyStmtCache.close()
+	var historyStmtCache *collectDataStmtCache
+	if storeHistory {
+		historyStmtCache = newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
+		defer historyStmtCache.close()
+	}
 	if err := insertCollectDataWithOptionsTx(tx, data, storeHistory, cacheStmtCache, historyStmtCache); err != nil {
 		return err
 	}

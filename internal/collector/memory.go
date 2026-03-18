@@ -2,8 +2,6 @@ package collector
 
 import (
 	"os"
-	"strconv"
-	"strings"
 )
 
 // ReadSystemMemoryMB returns Linux system memory totals in MB.
@@ -13,7 +11,7 @@ func ReadSystemMemoryMB() (total, used, available float64) {
 		return 0, 0, 0
 	}
 
-	total, used, available, ok := parseSystemMemoryMB(string(data))
+	total, used, available, ok := parseSystemMemoryMBBytes(data)
 	if !ok {
 		return 0, 0, 0
 	}
@@ -21,39 +19,40 @@ func ReadSystemMemoryMB() (total, used, available float64) {
 }
 
 func parseSystemMemoryMB(data string) (total, used, available float64, ok bool) {
+	return parseSystemMemoryMBBytes([]byte(data))
+}
+
+func parseSystemMemoryMBBytes(data []byte) (total, used, available float64, ok bool) {
 	var memTotal int64
 	var memAvailable int64
 	var memFree int64
 	var buffers int64
 	var cached int64
 
-	for _, line := range strings.Split(data, "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
+	for len(data) > 0 {
+		line := data
+		if idx := indexByte(data, '\n'); idx >= 0 {
+			line = data[:idx]
+			data = data[idx+1:]
+		} else {
+			data = nil
 		}
 
-		valueFields := strings.Fields(strings.TrimSpace(parts[1]))
-		if len(valueFields) == 0 {
-			continue
+		switch {
+		case hasLinePrefix(line, "MemTotal:"):
+			memTotal = parseMeminfoValue(line[len("MemTotal:"):])
+		case hasLinePrefix(line, "MemAvailable:"):
+			memAvailable = parseMeminfoValue(line[len("MemAvailable:"):])
+		case hasLinePrefix(line, "MemFree:"):
+			memFree = parseMeminfoValue(line[len("MemFree:"):])
+		case hasLinePrefix(line, "Buffers:"):
+			buffers = parseMeminfoValue(line[len("Buffers:"):])
+		case hasLinePrefix(line, "Cached:"):
+			cached = parseMeminfoValue(line[len("Cached:"):])
 		}
 
-		value, err := strconv.ParseInt(valueFields[0], 10, 64)
-		if err != nil {
-			continue
-		}
-
-		switch strings.TrimSpace(parts[0]) {
-		case "MemTotal":
-			memTotal = value
-		case "MemAvailable":
-			memAvailable = value
-		case "MemFree":
-			memFree = value
-		case "Buffers":
-			buffers = value
-		case "Cached":
-			cached = value
+		if memTotal > 0 && memAvailable > 0 {
+			break
 		}
 	}
 
@@ -77,4 +76,47 @@ func parseSystemMemoryMB(data string) (total, used, available float64, ok bool) 
 	}
 
 	return float64(memTotal) / 1024, float64(memUsed) / 1024, float64(memAvailable) / 1024, true
+}
+
+func hasLinePrefix(line []byte, prefix string) bool {
+	if len(line) < len(prefix) {
+		return false
+	}
+	for i := 0; i < len(prefix); i++ {
+		if line[i] != prefix[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func parseMeminfoValue(line []byte) int64 {
+	start := -1
+	var value int64
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if ch >= '0' && ch <= '9' {
+			if start < 0 {
+				start = i
+			}
+			value = value*10 + int64(ch-'0')
+			continue
+		}
+		if start >= 0 {
+			break
+		}
+	}
+	if start < 0 {
+		return 0
+	}
+	return value
+}
+
+func indexByte(s []byte, target byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == target {
+			return i
+		}
+	}
+	return -1
 }
