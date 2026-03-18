@@ -414,15 +414,19 @@ func BenchmarkGetLatestDataPoints_1000Limit(b *testing.B) {
 	oldSyncBatchTrigger := syncBatchTrigger
 	oldMaxDataPointsLimit := maxDataPointsLimit
 	oldMaxDataCacheLimit := maxDataCacheLimit
+	oldDataDBFile := dataDBFile
 	b.Cleanup(func() {
 		syncBatchTrigger = oldSyncBatchTrigger
 		maxDataPointsLimit = oldMaxDataPointsLimit
 		maxDataCacheLimit = oldMaxDataCacheLimit
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
 	})
 
 	syncBatchTrigger = int(^uint(0) >> 1)
 	maxDataPointsLimit = int(^uint(0) >> 1)
 	maxDataCacheLimit = int(^uint(0) >> 1)
+	dataDBFile = ""
 
 	now := time.Now()
 	entries := make([]DataPointEntry, 0, 1000)

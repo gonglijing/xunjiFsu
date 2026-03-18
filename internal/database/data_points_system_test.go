@@ -173,6 +173,156 @@ func TestGetAllDevicesLatestData_FallbackWhenDiskMissing(t *testing.T) {
 	}
 }
 
+func TestGetLatestDataPoints_MemoryLimitSkipsDisk(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldDataDBFile := dataDBFile
+	t.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
+	})
+
+	tmpDir := t.TempDir()
+	diskPath := filepath.Join(tmpDir, "data.db")
+	diskDB, err := openSQLite(diskPath, 1, 1)
+	if err != nil {
+		t.Fatalf("open disk db: %v", err)
+	}
+	defer func() { _ = diskDB.Close() }()
+	if err := ensureDiskDataSchema(diskDB); err != nil {
+		t.Fatalf("ensure disk schema: %v", err)
+	}
+
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'f1', '1', 'string', datetime('now')),
+		(1, 'dev-1', 'f2', '2', 'string', datetime('now', '-1 seconds'))`)
+	if err != nil {
+		t.Fatalf("insert mem rows: %v", err)
+	}
+	_, err = diskDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'f3', '3', 'string', datetime('now', '-10 seconds'))`)
+	if err != nil {
+		t.Fatalf("insert disk rows: %v", err)
+	}
+
+	dataDBFile = diskPath
+
+	items, err := GetLatestDataPoints(2)
+	if err != nil {
+		t.Fatalf("GetLatestDataPoints: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].FieldName != "f1" || items[1].FieldName != "f2" {
+		t.Fatalf("unexpected fields from memory fast path: %s, %s", items[0].FieldName, items[1].FieldName)
+	}
+}
+
+func TestGetDataPointsByDeviceAndTimeLimit_MemoryLimitSkipsDisk(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldDataDBFile := dataDBFile
+	t.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
+	})
+
+	tmpDir := t.TempDir()
+	diskPath := filepath.Join(tmpDir, "data.db")
+	diskDB, err := openSQLite(diskPath, 1, 1)
+	if err != nil {
+		t.Fatalf("open disk db: %v", err)
+	}
+	defer func() { _ = diskDB.Close() }()
+	if err := ensureDiskDataSchema(diskDB); err != nil {
+		t.Fatalf("ensure disk schema: %v", err)
+	}
+
+	end := time.Now()
+	start := end.Add(-time.Hour)
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'f1', '1', 'string', ?),
+		(1, 'dev-1', 'f2', '2', 'string', ?)`,
+		end.Add(-time.Minute),
+		end.Add(-2*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("insert mem rows: %v", err)
+	}
+	_, err = diskDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'f3', '3', 'string', ?)`,
+		end.Add(-10*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("insert disk rows: %v", err)
+	}
+
+	dataDBFile = diskPath
+
+	items, err := GetDataPointsByDeviceAndTimeLimit(1, start, end, 2)
+	if err != nil {
+		t.Fatalf("GetDataPointsByDeviceAndTimeLimit: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].FieldName != "f1" || items[1].FieldName != "f2" {
+		t.Fatalf("unexpected fields from memory fast path: %s, %s", items[0].FieldName, items[1].FieldName)
+	}
+}
+
+func TestGetDataPointsByDeviceFieldAndTime_MemoryLimitSkipsDisk(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldDataDBFile := dataDBFile
+	t.Cleanup(func() {
+		closeCachedDataDiskDBForPath(dataDBFile)
+		dataDBFile = oldDataDBFile
+	})
+
+	tmpDir := t.TempDir()
+	diskPath := filepath.Join(tmpDir, "data.db")
+	diskDB, err := openSQLite(diskPath, 1, 1)
+	if err != nil {
+		t.Fatalf("open disk db: %v", err)
+	}
+	defer func() { _ = diskDB.Close() }()
+	if err := ensureDiskDataSchema(diskDB); err != nil {
+		t.Fatalf("ensure disk schema: %v", err)
+	}
+
+	end := time.Now()
+	start := end.Add(-time.Hour)
+	_, err = DataDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'temperature', '21', 'string', ?)`,
+		end.Add(-time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("insert mem rows: %v", err)
+	}
+	_, err = diskDB.Exec(`INSERT INTO data_points (device_id, device_name, field_name, value, value_type, collected_at) VALUES
+		(1, 'dev-1', 'temperature', '9', 'string', ?)`,
+		end.Add(-10*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("insert disk rows: %v", err)
+	}
+
+	dataDBFile = diskPath
+
+	items, err := GetDataPointsByDeviceFieldAndTime(1, "temperature", start, end, 1)
+	if err != nil {
+		t.Fatalf("GetDataPointsByDeviceFieldAndTime: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Value != "21" {
+		t.Fatalf("unexpected value from memory fast path: %s", items[0].Value)
+	}
+}
+
 func TestBatchSaveDataCacheEntries_UpsertLatestValue(t *testing.T) {
 	prepareDataPointsTestDB(t)
 
