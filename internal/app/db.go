@@ -13,28 +13,71 @@ func initDatabases(cfg *config.Config) error {
 		return fmt.Errorf("config is nil")
 	}
 
-	database.ApplyRuntimeLimits(cfg.MaxDataPoints, cfg.MaxDataCache)
-	database.ApplySyncInterval(cfg.SyncInterval)
-
-	logger.Info("Initializing param database (persistent mode)...")
-	if err := database.InitParamDBWithPath(cfg.ParamDBPath); err != nil {
-		return fmt.Errorf("failed to initialize param database: %w", err)
+	applyDatabaseRuntimeConfig(cfg)
+	if err := initParamDatabase(cfg); err != nil {
+		return err
 	}
-
-	logger.Info("Initializing data database (memory mode + batch sync)...")
-	if err := database.InitDataDBWithPath(cfg.DataDBPath); err != nil {
-		return fmt.Errorf("failed to initialize data database: %w", err)
+	if err := initDataDatabase(cfg); err != nil {
+		return err
 	}
 
 	return nil
 }
 
+func applyDatabaseRuntimeConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+
+	database.ApplyRuntimeLimits(cfg.MaxDataPoints, cfg.MaxDataCache)
+	database.ApplySyncInterval(cfg.SyncInterval)
+}
+
+func initParamDatabase(cfg *config.Config) error {
+	logger.Info("Initializing param database (persistent mode)...")
+	if err := database.InitParamDBWithPath(cfg.ParamDBPath); err != nil {
+		return fmt.Errorf("failed to initialize param database: %w", err)
+	}
+	return nil
+}
+
+func initDataDatabase(cfg *config.Config) error {
+	logger.Info("Initializing data database (memory mode + batch sync)...")
+	if err := database.InitDataDBWithPath(cfg.DataDBPath); err != nil {
+		return fmt.Errorf("failed to initialize data database: %w", err)
+	}
+	return nil
+}
+
 func initSchemasAndDefaultData() error {
+	if err := initParamDatabaseSchema(); err != nil {
+		return err
+	}
+	if err := initGatewayDatabaseTables(); err != nil {
+		return err
+	}
+	if err := initDeviceDatabaseTables(); err != nil {
+		return err
+	}
+	if err := initDataDatabaseSchema(); err != nil {
+		return err
+	}
+	if err := initDefaultGatewayData(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func initParamDatabaseSchema() error {
 	logger.Info("Initializing param database schema...")
 	if err := database.InitParamSchema(); err != nil {
 		return fmt.Errorf("failed to initialize param schema: %w", err)
 	}
+	return nil
+}
 
+func initGatewayDatabaseTables() error {
 	logger.Info("Initializing resource table...")
 	if err := database.InitResourceTable(); err != nil {
 		return fmt.Errorf("failed to initialize resource table: %w", err)
@@ -50,21 +93,29 @@ func initSchemasAndDefaultData() error {
 	if err := database.InitRuntimeConfigAuditTable(); err != nil {
 		return fmt.Errorf("failed to initialize runtime config audit table: %w", err)
 	}
+	return nil
+}
 
+func initDeviceDatabaseTables() error {
 	logger.Info("Initializing device table...")
 	if err := database.InitDeviceTable(); err != nil {
 		return fmt.Errorf("failed to initialize device table: %w", err)
 	}
+	return nil
+}
 
+func initDataDatabaseSchema() error {
 	logger.Info("Initializing data database schema...")
 	if err := database.InitDataSchema(); err != nil {
 		return fmt.Errorf("failed to initialize data schema: %w", err)
 	}
+	return nil
+}
 
+func initDefaultGatewayData() error {
 	logger.Info("Initializing default data...")
 	if err := database.InitDefaultData(); err != nil {
 		return fmt.Errorf("failed to initialize default data: %w", err)
 	}
-
 	return nil
 }
