@@ -144,14 +144,6 @@ func (m *DriverManager) IsLoaded(id int64) bool {
 	return ok
 }
 
-func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
-	d, ok := m.drivers[id]
-	if !ok {
-		return 0, ErrDriverNotFound
-	}
-	return d.resourceID, nil
-}
-
 func (m *DriverManager) LoadDriverFromModel(driver *models.Driver, resourceID int64) error {
 	if driver == nil {
 		return fmt.Errorf("driver is nil")
@@ -225,9 +217,4 @@ func ExtractDriverMetadata(wasmData []byte) (string, string, error) {
 		return "", "", fmt.Errorf("empty wasm data")
 	}
 	return "", "", nil
-}
-
-func ExtractDriverVersion(wasmData []byte) (string, error) {
-	version, _, err := ExtractDriverMetadata(wasmData)
-	return version, err
 }

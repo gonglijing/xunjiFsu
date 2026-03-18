@@ -26,11 +26,6 @@ func CreateAlarmLog(log *models.AlarmLog) (int64, error) {
 	return result.LastInsertId()
 }
 
-// GetAlarmLogsByDeviceID 根据设备ID获取报警日志
-func GetAlarmLogsByDeviceID(deviceID int64, limit int) ([]*models.AlarmLog, error) {
-	return listAlarmLogs(selectAlarmLogFields+" WHERE device_id = ? ORDER BY triggered_at DESC LIMIT ?", []any{deviceID, limit})
-}
-
 // GetRecentAlarmLogs 获取最近的报警日志
 func GetRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
 	return listAlarmLogs(selectAlarmLogFields+" ORDER BY triggered_at DESC LIMIT ?", []any{limit})

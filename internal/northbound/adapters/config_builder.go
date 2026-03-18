@@ -29,14 +29,6 @@ func (b *NorthboundConfigBuilder) SetBrokerURL(url string) *NorthboundConfigBuil
 	return b
 }
 
-// SetPort 设置端口
-func (b *NorthboundConfigBuilder) SetPort(port int) *NorthboundConfigBuilder {
-	if port > 0 {
-		b.config["port"] = port
-	}
-	return b
-}
-
 // SetUsername 设置用户名
 func (b *NorthboundConfigBuilder) SetUsername(username string) *NorthboundConfigBuilder {
 	if username != "" {

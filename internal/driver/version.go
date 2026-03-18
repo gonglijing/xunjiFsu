@@ -34,12 +34,6 @@ func ExtractDriverMetadata(wasmData []byte) (string, string, error) {
 	return extractDriverMetadataFromPlugin(plugin)
 }
 
-// ExtractDriverVersion reads the internal driver version from a wasm binary if exported.
-func ExtractDriverVersion(wasmData []byte) (string, error) {
-	version, _, err := ExtractDriverMetadata(wasmData)
-	return version, err
-}
-
 func extractDriverVersionFromPlugin(plugin *extism.Plugin) (string, error) {
 	version, _, err := extractDriverMetadataFromPlugin(plugin)
 	return version, err

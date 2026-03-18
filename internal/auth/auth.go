@@ -255,17 +255,6 @@ func ChangePassword(userID int64, oldPassword, newPassword string) error {
 	return database.UpdateUser(user)
 }
 
-// ResetPassword 重置密码（管理员功能）
-func ResetPassword(userID int64, newPassword string) error {
-	user, err := database.GetUserByID(userID)
-	if err != nil {
-		return ErrUserNotFound
-	}
-
-	user.Password = pwdutil.Hash(newPassword)
-	return database.UpdateUser(user)
-}
-
 func SessionFromContext(ctx context.Context) *SessionInfo {
 	if ctx == nil {
 		return nil

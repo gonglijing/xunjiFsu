@@ -56,14 +56,3 @@ func Compare(password, hash string) bool {
 
 	return false
 }
-
-// NeedsRehash 检查密码哈希是否需要重新生成
-// 当Cost改变时返回true
-func NeedsRehash(hash string) bool {
-	// 解析现有的哈希成本
-	cost, err := bcrypt.Cost([]byte(hash))
-	if err != nil {
-		return true // 无法解析，视为需要重新生成
-	}
-	return cost < Cost
-}

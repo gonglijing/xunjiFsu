@@ -42,18 +42,8 @@ func (g *GracefulShutdown) AddShutdownFunc(f ShutdownFunc) {
 	g.shutdownFuncs = append(g.shutdownFuncs, f)
 }
 
-// AddShutdownFuncInterface 添加关闭函数(接口形式)
-func (g *GracefulShutdown) AddShutdownFuncInterface(f func(ctx context.Context) error) {
-	g.shutdownFuncs = append(g.shutdownFuncs, f)
-}
-
 // SetHTTPServer 设置HTTP服务器
 func (g *GracefulShutdown) SetHTTPServer(srv *http.Server) {
-	g.httpServer = srv
-}
-
-// SetHTTPShutdowner 设置支持 Shutdown 的HTTP服务（便于测试注入）
-func (g *GracefulShutdown) SetHTTPShutdowner(srv httpShutdowner) {
 	g.httpServer = srv
 }
 
@@ -99,14 +89,4 @@ func (g *GracefulShutdown) Shutdown() {
 // Wait 等待关闭完成
 func (g *GracefulShutdown) Wait() {
 	g.wg.Wait()
-}
-
-// WithTimeout 创建带超时的上下文
-func (g *GracefulShutdown) WithTimeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), g.timeout)
-}
-
-// WaitForSignal 等待关闭信号
-func (g *GracefulShutdown) WaitForSignal() {
-	<-g.notifyChan
 }

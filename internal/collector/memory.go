@@ -18,10 +18,6 @@ func ReadSystemMemoryMB() (total, used, available float64) {
 	return total, used, available
 }
 
-func parseSystemMemoryMB(data string) (total, used, available float64, ok bool) {
-	return parseSystemMemoryMBBytes([]byte(data))
-}
-
 func parseSystemMemoryMBBytes(data []byte) (total, used, available float64, ok bool) {
 	var memTotal int64
 	var memAvailable int64

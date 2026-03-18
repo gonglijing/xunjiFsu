@@ -104,16 +104,6 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
-func TestConfig_String(t *testing.T) {
-	cfg := DefaultConfig()
-	str := cfg.String()
-
-	// 验证字符串包含关键配置
-	if str == "" {
-		t.Error("String() returned empty string")
-	}
-}
-
 func TestGetAllowedOrigins_Default(t *testing.T) {
 	cfg := &Config{
 		AllowedOrigins: "",

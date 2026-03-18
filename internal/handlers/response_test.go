@@ -330,7 +330,7 @@ func TestWriteUnauthorized_DefaultCode(t *testing.T) {
 func TestWriteServerError_DefaultCode(t *testing.T) {
 	w := httptest.NewRecorder()
 
-	WriteServerError(w, "server error")
+	WriteErrorCode(w, http.StatusInternalServerError, defaultServerErrorCode, "server error")
 
 	if w.Result().StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusInternalServerError)

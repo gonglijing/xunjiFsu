@@ -37,15 +37,3 @@ func TimeoutMiddleware(cfg *TimeoutConfig) func(http.Handler) http.Handler {
 		return http.TimeoutHandler(next, timeout, "Request timeout")
 	}
 }
-
-// WithTimeout 为处理器添加超时
-func WithTimeout(handler http.HandlerFunc, timeout time.Duration) http.HandlerFunc {
-	if timeout <= 0 {
-		return handler
-	}
-
-	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handler), timeout, "Request timeout")
-	return func(w http.ResponseWriter, r *http.Request) {
-		timeoutHandler.ServeHTTP(w, r)
-	}
-}

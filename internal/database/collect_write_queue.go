@@ -199,16 +199,6 @@ func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
 	return flush()
 }
 
-func collectWriteQueueRunning() bool {
-	collectWriteMu.RLock()
-	defer collectWriteMu.RUnlock()
-	return collectWriteAlive && collectWriteCh != nil
-}
-
-func writeCollectDataBatchWithTx(tx *sql.Tx, items []collectWriteRequest) error {
-	return writeCollectDataBatchItemsWithTx(tx, items, nil)
-}
-
 func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, historyRows *int) error {
 	if tx == nil {
 		return fmt.Errorf("nil tx")

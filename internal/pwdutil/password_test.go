@@ -114,55 +114,6 @@ func TestCompare_CaseSensitive(t *testing.T) {
 	}
 }
 
-func TestNeedsRehash_SameCost(t *testing.T) {
-	password := "testPassword"
-	hash := Hash(password)
-
-	// 使用相同 cost，不应该需要重新哈希
-	result := NeedsRehash(hash)
-
-	if result {
-		t.Error("NeedsRehash() for same cost hash returned true")
-	}
-}
-
-func TestNeedsRehash_LowerCost(t *testing.T) {
-	password := "testPassword"
-
-	// 创建一个低成本的哈希
-	// 注意：由于 NeedsRehash 内部比较成本，我们直接测试其行为
-	hash := Hash(password)
-
-	// 由于我们的 Cost 是固定的，应该不需要重新哈希
-	result := NeedsRehash(hash)
-
-	// 这个测试验证当前成本设置下的行为
-	// 实际结果取决于 Cost 常量的值
-	_ = result
-}
-
-func TestNeedsRehash_InvalidHash(t *testing.T) {
-	invalidHash := "invalid-hash-format"
-
-	// 无效哈希应该需要重新生成
-	result := NeedsRehash(invalidHash)
-
-	if !result {
-		t.Error("NeedsRehash() for invalid hash returned false")
-	}
-}
-
-func TestNeedsRehash_TruncatedHash(t *testing.T) {
-	// 太短的哈希
-	truncatedHash := "$2a$10$xxx"
-
-	result := NeedsRehash(truncatedHash)
-
-	if !result {
-		t.Error("NeedsRehash() for truncated hash returned false")
-	}
-}
-
 func TestHash_ProducesBCryptHash(t *testing.T) {
 	password := "testPassword"
 	hash := Hash(password)
@@ -197,14 +148,6 @@ func TestCompare_MultiplePasswords(t *testing.T) {
 				t.Errorf("Compare() matched wrong password for: %s", password)
 			}
 		})
-	}
-}
-
-func TestNeedsRehash_EmptyString(t *testing.T) {
-	result := NeedsRehash("")
-
-	if !result {
-		t.Error("NeedsRehash() for empty string returned false")
 	}
 }
 

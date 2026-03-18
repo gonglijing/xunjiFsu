@@ -122,10 +122,6 @@ func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
 }
 
 // WriteServerError 500 错误
-func WriteServerError(w http.ResponseWriter, message string) {
-	WriteErrorCode(w, http.StatusInternalServerError, defaultServerErrorCode, message)
-}
-
 func WriteServerErrorDef(w http.ResponseWriter, def APIErrorDef) {
 	WriteErrorDef(w, http.StatusInternalServerError, def)
 }
@@ -199,15 +195,6 @@ func ParseID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func parseIDOrWriteBadRequest(w http.ResponseWriter, r *http.Request, message string) (int64, bool) {
-	id, err := ParseID(r)
-	if err != nil {
-		WriteBadRequest(w, message)
-		return 0, false
-	}
-	return id, true
-}
-
 func parseIDOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := ParseID(r)
 	if err != nil {
@@ -215,14 +202,6 @@ func parseIDOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request) (in
 		return 0, false
 	}
 	return id, true
-}
-
-func parseRequestOrWriteBadRequest(w http.ResponseWriter, r *http.Request, payload interface{}, message string) bool {
-	if err := ParseRequest(r, payload); err != nil {
-		WriteBadRequest(w, message)
-		return false
-	}
-	return true
 }
 
 func parseRequestOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request, payload interface{}) bool {

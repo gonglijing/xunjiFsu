@@ -389,19 +389,6 @@ func (m *DriverManager) IsLoaded(id int64) bool {
 	return exists
 }
 
-// GetDriverResourceID 获取驱动关联的资源ID
-func (m *DriverManager) GetDriverResourceID(id int64) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	driver, exists := m.drivers[id]
-	if !exists {
-		return 0, ErrDriverNotFound
-	}
-
-	return driver.resourceID, nil
-}
-
 // LoadDriverFromModel 从驱动模型加载或重载驱动
 func (m *DriverManager) LoadDriverFromModel(driver *models.Driver, resourceID int64) error {
 	if driver == nil {

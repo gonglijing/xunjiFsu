@@ -13,7 +13,7 @@ Inactive:        512768 kB
 `
 
 func TestParseSystemMemoryMB_UsesMemAvailable(t *testing.T) {
-	total, used, available, ok := parseSystemMemoryMB(sampleMeminfo)
+	total, used, available, ok := parseSystemMemoryMBBytes([]byte(sampleMeminfo))
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -29,11 +29,11 @@ func TestParseSystemMemoryMB_UsesMemAvailable(t *testing.T) {
 }
 
 func TestParseSystemMemoryMB_FallsBackWithoutMemAvailable(t *testing.T) {
-	total, used, available, ok := parseSystemMemoryMB(`MemTotal:       2048000 kB
+	total, used, available, ok := parseSystemMemoryMBBytes([]byte(`MemTotal:       2048000 kB
 MemFree:         256000 kB
 Buffers:         128000 kB
 Cached:          640000 kB
-`)
+`))
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -49,9 +49,9 @@ Cached:          640000 kB
 }
 
 func TestParseSystemMemoryMB_ClampsAvailableToTotal(t *testing.T) {
-	total, used, available, ok := parseSystemMemoryMB(`MemTotal:       1024000 kB
+	total, used, available, ok := parseSystemMemoryMBBytes([]byte(`MemTotal:       1024000 kB
 MemAvailable:   2048000 kB
-`)
+`))
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -67,8 +67,9 @@ MemAvailable:   2048000 kB
 }
 
 func BenchmarkParseSystemMemoryMB(b *testing.B) {
+	data := []byte(sampleMeminfo)
 	for i := 0; i < b.N; i++ {
-		_, _, _, _ = parseSystemMemoryMB(sampleMeminfo)
+		_, _, _, _ = parseSystemMemoryMBBytes(data)
 	}
 }
 

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -95,22 +94,6 @@ func TestGetRecentAlarmLogs_AllowsNullAcknowledgedBy(t *testing.T) {
 	}
 	if logs[0].AcknowledgedAt != nil {
 		t.Fatalf("expected nil acknowledged_at, got %v", logs[0].AcknowledgedAt)
-	}
-}
-
-func TestGetAlarmLogsByDeviceID_AllowsNullAcknowledgedBy(t *testing.T) {
-	setupAlarmLogsTestDB(t)
-	insertAlarmLogRow(t, sql.NullString{String: "", Valid: false}, nil)
-
-	logs, err := GetAlarmLogsByDeviceID(1, 10)
-	if err != nil {
-		t.Fatalf("GetAlarmLogsByDeviceID: %v", err)
-	}
-	if len(logs) != 1 {
-		t.Fatalf("expected 1 alarm log, got %d", len(logs))
-	}
-	if logs[0].AcknowledgedBy != "" {
-		t.Fatalf("expected empty acknowledged_by when NULL, got %q", logs[0].AcknowledgedBy)
 	}
 }
 

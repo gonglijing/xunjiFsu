@@ -345,13 +345,6 @@ func applyDurationText(dst *time.Duration, value string) {
 	}
 }
 
-func setPositiveInt(dst *int, value int) {
-	if dst == nil || value <= 0 {
-		return
-	}
-	*dst = value
-}
-
 func applyPositiveIntText(dst *int, value string) {
 	if dst == nil || value == "" {
 		return
@@ -561,10 +554,4 @@ func (c *Config) GetAllowedOrigins() []string {
 		return []string{"http://localhost:8080", "http://127.0.0.1:8080"}
 	}
 	return strings.Split(c.AllowedOrigins, ",")
-}
-
-// String 返回配置的字符串表示
-func (c *Config) String() string {
-	return fmt.Sprintf("Config{ListenAddr=%s, DBPath=%s, DriversDir=%s, LogLevel=%s, CollectorEnabled=%v, SyncInterval=%v}",
-		c.ListenAddr, c.DBPath, c.DriversDir, c.LogLevel, c.CollectorEnabled, c.SyncInterval)
 }

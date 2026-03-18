@@ -36,7 +36,7 @@ func TestGracefulShutdown_AddAndRunFuncs(t *testing.T) {
 		atomic.StoreInt32(&called1, 1)
 		return nil
 	})
-	g.AddShutdownFuncInterface(func(ctx context.Context) error {
+	g.AddShutdownFunc(func(ctx context.Context) error {
 		atomic.StoreInt32(&called2, 1)
 		return nil
 	})
@@ -53,25 +53,11 @@ func TestGracefulShutdown_AddAndRunFuncs(t *testing.T) {
 func TestGracefulShutdown_HTTPServerShutdown(t *testing.T) {
 	g := NewGracefulShutdown(2 * time.Second)
 	fs := &fakeServer{}
-	g.SetHTTPShutdowner(fs)
+	g.httpServer = fs
 
 	g.Shutdown()
 
 	if atomic.LoadInt32(&fs.shutdownCalled) != 1 {
 		t.Fatalf("expected HTTP server Shutdown to be called")
-	}
-}
-
-func TestGracefulShutdown_WithTimeout(t *testing.T) {
-	g := NewGracefulShutdown(100 * time.Millisecond)
-	ctx, cancel := g.WithTimeout()
-	defer cancel()
-
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		t.Fatalf("expected context to have deadline")
-	}
-	if time.Until(deadline) <= 0 {
-		t.Fatalf("deadline already passed")
 	}
 }
