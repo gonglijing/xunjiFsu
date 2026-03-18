@@ -473,6 +473,39 @@ func TestDriverResultToCollectData_EmptyResultKeepsNilFields(t *testing.T) {
 	}
 }
 
+func TestDriverResultToCollectData_UnicodeWhitespaceStillTrimmed(t *testing.T) {
+	device := &models.Device{
+		ID:         21,
+		Name:       "dev-unicode",
+		ProductKey: "\u3000pk\u3000",
+		DeviceKey:  "\u3000dk\u3000",
+	}
+	res := &driver.DriverResult{
+		ProductKey: "\u3000driver-pk\u3000",
+		Data: map[string]string{
+			"\u3000temp\u3000": "20",
+		},
+		Points: []driver.DriverPoint{
+			{FieldName: "\u3000humidity\u3000", Value: 55},
+		},
+	}
+
+	collect := driverResultToCollectData(device, res)
+	if collect == nil {
+		t.Fatalf("collect data should not be nil")
+	}
+	if collect.ProductKey != "driver-pk" || collect.DeviceKey != "dk" {
+		t.Fatalf("expected unicode whitespace trimmed, got product=%q device=%q", collect.ProductKey, collect.DeviceKey)
+	}
+	fields := collect.EnsureFields()
+	if got := fields["temp"]; got != "20" {
+		t.Fatalf("expected trimmed unicode field temp=20, got %q", got)
+	}
+	if got := fields["humidity"]; got != "55" {
+		t.Fatalf("expected trimmed unicode point humidity=55, got %q", got)
+	}
+}
+
 func TestSyncDeviceProductKey_UpdateInMemory(t *testing.T) {
 	c := NewCollector(nil, nil)
 	device := &models.Device{ID: 3, ProductKey: "pk-old"}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
@@ -67,8 +68,8 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 	if ts.IsZero() {
 		ts = time.Now()
 	}
-	resultProductKey := strings.TrimSpace(res.ProductKey)
-	deviceProductKey := strings.TrimSpace(device.ProductKey)
+	resultProductKey := trimCollectorText(res.ProductKey)
+	deviceProductKey := trimCollectorText(device.ProductKey)
 	if resultProductKey == "" {
 		resultProductKey = deviceProductKey
 	}
@@ -76,7 +77,7 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		DeviceID:   device.ID,
 		DeviceName: device.Name,
 		ProductKey: resultProductKey,
-		DeviceKey:  strings.TrimSpace(device.DeviceKey),
+		DeviceKey:  trimCollectorText(device.DeviceKey),
 		Timestamp:  ts,
 		Fields:     fields,
 		Points:     points,
@@ -92,7 +93,7 @@ func (c *Collector) syncDeviceProductKey(device *models.Device, collect *models.
 		return nil
 	}
 	collect.ProductKey = nextProductKey
-	currentProductKey := strings.TrimSpace(device.ProductKey)
+	currentProductKey := trimCollectorText(device.ProductKey)
 	if currentProductKey == nextProductKey {
 		return nil
 	}
@@ -106,7 +107,7 @@ func (c *Collector) syncDeviceProductKey(device *models.Device, collect *models.
 }
 
 func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate string) string {
-	candidate = strings.TrimSpace(candidate)
+	candidate = trimCollectorText(candidate)
 	if driverID == nil || *driverID <= 0 {
 		return candidate
 	}
@@ -115,7 +116,7 @@ func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate stri
 	c.driverIdentityMu.Lock()
 	defer c.driverIdentityMu.Unlock()
 
-	cached := strings.TrimSpace(c.driverProductKeys[id])
+	cached := trimCollectorText(c.driverProductKeys[id])
 	if cached == "" {
 		if candidate != "" {
 			c.driverProductKeys[id] = candidate
@@ -142,11 +143,7 @@ func resultFieldsForCollect(res *driver.DriverResult) (map[string]string, []mode
 		return nil, points
 	}
 
-	fields := normalizedDataFieldsWithExtraCap(res.Data, len(points))
-	for _, p := range points {
-		fields[p.FieldName] = models.CollectPointValueString(p.Value)
-	}
-	return fields, points
+	return normalizedDataFields(res.Data), points
 }
 
 func normalizedDataFields(data map[string]string) map[string]string {
@@ -163,7 +160,7 @@ func normalizedDataFieldsWithExtraCap(data map[string]string, extraCap int) map[
 
 	var fields map[string]string
 	for key, value := range data {
-		name := strings.TrimSpace(key)
+		name := trimCollectorText(key)
 		if name == "" {
 			continue
 		}
@@ -182,7 +179,7 @@ func normalizedCollectPoints(points []driver.DriverPoint) []models.CollectPoint 
 
 	write := 0
 	for i := range points {
-		name := strings.TrimSpace(points[i].FieldName)
+		name := trimCollectorText(points[i].FieldName)
 		if name == "" {
 			continue
 		}
@@ -198,12 +195,58 @@ func normalizedCollectPoints(points []driver.DriverPoint) []models.CollectPoint 
 
 func canReuseCollectedDataFields(data map[string]string) bool {
 	for key := range data {
-		if strings.TrimSpace(key) == "" {
+		trimmed := trimCollectorText(key)
+		if trimmed == "" {
 			return false
 		}
-		if key != strings.TrimSpace(key) {
+		if key != trimmed {
 			return false
 		}
 	}
 	return true
+}
+
+func trimCollectorText(s string) string {
+	if s == "" {
+		return ""
+	}
+	start := 0
+	end := len(s)
+
+	for start < end {
+		c := s[start]
+		if !isASCIICollectorSpace(c) {
+			break
+		}
+		start++
+	}
+	if start == end {
+		return ""
+	}
+	for end > start {
+		c := s[end-1]
+		if !isASCIICollectorSpace(c) {
+			break
+		}
+		end--
+	}
+	if start == 0 && end == len(s) {
+		if s[0] < utf8.RuneSelf && s[len(s)-1] < utf8.RuneSelf {
+			return s
+		}
+		return strings.TrimSpace(s)
+	}
+	if s[start] < utf8.RuneSelf && s[end-1] < utf8.RuneSelf {
+		return s[start:end]
+	}
+	return strings.TrimSpace(s)
+}
+
+func isASCIICollectorSpace(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
+		return true
+	default:
+		return false
+	}
 }

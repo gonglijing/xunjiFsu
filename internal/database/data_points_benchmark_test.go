@@ -82,6 +82,27 @@ func makeBenchmarkDataPointEntries(fieldCount int) []DataPointEntry {
 	return entries
 }
 
+func makeBenchmarkMixedCollectData(fieldCount int) *models.CollectData {
+	fields := make(map[string]string, fieldCount)
+	points := make([]models.CollectPoint, 0, fieldCount)
+	for i := 0; i < fieldCount; i++ {
+		name := fmt.Sprintf("f_%d", i)
+		fields[name] = fmt.Sprintf("%d", i)
+		points = append(points, models.CollectPoint{
+			FieldName: name,
+			Value:     float64(i) + 0.5,
+		})
+	}
+
+	return &models.CollectData{
+		DeviceID:   1,
+		DeviceName: "bench-device",
+		Timestamp:  time.Now(),
+		Fields:     fields,
+		Points:     points,
+	}
+}
+
 func benchmarkInsertCollectDataWithOptions(b *testing.B, fieldCount int, storeHistory bool) {
 	prepareDataPointsBenchmarkDB(b)
 
@@ -203,6 +224,38 @@ func BenchmarkWriteCollectDataBatch_TwoItems_CacheOnly_8Fields(b *testing.B) {
 	}
 }
 
+func BenchmarkWriteCollectDataBatch_ThirtyTwoItems_CacheOnly_8Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	items := make([]collectWriteRequest, 0, collectWriteMaxBatchItems)
+	for i := 0; i < collectWriteMaxBatchItems; i++ {
+		data := makeBenchmarkCollectData(8)
+		data.DeviceID = int64(i + 1)
+		items = append(items, collectWriteRequest{data: data, storeHistory: false})
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := writeCollectDataBatch(items); err != nil {
+			b.Fatalf("writeCollectDataBatch error: %v", err)
+		}
+	}
+}
+
 func BenchmarkBatchSaveDataPoints_32Fields(b *testing.B) {
 	prepareDataPointsBenchmarkDB(b)
 
@@ -259,6 +312,37 @@ func BenchmarkBatchSaveLatestDataPoints_32Fields(b *testing.B) {
 	}
 }
 
+func BenchmarkBatchSaveLatestDataPoints_1000Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	entries := makeBenchmarkDataPointEntries(1000)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		deviceID := int64(i + 1)
+		for j := range entries {
+			entries[j].DeviceID = deviceID
+		}
+		if err := BatchSaveLatestDataPoints(entries); err != nil {
+			b.Fatalf("BatchSaveLatestDataPoints error: %v", err)
+		}
+	}
+}
+
 func BenchmarkBatchSaveDataCacheEntries_32Fields(b *testing.B) {
 	prepareDataPointsBenchmarkDB(b)
 
@@ -284,6 +368,64 @@ func BenchmarkBatchSaveDataCacheEntries_32Fields(b *testing.B) {
 		}
 		if err := BatchSaveDataCacheEntries(entries); err != nil {
 			b.Fatalf("BatchSaveDataCacheEntries error: %v", err)
+		}
+	}
+}
+
+func BenchmarkBatchSaveDataCacheEntries_1000Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	entries := makeBenchmarkDataPointEntries(1000)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		deviceID := int64(i + 1)
+		for j := range entries {
+			entries[j].DeviceID = deviceID
+		}
+		if err := BatchSaveDataCacheEntries(entries); err != nil {
+			b.Fatalf("BatchSaveDataCacheEntries error: %v", err)
+		}
+	}
+}
+
+func BenchmarkInsertCollectDataWithOptions_MixedOverride_1000Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	data := makeBenchmarkMixedCollectData(1000)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := InsertCollectDataWithOptions(data, true); err != nil {
+			b.Fatalf("InsertCollectDataWithOptions mixed error: %v", err)
 		}
 	}
 }

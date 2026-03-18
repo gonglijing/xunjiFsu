@@ -51,10 +51,14 @@ func TestTriggerSyncIfNeeded(t *testing.T) {
 	oldTrigger := syncBatchTrigger
 	oldFn := syncDataToDiskFn
 	dataSyncTriggered.Store(false)
+	resetPendingHistoryRowsForSync(0)
+	pendingHistoryRowsDirty.Store(false)
 	defer func() {
 		syncBatchTrigger = oldTrigger
 		syncDataToDiskFn = oldFn
 		dataSyncTriggered.Store(false)
+		resetPendingHistoryRowsForSync(0)
+		pendingHistoryRowsDirty.Store(false)
 	}()
 
 	syncBatchTrigger = 2
@@ -119,9 +123,13 @@ func TestTriggerSyncIfNeeded(t *testing.T) {
 func TestTriggerDataSyncAsync_DeduplicatesConcurrentTriggers(t *testing.T) {
 	oldFn := syncDataToDiskFn
 	dataSyncTriggered.Store(false)
+	resetPendingHistoryRowsForSync(0)
+	pendingHistoryRowsDirty.Store(false)
 	defer func() {
 		syncDataToDiskFn = oldFn
 		dataSyncTriggered.Store(false)
+		resetPendingHistoryRowsForSync(0)
+		pendingHistoryRowsDirty.Store(false)
 	}()
 
 	started := make(chan struct{}, 1)
@@ -424,19 +432,31 @@ func TestSaveDataPoint_ThrottledCleanup(t *testing.T) {
 	oldLimit := maxDataPointsLimit
 	oldEvery := dataPointsCleanupEveryWrites
 	oldInterval := dataPointsCleanupMinInterval
+	oldTrigger := syncBatchTrigger
+	oldFn := syncDataToDiskFn
 	defer func() {
 		maxDataPointsLimit = oldLimit
 		dataPointsCleanupEveryWrites = oldEvery
 		dataPointsCleanupMinInterval = oldInterval
+		syncBatchTrigger = oldTrigger
+		syncDataToDiskFn = oldFn
 		atomic.StoreUint64(&dataPointsCleanupCounter, 0)
 		atomic.StoreInt64(&dataPointsLastCleanupNS, 0)
+		resetPendingHistoryRowsForSync(0)
+		pendingHistoryRowsDirty.Store(false)
+		dataSyncTriggered.Store(false)
 	}()
 
 	maxDataPointsLimit = 3
 	dataPointsCleanupEveryWrites = 1000
 	dataPointsCleanupMinInterval = time.Hour
+	syncBatchTrigger = int(^uint(0) >> 1)
+	syncDataToDiskFn = func() error { return nil }
 	atomic.StoreUint64(&dataPointsCleanupCounter, 0)
 	atomic.StoreInt64(&dataPointsLastCleanupNS, 0)
+	resetPendingHistoryRowsForSync(0)
+	pendingHistoryRowsDirty.Store(false)
+	dataSyncTriggered.Store(false)
 
 	if DataDB != nil {
 		_ = DataDB.Close()
@@ -491,5 +511,77 @@ func TestSaveDataPoint_ThrottledCleanup(t *testing.T) {
 	}
 	if count > maxDataPointsLimit {
 		t.Fatalf("expected count <= %d after cleanup, got %d", maxDataPointsLimit, count)
+	}
+}
+
+func TestSaveDataPoint_TriggersSyncAtThreshold(t *testing.T) {
+	oldTrigger := syncBatchTrigger
+	oldFn := syncDataToDiskFn
+	dataSyncTriggered.Store(false)
+	resetPendingHistoryRowsForSync(0)
+	pendingHistoryRowsDirty.Store(false)
+	defer func() {
+		syncBatchTrigger = oldTrigger
+		syncDataToDiskFn = oldFn
+		dataSyncTriggered.Store(false)
+		resetPendingHistoryRowsForSync(0)
+		pendingHistoryRowsDirty.Store(false)
+	}()
+
+	syncBatchTrigger = 2
+	done := make(chan struct{}, 1)
+	var calls atomic.Int32
+	syncDataToDiskFn = func() error {
+		calls.Add(1)
+		done <- struct{}{}
+		return nil
+	}
+
+	if DataDB != nil {
+		_ = DataDB.Close()
+	}
+	var err error
+	DataDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open data db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = DataDB.Close()
+	})
+
+	_, err = DataDB.Exec(`CREATE TABLE data_points (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		device_id INTEGER NOT NULL,
+		device_name TEXT NOT NULL,
+		field_name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		value_type TEXT DEFAULT 'string',
+		collected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("create data_points: %v", err)
+	}
+
+	if err := SaveDataPoint(1, "dev1", "f1", "v1", "string"); err != nil {
+		t.Fatalf("SaveDataPoint f1: %v", err)
+	}
+	select {
+	case <-done:
+		t.Fatalf("unexpected sync trigger below threshold")
+	default:
+	}
+
+	if err := SaveDataPoint(1, "dev1", "f2", "v2", "string"); err != nil {
+		t.Fatalf("SaveDataPoint f2: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("sync function was not called at threshold")
+	}
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("syncDataToDiskFn calls = %d, want 1", got)
 	}
 }

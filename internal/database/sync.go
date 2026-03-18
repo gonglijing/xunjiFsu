@@ -19,6 +19,8 @@ var dataSyncControlMu sync.Mutex
 var dataSyncTicker *time.Ticker
 var dataSyncStop chan struct{}
 var dataSyncTriggered atomic.Bool
+var pendingHistoryRowsForSync atomic.Int64
+var pendingHistoryRowsDirty atomic.Bool
 
 // StartDataSync 启动数据同步任务（内存 -> 磁盘批量写入）
 func StartDataSync() {
@@ -49,16 +51,43 @@ func StartDataSync() {
 // TriggerSyncIfNeeded 检查是否需要触发同步
 // 返回true表示已触发同步
 func TriggerSyncIfNeeded() bool {
+	if syncBatchTrigger <= 0 {
+		return triggerDataSyncAsync()
+	}
+
+	pending := pendingHistoryRowsForSync.Load()
+	if pendingHistoryRowsDirty.Load() && pending > 0 && pending < int64(syncBatchTrigger) {
+		return false
+	}
+
 	var count int
 	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
 		log.Printf("Failed to count data points for sync trigger: %v", err)
 		return false
 	}
+	pendingHistoryRowsForSync.Store(int64(count))
+	pendingHistoryRowsDirty.Store(false)
 	if count >= syncBatchTrigger {
 		log.Printf("Triggering sync due to data count: %d", count)
 		return triggerDataSyncAsync()
 	}
 	return false
+}
+
+func noteHistoryRowsWritten(n int) {
+	if n <= 0 {
+		return
+	}
+	pendingHistoryRowsForSync.Add(int64(n))
+	pendingHistoryRowsDirty.Store(true)
+}
+
+func resetPendingHistoryRowsForSync(n int64) {
+	if n < 0 {
+		n = 0
+	}
+	pendingHistoryRowsForSync.Store(n)
+	pendingHistoryRowsDirty.Store(false)
 }
 
 func triggerDataSyncAsync() bool {
@@ -106,6 +135,7 @@ func syncDataToDisk() error {
 		return fmt.Errorf("failed to get max data point id: %w", err)
 	}
 	if maxID == 0 {
+		resetPendingHistoryRowsForSync(0)
 		return nil
 	}
 
@@ -142,6 +172,7 @@ func syncDataToDisk() error {
 	if _, err := DataDB.Exec("DELETE FROM data_points WHERE id <= ?", maxID); err != nil {
 		return fmt.Errorf("failed to cleanup synced data points: %w", err)
 	}
+	resetPendingHistoryRowsForSync(0)
 
 	log.Printf("Data synced to disk: %d points", count)
 	return nil

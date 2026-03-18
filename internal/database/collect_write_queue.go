@@ -118,7 +118,6 @@ func flushCollectDataBatch(batch []collectWriteRequest) {
 			}
 		}
 	}
-	clear(batch)
 }
 
 func writeCollectDataBatch(items []collectWriteRequest) error {
@@ -128,6 +127,10 @@ func writeCollectDataBatch(items []collectWriteRequest) error {
 	if len(items) == 1 {
 		return InsertCollectDataWithOptions(items[0].data, items[0].storeHistory)
 	}
+	if err := writeCollectDataCacheOnlyBatchDirect(items); err == nil {
+		maybeEnforceDataCacheLimit()
+		return nil
+	}
 
 	tx, err := DataDB.Begin()
 	if err != nil {
@@ -135,8 +138,8 @@ func writeCollectDataBatch(items []collectWriteRequest) error {
 	}
 	defer tx.Rollback()
 
-	storedHistory := false
-	if err := writeCollectDataBatchItemsWithTx(tx, items, &storedHistory); err != nil {
+	var historyRows int
+	if err := writeCollectDataBatchItemsWithTx(tx, items, &historyRows); err != nil {
 		return err
 	}
 
@@ -145,11 +148,55 @@ func writeCollectDataBatch(items []collectWriteRequest) error {
 	}
 
 	maybeEnforceDataCacheLimit()
-	if storedHistory {
+	if historyRows > 0 {
+		noteHistoryRowsWritten(historyRows)
 		maybeEnforceDataPointsLimit()
 		TriggerSyncIfNeeded()
 	}
 	return nil
+}
+
+func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
+	args := getCollectDataArgs(collectDataCacheBatchSize * 4)
+	defer putCollectDataArgs(args)
+	batchRows := 0
+
+	flush := func() error {
+		if batchRows == 0 {
+			return nil
+		}
+		stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheBatchSQLCache.get(batchRows))
+		if err != nil {
+			return fmt.Errorf("failed to prepare data cache batch statement: %w", err)
+		}
+		if _, err := stmt.Exec(args...); err != nil {
+			return fmt.Errorf("failed to upsert data cache batch: %w", err)
+		}
+		args = args[:0]
+		batchRows = 0
+		return nil
+	}
+
+	for _, item := range items {
+		if item.storeHistory {
+			return fmt.Errorf("history write present")
+		}
+		rows := countCollectDataCacheRows(item.data)
+		if rows == 0 {
+			continue
+		}
+		if rows > collectDataCacheBatchSize {
+			return fmt.Errorf("cache item too large")
+		}
+		if batchRows > 0 && batchRows+rows > collectDataCacheBatchSize {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+		args = appendCollectDataCacheArgsForData(args, item.data)
+		batchRows += rows
+	}
+	return flush()
 }
 
 func collectWriteQueueRunning() bool {
@@ -162,7 +209,7 @@ func writeCollectDataBatchWithTx(tx *sql.Tx, items []collectWriteRequest) error 
 	return writeCollectDataBatchItemsWithTx(tx, items, nil)
 }
 
-func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, storedHistory *bool) error {
+func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, historyRows *int) error {
 	if tx == nil {
 		return fmt.Errorf("nil tx")
 	}
@@ -179,11 +226,12 @@ func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, s
 		if item.storeHistory && historyStmtCache == nil {
 			historyStmtCache = newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
 		}
-		if err := insertCollectDataWithOptionsTx(tx, item.data, item.storeHistory, cacheStmtCache, historyStmtCache); err != nil {
+		written, err := insertCollectDataWithOptionsTx(tx, item.data, item.storeHistory, cacheStmtCache, historyStmtCache)
+		if err != nil {
 			return err
 		}
-		if storedHistory != nil && item.storeHistory {
-			*storedHistory = true
+		if historyRows != nil {
+			*historyRows += written
 		}
 	}
 	return nil

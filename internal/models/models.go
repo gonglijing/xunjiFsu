@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // User 用户模型
@@ -195,6 +196,7 @@ type CollectData struct {
 	Timestamp  time.Time         `json:"timestamp"`
 	Fields     map[string]string `json:"fields"`
 	Points     []CollectPoint    `json:"points,omitempty"`
+	fieldsDone bool
 }
 
 type CollectPoint struct {
@@ -207,13 +209,16 @@ func (c *CollectData) EnsureFields() map[string]string {
 	if c == nil {
 		return nil
 	}
-	if len(c.Fields) > 0 || len(c.Points) == 0 {
+	if len(c.Points) == 0 || c.fieldsDone {
 		return c.Fields
 	}
 
-	fields := make(map[string]string, len(c.Points))
+	fields := c.Fields
+	if len(fields) == 0 {
+		fields = make(map[string]string, len(c.Points))
+	}
 	for _, point := range c.Points {
-		name := strings.TrimSpace(point.FieldName)
+		name := trimCollectFieldName(point.FieldName)
 		if name == "" {
 			continue
 		}
@@ -223,7 +228,44 @@ func (c *CollectData) EnsureFields() map[string]string {
 		return nil
 	}
 	c.Fields = fields
+	c.fieldsDone = true
 	return c.Fields
+}
+
+func trimCollectFieldName(s string) string {
+	if s == "" {
+		return ""
+	}
+	start := 0
+	end := len(s)
+	for start < end && isASCIIModelSpace(s[start]) {
+		start++
+	}
+	if start == end {
+		return ""
+	}
+	for end > start && isASCIIModelSpace(s[end-1]) {
+		end--
+	}
+	if start == 0 && end == len(s) {
+		if s[0] < utf8.RuneSelf && s[len(s)-1] < utf8.RuneSelf {
+			return s
+		}
+		return strings.TrimSpace(s)
+	}
+	if s[start] < utf8.RuneSelf && s[end-1] < utf8.RuneSelf {
+		return s[start:end]
+	}
+	return strings.TrimSpace(s)
+}
+
+func isASCIIModelSpace(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
+		return true
+	default:
+		return false
+	}
 }
 
 func CollectPointValueString(value interface{}) string {

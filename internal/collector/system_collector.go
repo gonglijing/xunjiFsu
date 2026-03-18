@@ -21,6 +21,7 @@ type SystemStatsCollector struct {
 	interval      time.Duration
 	diskPath      string
 	stopChan      chan struct{}
+	lastStats     *models.SystemStats
 	wg            sync.WaitGroup
 	running       bool
 	mu            sync.RWMutex
@@ -136,6 +137,7 @@ func (c *SystemStatsCollector) run() {
 // collect 执行一次采集
 func (c *SystemStatsCollector) collect() {
 	stats := c.collectSystemStats()
+	c.setLastStats(stats)
 	data := c.statsToCollectData(stats)
 
 	// 发送到北向
@@ -161,6 +163,35 @@ func (c *SystemStatsCollector) collect() {
 
 // CollectSystemStatsOnce 立即采集一次系统属性（公开方法，供北向适配器调用）
 func (c *SystemStatsCollector) CollectSystemStatsOnce() *models.SystemStats {
+	if stats := c.getLastStats(); stats != nil {
+		return stats
+	}
+	stats := c.collectSystemStats()
+	c.setLastStats(stats)
+	return cloneSystemStats(stats)
+}
+
+func (c *SystemStatsCollector) getLastStats() *models.SystemStats {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return cloneSystemStats(c.lastStats)
+}
+
+func (c *SystemStatsCollector) setLastStats(stats *models.SystemStats) {
+	c.mu.Lock()
+	c.lastStats = cloneSystemStats(stats)
+	c.mu.Unlock()
+}
+
+func cloneSystemStats(stats *models.SystemStats) *models.SystemStats {
+	if stats == nil {
+		return nil
+	}
+	clone := *stats
+	return &clone
+}
+
+func (c *SystemStatsCollector) CollectSystemStatsFresh() *models.SystemStats {
 	return c.collectSystemStats()
 }
 

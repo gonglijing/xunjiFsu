@@ -261,6 +261,32 @@ func TestBatchSaveLatestDataPoints_SmallBatchUpserts(t *testing.T) {
 	}
 }
 
+func TestBatchSaveLatestDataPoints_LargeBatchDefaultsValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := make([]DataPointEntry, 0, collectDataHistoryBatchSize+1)
+	for i := 0; i <= collectDataHistoryBatchSize; i++ {
+		entries = append(entries, DataPointEntry{
+			DeviceID:   int64(i + 1),
+			DeviceName: "dev",
+			FieldName:  "temperature",
+			Value:      "20",
+		})
+	}
+
+	if err := BatchSaveLatestDataPoints(entries); err != nil {
+		t.Fatalf("BatchSaveLatestDataPoints: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_points WHERE device_id = ? AND field_name = ?`, 1, "temperature").Scan(&valueType); err != nil {
+		t.Fatalf("query data_points: %v", err)
+	}
+	if valueType != collectDataValueTypeString {
+		t.Fatalf("value_type = %q, want %q", valueType, collectDataValueTypeString)
+	}
+}
+
 func TestBatchSaveDataCacheEntries_SmallBatchDefaultsValueType(t *testing.T) {
 	prepareDataPointsTestDB(t)
 
@@ -275,6 +301,63 @@ func TestBatchSaveDataCacheEntries_SmallBatchDefaultsValueType(t *testing.T) {
 	var valueType string
 	if err := DataDB.QueryRow(`SELECT value_type FROM data_cache WHERE device_id = ? AND field_name = ?`, 2, "temperature").Scan(&valueType); err != nil {
 		t.Fatalf("query data_cache: %v", err)
+	}
+	if valueType != collectDataValueTypeString {
+		t.Fatalf("value_type = %q, want %q", valueType, collectDataValueTypeString)
+	}
+}
+
+func TestBatchSaveDataCacheEntries_LargeBatchDefaultsValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := make([]DataPointEntry, 0, collectDataCacheBatchSize+1)
+	for i := 0; i <= collectDataCacheBatchSize; i++ {
+		entries = append(entries, DataPointEntry{
+			DeviceID:  int64(i + 1),
+			FieldName: "temperature",
+			Value:     "21.5",
+		})
+	}
+
+	if err := BatchSaveDataCacheEntries(entries); err != nil {
+		t.Fatalf("BatchSaveDataCacheEntries: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_cache WHERE device_id = ? AND field_name = ?`, 1, "temperature").Scan(&valueType); err != nil {
+		t.Fatalf("query data_cache: %v", err)
+	}
+	if valueType != collectDataValueTypeString {
+		t.Fatalf("value_type = %q, want %q", valueType, collectDataValueTypeString)
+	}
+}
+
+func TestSaveDataCache_DefaultsValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	if err := SaveDataCache(3, "dev-3", "temperature", "23.4", ""); err != nil {
+		t.Fatalf("SaveDataCache: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_cache WHERE device_id = ? AND field_name = ?`, 3, "temperature").Scan(&valueType); err != nil {
+		t.Fatalf("query data_cache: %v", err)
+	}
+	if valueType != collectDataValueTypeString {
+		t.Fatalf("value_type = %q, want %q", valueType, collectDataValueTypeString)
+	}
+}
+
+func TestSaveDataPoint_DefaultsValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	if err := SaveDataPoint(4, "dev-4", "humidity", "55", ""); err != nil {
+		t.Fatalf("SaveDataPoint: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_points WHERE device_id = ? AND field_name = ?`, 4, "humidity").Scan(&valueType); err != nil {
+		t.Fatalf("query data_points: %v", err)
 	}
 	if valueType != collectDataValueTypeString {
 		t.Fatalf("value_type = %q, want %q", valueType, collectDataValueTypeString)
@@ -420,6 +503,59 @@ func TestInsertCollectDataWithOptions_PointsCacheOnlySmallBatch(t *testing.T) {
 	}
 	if got["humidity"] != "63" {
 		t.Fatalf("expected humidity value 63, got %q", got["humidity"])
+	}
+}
+
+func TestInsertCollectDataWithOptions_MergesFieldsAndPoints(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	data := &models.CollectData{
+		DeviceID:   78,
+		DeviceName: "dev-78",
+		Timestamp:  time.Now(),
+		Fields: map[string]string{
+			"temperature": "20",
+			"humidity":    "50",
+		},
+		Points: []models.CollectPoint{
+			{FieldName: "temperature", Value: 21.5},
+			{FieldName: "pressure", Value: 100.1},
+		},
+	}
+
+	if err := InsertCollectDataWithOptions(data, false); err != nil {
+		t.Fatalf("InsertCollectDataWithOptions(mixed, storeHistory=false): %v", err)
+	}
+
+	rows, err := DataDB.Query("SELECT field_name, value FROM data_cache WHERE device_id = ? ORDER BY field_name", data.DeviceID)
+	if err != nil {
+		t.Fatalf("query data_cache: %v", err)
+	}
+	defer rows.Close()
+
+	got := make(map[string]string, 3)
+	for rows.Next() {
+		var field, value string
+		if err := rows.Scan(&field, &value); err != nil {
+			t.Fatalf("scan data_cache: %v", err)
+		}
+		got[field] = value
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate data_cache: %v", err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("expected 3 cached fields, got %d", len(got))
+	}
+	if got["temperature"] != "21.5" {
+		t.Fatalf("expected point value override temperature=21.5, got %q", got["temperature"])
+	}
+	if got["humidity"] != "50" {
+		t.Fatalf("expected humidity=50, got %q", got["humidity"])
+	}
+	if got["pressure"] != "100.1" {
+		t.Fatalf("expected pressure=100.1, got %q", got["pressure"])
 	}
 }
 

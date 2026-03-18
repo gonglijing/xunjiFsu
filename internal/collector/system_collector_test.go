@@ -141,6 +141,48 @@ func TestNewSystemStatsCollector_SetsDiskPath(t *testing.T) {
 	}
 }
 
+func TestCollectSystemStatsOnce_UsesCachedSnapshot(t *testing.T) {
+	collector := NewSystemStatsCollector()
+	collector.setLastStats(&models.SystemStats{
+		Timestamp: 123,
+		CpuUsage:  45.6,
+	})
+
+	stats := collector.CollectSystemStatsOnce()
+	if stats == nil {
+		t.Fatal("expected cached stats")
+	}
+	if stats.Timestamp != 123 || stats.CpuUsage != 45.6 {
+		t.Fatalf("unexpected cached stats: %+v", stats)
+	}
+
+	stats.CpuUsage = 0
+	cached := collector.getLastStats()
+	if cached == nil || cached.CpuUsage != 45.6 {
+		t.Fatalf("cached stats should be cloned, got %+v", cached)
+	}
+}
+
+func TestCollectSystemStatsOnce_PopulatesCacheWhenMissing(t *testing.T) {
+	collector := NewSystemStatsCollector()
+
+	stats := collector.CollectSystemStatsOnce()
+	if stats == nil {
+		t.Fatal("expected collected stats")
+	}
+	if stats.Timestamp == 0 {
+		t.Fatalf("expected non-zero timestamp, got %+v", stats)
+	}
+
+	cached := collector.getLastStats()
+	if cached == nil {
+		t.Fatal("expected cache populated")
+	}
+	if cached.Timestamp != stats.Timestamp {
+		t.Fatalf("cached timestamp = %d, want %d", cached.Timestamp, stats.Timestamp)
+	}
+}
+
 func TestParseProcStatCPUTotalIdleBytes(t *testing.T) {
 	stat, ok := parseProcStatCPUTotalIdleBytes([]byte("cpu  100 20 30 40 5 6 7 8 0 0\ncpu0 1 2 3 4\n"))
 	if !ok {
@@ -215,5 +257,30 @@ func BenchmarkStatsToCollectData(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = collector.statsToCollectData(stats)
+	}
+}
+
+func BenchmarkCollectSystemStatsOnceCached(b *testing.B) {
+	collector := NewSystemStatsCollector()
+	collector.setLastStats(&models.SystemStats{
+		Timestamp:    1700000000,
+		CpuUsage:     12.3456,
+		MemTotal:     2048.4,
+		MemUsed:      1024.2,
+		MemUsage:     50.01,
+		MemAvailable: 1024.2,
+		DiskTotal:    100.0,
+		DiskUsed:     33.3,
+		DiskUsage:    33.3,
+		DiskFree:     66.7,
+		Uptime:       12345,
+		Load1:        0.12,
+		Load5:        0.34,
+		Load15:       0.56,
+	})
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = collector.CollectSystemStatsOnce()
 	}
 }
