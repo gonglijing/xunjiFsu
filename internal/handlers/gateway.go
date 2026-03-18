@@ -23,7 +23,7 @@ func (h *Handler) UpdateGatewayConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.UpdateGatewayConfig(toDatabaseGatewayConfig(cfg)); err != nil {
+	if err := database.UpdateGatewayConfig(buildDatabaseGatewayConfig(cfg)); err != nil {
 		writeServerErrorWithLog(w, apiErrUpdateGatewayConfigFailed, err)
 		return
 	}

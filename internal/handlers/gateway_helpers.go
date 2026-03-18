@@ -23,7 +23,7 @@ func normalizeGatewayConfigInput(cfg *models.GatewayConfig) {
 	}
 }
 
-func toDatabaseGatewayConfig(cfg *models.GatewayConfig) *database.GatewayConfig {
+func buildDatabaseGatewayConfig(cfg *models.GatewayConfig) *database.GatewayConfig {
 	if cfg == nil {
 		return nil
 	}
