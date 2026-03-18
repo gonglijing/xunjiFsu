@@ -21,6 +21,14 @@ import (
 
 const retentionCleanupInterval = 24 * time.Hour
 
+type httpServerMode string
+
+const (
+	httpServerModePlain     httpServerMode = "plain_http"
+	httpServerModeManualTLS httpServerMode = "manual_tls"
+	httpServerModeAutoTLS   httpServerMode = "auto_tls"
+)
+
 // Run boots the application and blocks until shutdown completes.
 func Run(cfg *config.Config) error {
 	secretKey := loadOrGenerateSecretKey()
@@ -120,23 +128,40 @@ func buildHTTPServer(cfg *config.Config, handler http.Handler) *http.Server {
 }
 
 func serveHTTPServer(server *http.Server, cfg *config.Config) error {
-	switch {
-	case cfg.TLSAuto && cfg.TLSDomain != "":
-		if err := listenAndServeWithAutoCert(server, cfg); err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("server error: %w", err)
+	switch resolveHTTPServerMode(cfg) {
+	case httpServerModeAutoTLS:
+		if err := listenAndServeWithAutoCert(server, cfg); err != nil {
+			return wrapHTTPServerError(err)
 		}
-	case cfg.TLSCertFile != "" && cfg.TLSKeyFile != "":
+	case httpServerModeManualTLS:
 		logger.Info("Starting HTTPS", "addr", cfg.ListenAddr, "cert", cfg.TLSCertFile)
-		if err := server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("server error: %w", err)
+		if err := server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil {
+			return wrapHTTPServerError(err)
 		}
 	default:
 		logger.Info("Starting HTTP", "addr", cfg.ListenAddr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("server error: %w", err)
+		if err := server.ListenAndServe(); err != nil {
+			return wrapHTTPServerError(err)
 		}
 	}
 	return nil
+}
+
+func resolveHTTPServerMode(cfg *config.Config) httpServerMode {
+	if cfg != nil && cfg.TLSAuto && cfg.TLSDomain != "" {
+		return httpServerModeAutoTLS
+	}
+	if cfg != nil && cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		return httpServerModeManualTLS
+	}
+	return httpServerModePlain
+}
+
+func wrapHTTPServerError(err error) error {
+	if err == nil || err == http.ErrServerClosed {
+		return nil
+	}
+	return fmt.Errorf("server error: %w", err)
 }
 
 // loadEnabledDrivers 从数据库加载所有启用的驱动

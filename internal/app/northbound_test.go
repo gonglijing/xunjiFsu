@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -94,5 +95,57 @@ func TestBuildHTTPServer(t *testing.T) {
 	}
 	if server.Handler == nil {
 		t.Fatal("server.Handler = nil, want non-nil")
+	}
+}
+
+func TestResolveHTTPServerMode(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *appconfig.Config
+		want httpServerMode
+	}{
+		{name: "nil config", cfg: nil, want: httpServerModePlain},
+		{name: "plain http", cfg: &appconfig.Config{}, want: httpServerModePlain},
+		{
+			name: "auto tls",
+			cfg:  &appconfig.Config{TLSAuto: true, TLSDomain: "gw.example.com"},
+			want: httpServerModeAutoTLS,
+		},
+		{
+			name: "manual tls",
+			cfg:  &appconfig.Config{TLSCertFile: "cert.pem", TLSKeyFile: "key.pem"},
+			want: httpServerModeManualTLS,
+		},
+		{
+			name: "auto tls wins over manual tls",
+			cfg:  &appconfig.Config{TLSAuto: true, TLSDomain: "gw.example.com", TLSCertFile: "cert.pem", TLSKeyFile: "key.pem"},
+			want: httpServerModeAutoTLS,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveHTTPServerMode(tt.cfg); got != tt.want {
+				t.Fatalf("resolveHTTPServerMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWrapHTTPServerError(t *testing.T) {
+	if err := wrapHTTPServerError(nil); err != nil {
+		t.Fatalf("wrapHTTPServerError(nil) = %v, want nil", err)
+	}
+	if err := wrapHTTPServerError(http.ErrServerClosed); err != nil {
+		t.Fatalf("wrapHTTPServerError(ErrServerClosed) = %v, want nil", err)
+	}
+
+	serveErr := errors.New("listen failed")
+	wrapped := wrapHTTPServerError(serveErr)
+	if wrapped == nil {
+		t.Fatal("wrapHTTPServerError() = nil, want wrapped error")
+	}
+	if wrapped.Error() != "server error: listen failed" {
+		t.Fatalf("wrapped.Error() = %q, want %q", wrapped.Error(), "server error: listen failed")
 	}
 }
