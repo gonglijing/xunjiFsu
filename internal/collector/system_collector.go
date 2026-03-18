@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -151,7 +150,7 @@ func (c *SystemStatsCollector) CollectSystemStatsOnce() *models.SystemStats {
 	return c.collectSystemStats()
 }
 
-// IsRunning 检查是否运行中
+// collectSystemStats 采集一次系统属性
 func (c *SystemStatsCollector) collectSystemStats() *models.SystemStats {
 	stats := &models.SystemStats{
 		Timestamp: time.Now().Unix(),
@@ -256,14 +255,7 @@ func firstLine(s string) string {
 
 // getMemoryInfo 获取内存信息
 func (c *SystemStatsCollector) getMemoryInfo(stats *models.SystemStats) {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	// Go 内存使用 (MB)
-	goUsed := float64(m.Alloc) / 1024 / 1024
-
-	// 尝试读取 /proc/meminfo 获取系统内存 (Linux)
-	total, used, available := c.readLinuxMemoryInfo()
+	total, used, available := ReadSystemMemoryMB()
 
 	stats.MemTotal = total
 	stats.MemUsed = used
@@ -272,67 +264,11 @@ func (c *SystemStatsCollector) getMemoryInfo(stats *models.SystemStats) {
 	if total > 0 {
 		stats.MemUsage = (used / total) * 100
 	} else {
-		// 降级：使用 Go 内存估算
-		stats.MemTotal = 8192 // 假设 8GB
-		stats.MemUsed = goUsed
-		stats.MemUsage = (goUsed / stats.MemTotal) * 100
-		stats.MemAvailable = stats.MemTotal - stats.MemUsed
+		stats.MemTotal = 0
+		stats.MemUsed = 0
+		stats.MemUsage = 0
+		stats.MemAvailable = 0
 	}
-}
-
-// readLinuxMemoryInfo 读取 Linux 内存信息
-func (c *SystemStatsCollector) readLinuxMemoryInfo() (total, used, available float64) {
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		return 0, 0, 0
-	}
-
-	lines := strings.Split(string(data), "\n")
-	memTotal := int64(0)
-	memAvailable := int64(0)
-	memUsed := int64(0)
-
-	for _, line := range lines {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		valueStr := strings.TrimSpace(parts[1])
-		valueStr = strings.TrimSuffix(valueStr, " kB")
-		value, err := strconv.ParseInt(valueStr, 10, 64)
-		if err != nil {
-			continue
-		}
-
-		switch key {
-		case "MemTotal":
-			memTotal = value
-		case "MemAvailable":
-			memAvailable = value
-		case "MemFree":
-			memUsed += value
-		case "Buffers":
-			memUsed += value
-		case "Cached":
-			memUsed += value
-		}
-	}
-
-	if memTotal == 0 {
-		return 0, 0, 0
-	}
-
-	if memUsed == 0 {
-		memUsed = memTotal - memAvailable
-	}
-
-	// KB to MB
-	total = float64(memTotal) / 1024
-	used = float64(memUsed) / 1024
-	available = float64(memAvailable) / 1024
-
-	return
 }
 
 // getDiskInfo 获取硬盘信息

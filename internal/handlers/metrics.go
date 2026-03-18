@@ -21,13 +21,17 @@ type SystemMetrics struct {
 
 // GoMetrics Go运行时指标
 type GoMetrics struct {
-	Version     string  `json:"version"`
-	Goroutines  int     `json:"goroutines"`
-	MemoryAlloc float64 `json:"memory_alloc_mb"`
-	MemoryTotal float64 `json:"memory_total_mb"`
-	HeapAlloc   float64 `json:"heap_alloc_mb"`
-	NumGC       uint32  `json:"num_gc"`
-	GCPause     float64 `json:"gc_pause_ms"`
+	Version           string  `json:"version"`
+	Goroutines        int     `json:"goroutines"`
+	MemoryAlloc       float64 `json:"memory_alloc_mb"`
+	MemoryTotal       float64 `json:"memory_total_mb"`
+	HeapAlloc         float64 `json:"heap_alloc_mb"`
+	ProcessRSS        float64 `json:"process_rss_mb"`
+	SystemMemoryTotal float64 `json:"system_memory_total_mb"`
+	SystemMemoryUsed  float64 `json:"system_memory_used_mb"`
+	SystemMemoryUsage float64 `json:"system_memory_usage"`
+	NumGC             uint32  `json:"num_gc"`
+	GCPause           float64 `json:"gc_pause_ms"`
 }
 
 // DatabaseMetrics 数据库指标
@@ -54,6 +58,12 @@ var metricsStartTime = time.Now()
 func Metrics(w http.ResponseWriter, r *http.Request) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
+	systemTotal, systemUsed, _ := readSystemMemoryMB()
+	systemUsage := 0.0
+	if systemTotal > 0 {
+		systemUsage = (systemUsed / systemTotal) * 100
+	}
+	gcPauseMS := readLastGCPauseMS(&m)
 
 	// 获取数据库指标
 	paramStats := database.ParamDB.Stats()
@@ -67,13 +77,17 @@ func Metrics(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now(),
 		Uptime:    time.Since(metricsStartTime).String(),
 		GoMetrics: GoMetrics{
-			Version:     runtime.Version(),
-			Goroutines:  runtime.NumGoroutine(),
-			MemoryAlloc: float64(m.Alloc) / 1024 / 1024,
-			MemoryTotal: float64(m.TotalAlloc) / 1024 / 1024,
-			HeapAlloc:   float64(m.HeapAlloc) / 1024 / 1024,
-			NumGC:       m.NumGC,
-			GCPause:     float64(m.GCCPUFraction) * 1000,
+			Version:           runtime.Version(),
+			Goroutines:        runtime.NumGoroutine(),
+			MemoryAlloc:       float64(m.Alloc) / 1024 / 1024,
+			MemoryTotal:       float64(m.TotalAlloc) / 1024 / 1024,
+			HeapAlloc:         float64(m.HeapAlloc) / 1024 / 1024,
+			ProcessRSS:        readProcessRSSMB(),
+			SystemMemoryTotal: systemTotal,
+			SystemMemoryUsed:  systemUsed,
+			SystemMemoryUsage: systemUsage,
+			NumGC:             m.NumGC,
+			GCPause:           gcPauseMS,
 		},
 		Database: DatabaseMetrics{
 			ParamDBConns:     paramStats.OpenConnections,
@@ -114,4 +128,13 @@ func (m *CollectMetrics) Record(collector *collector.Collector) {
 // ResetUptime 重置运行时间计数
 func ResetMetricsUptime() {
 	metricsStartTime = time.Now()
+}
+
+func readLastGCPauseMS(memStats *runtime.MemStats) float64 {
+	if memStats == nil || memStats.NumGC == 0 {
+		return 0
+	}
+
+	lastPauseIndex := (memStats.NumGC - 1) % uint32(len(memStats.PauseNs))
+	return float64(memStats.PauseNs[lastPauseIndex]) / float64(time.Millisecond)
 }
