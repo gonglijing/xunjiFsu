@@ -129,6 +129,7 @@ Schema 接口：
 
 - `collector_device_sync_interval`
 - `collector_command_poll_interval`
+- `collector_workers`
 - `northbound_mqtt_reconnect_interval`
 - `driver_serial_read_timeout`
 - `driver_tcp_dial_timeout`
@@ -141,6 +142,7 @@ Schema 接口：
 ### 参数作用域分析
 
 - **采集设备同步周期**：全局参数，影响采集器多久与数据库同步设备启停/配置。
+- **采集并发数**：全局参数，控制采集器同时派发多少个设备采集任务；设备底层资源访问仍由执行器按资源串行化，适合在“多设备、多资源”场景下放大吞吐。
 - **MQTT 重连间隔**：全局参数，应用到支持 `SetReconnectInterval` 的北向适配器实例。
 - **串口读超时 / TCP 超时重试**：全局驱动执行参数，作用于执行器层。
 
@@ -186,6 +188,10 @@ Schema 接口：
 ### 最近的内存优化点
 
 - 采集任务堆改为“原位更新/删除”，设备配置变化时不再把旧任务节点留在堆里等待延迟清理。
+- 采集器调度已改为“有界并发派发 + 资源级串行执行”，默认 `collector_workers=4`，可在线调优。
+- 实时/历史数据写入改为分块批量 `INSERT`，避免大测点场景按字段逐条落库造成 SQL 往返放大。
+- 数据缓存上限默认提升到 `100000`，用于支撑 10000 测点设备的最新值缓存和批量落盘。
+- 历史同步触发已做去重，密集写入时不会重复排队多个同步协程。
 - 驱动执行输入改为强类型结构序列化，减少热路径上的 `map[string]interface{}` 分配和接口装箱。
 - 设备配置与空采集结果采用更保守的 map 分配策略，降低高频小对象分配。
 
@@ -301,6 +307,7 @@ Schema 接口：
 - `SESSION_SECRET`
 - `ALLOWED_ORIGINS`
 - `LOG_LEVEL` / `LOG_JSON`
+- `COLLECTOR_WORKERS`
 - `COLLECTOR_DEVICE_SYNC_INTERVAL`
 - `COLLECTOR_COMMAND_POLL_INTERVAL`
 - `NORTHBOUND_MQTT_RECONNECT_INTERVAL`
@@ -309,6 +316,14 @@ Schema 接口：
 - `DRIVER_TCP_READ_TIMEOUT`
 - `DRIVER_SERIAL_OPEN_RETRIES`
 - `DRIVER_TCP_DIAL_RETRIES`
+- `MAX_DATA_POINTS`
+- `MAX_DATA_CACHE`
+
+配置文件中与大测点容量直接相关的键：
+
+- `collector.workers`：默认 `4`
+- `data.max_data_points`：默认 `100000`
+- `data.max_data_cache`：默认 `100000`
 
 > 配置文件中示例监听端口是 `:8088`，代码默认值是 `:8080`，最终以“加载到的配置 + 环境变量覆盖”为准。
 

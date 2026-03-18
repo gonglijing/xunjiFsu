@@ -63,8 +63,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.CollectorEnabled != true {
 		t.Errorf("CollectorEnabled = %v, want true", cfg.CollectorEnabled)
 	}
-	if cfg.CollectorWorkers != 10 {
-		t.Errorf("CollectorWorkers = %d, want 10", cfg.CollectorWorkers)
+	if cfg.CollectorWorkers != 4 {
+		t.Errorf("CollectorWorkers = %d, want 4", cfg.CollectorWorkers)
 	}
 	if cfg.SyncInterval != 5*time.Minute {
 		t.Errorf("SyncInterval = %v, want 5m", cfg.SyncInterval)
@@ -99,8 +99,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.MaxDataPoints != 100000 {
 		t.Errorf("MaxDataPoints = %d, want 100000", cfg.MaxDataPoints)
 	}
-	if cfg.MaxDataCache != 10000 {
-		t.Errorf("MaxDataCache = %d, want 10000", cfg.MaxDataCache)
+	if cfg.MaxDataCache != 100000 {
+		t.Errorf("MaxDataCache = %d, want 100000", cfg.MaxDataCache)
 	}
 }
 
@@ -513,8 +513,8 @@ func TestLoadFromEnv_InvalidInt(t *testing.T) {
 	applyEnvConfig(cfg)
 
 	// 应该保持默认值
-	if cfg.CollectorWorkers != 10 {
-		t.Errorf("CollectorWorkers = %d, want 10", cfg.CollectorWorkers)
+	if cfg.CollectorWorkers != 4 {
+		t.Errorf("CollectorWorkers = %d, want 4", cfg.CollectorWorkers)
 	}
 }
 
@@ -648,8 +648,13 @@ northbound:
   mqtt_reconnect_interval: 9s
 
 collector:
+  workers: 6
   device_sync_interval: 12s
   command_poll_interval: 600ms
+
+data:
+  max_data_points: 300000
+  max_data_cache: 120000
 `
 	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(content), 0o644); err != nil {
 		t.Fatalf("write config file: %v", err)
@@ -711,10 +716,19 @@ collector:
 	if cfg.NorthboundMQTTReconnectInterval != 9*time.Second {
 		t.Fatalf("NorthboundMQTTReconnectInterval=%v, want 9s", cfg.NorthboundMQTTReconnectInterval)
 	}
+	if cfg.CollectorWorkers != 6 {
+		t.Fatalf("CollectorWorkers=%d, want 6", cfg.CollectorWorkers)
+	}
 	if cfg.CollectorDeviceSyncInterval != 12*time.Second {
 		t.Fatalf("CollectorDeviceSyncInterval=%v, want 12s", cfg.CollectorDeviceSyncInterval)
 	}
 	if cfg.CollectorCommandPollInterval != 600*time.Millisecond {
 		t.Fatalf("CollectorCommandPollInterval=%v, want 600ms", cfg.CollectorCommandPollInterval)
+	}
+	if cfg.MaxDataPoints != 300000 {
+		t.Fatalf("MaxDataPoints=%d, want 300000", cfg.MaxDataPoints)
+	}
+	if cfg.MaxDataCache != 120000 {
+		t.Fatalf("MaxDataCache=%d, want 120000", cfg.MaxDataCache)
 	}
 }

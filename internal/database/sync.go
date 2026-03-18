@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -17,6 +18,7 @@ var dataSyncMu sync.Mutex
 var dataSyncControlMu sync.Mutex
 var dataSyncTicker *time.Ticker
 var dataSyncStop chan struct{}
+var dataSyncTriggered atomic.Bool
 
 // StartDataSync 启动数据同步任务（内存 -> 磁盘批量写入）
 func StartDataSync() {
@@ -54,14 +56,23 @@ func TriggerSyncIfNeeded() bool {
 	}
 	if count >= syncBatchTrigger {
 		log.Printf("Triggering sync due to data count: %d", count)
-		go func() {
-			if err := syncDataToDiskFn(); err != nil {
-				log.Printf("Failed to sync data to disk: %v", err)
-			}
-		}()
-		return true
+		return triggerDataSyncAsync()
 	}
 	return false
+}
+
+func triggerDataSyncAsync() bool {
+	if !dataSyncTriggered.CompareAndSwap(false, true) {
+		return false
+	}
+
+	go func() {
+		defer dataSyncTriggered.Store(false)
+		if err := syncDataToDiskFn(); err != nil {
+			log.Printf("Failed to sync data to disk: %v", err)
+		}
+	}()
+	return true
 }
 
 // SyncDataToDisk 手动触发数据同步（公开函数，供优雅关闭调用）

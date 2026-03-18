@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	"log"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -22,21 +23,34 @@ const (
 	defaultCommandPollInterval = 500 * time.Millisecond
 )
 
+func defaultCollectConcurrency() int {
+	n := runtime.GOMAXPROCS(0)
+	if n <= 1 {
+		return 1
+	}
+	if n > 8 {
+		return 8
+	}
+	return n
+}
+
 // Collector 采集器
 type Collector struct {
-	driverExecutor       *driver.DriverExecutor
-	northboundMgr        *northbound.NorthboundManager
-	driverIdentityMu     sync.RWMutex
-	driverProductKeys    map[int64]string // 驱动级固定 productKey 缓存
-	mu                   sync.RWMutex
-	running              bool
-	stopChan             chan struct{}
-	wakeChan             chan struct{}
-	deviceSyncResetChan  chan time.Duration
-	commandPollResetChan chan time.Duration
-	deviceSyncInterval   time.Duration
-	commandPollInterval  time.Duration
-	wg                   sync.WaitGroup
+	driverExecutor        *driver.DriverExecutor
+	northboundMgr         *northbound.NorthboundManager
+	driverIdentityMu      sync.RWMutex
+	driverProductKeys     map[int64]string // 驱动级固定 productKey 缓存
+	mu                    sync.RWMutex
+	running               bool
+	stopChan              chan struct{}
+	wakeChan              chan struct{}
+	deviceSyncResetChan   chan time.Duration
+	commandPollResetChan  chan time.Duration
+	deviceSyncInterval    time.Duration
+	commandPollInterval   time.Duration
+	maxConcurrentCollects int
+	activeCollects        int
+	wg                    sync.WaitGroup
 	// 设备采集任务
 	tasks    map[int64]*collectTask
 	taskHeap *taskHeap // 优先队列，按下次采集时间排序
@@ -110,19 +124,40 @@ func NewCollectorWithIntervals(driverExecutor *driver.DriverExecutor, northbound
 	h := &taskHeap{}
 	heap.Init(h)
 	return &Collector{
-		driverExecutor:       driverExecutor,
-		northboundMgr:        northboundMgr,
-		driverProductKeys:    make(map[int64]string),
-		running:              false,
-		stopChan:             make(chan struct{}),
-		wakeChan:             make(chan struct{}, 1),
-		deviceSyncResetChan:  make(chan time.Duration, 1),
-		commandPollResetChan: make(chan time.Duration, 1),
-		deviceSyncInterval:   deviceSyncInterval,
-		commandPollInterval:  commandPollInterval,
-		tasks:                make(map[int64]*collectTask),
-		taskHeap:             h,
+		driverExecutor:        driverExecutor,
+		northboundMgr:         northboundMgr,
+		driverProductKeys:     make(map[int64]string),
+		running:               false,
+		stopChan:              make(chan struct{}),
+		wakeChan:              make(chan struct{}, 1),
+		deviceSyncResetChan:   make(chan time.Duration, 1),
+		commandPollResetChan:  make(chan time.Duration, 1),
+		deviceSyncInterval:    deviceSyncInterval,
+		commandPollInterval:   commandPollInterval,
+		maxConcurrentCollects: defaultCollectConcurrency(),
+		tasks:                 make(map[int64]*collectTask),
+		taskHeap:              h,
 	}
+}
+
+func (c *Collector) GetMaxConcurrentCollects() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.maxConcurrentCollects <= 0 {
+		return defaultCollectConcurrency()
+	}
+	return c.maxConcurrentCollects
+}
+
+func (c *Collector) SetMaxConcurrentCollects(limit int) {
+	if limit <= 0 {
+		limit = defaultCollectConcurrency()
+	}
+
+	c.mu.Lock()
+	c.maxConcurrentCollects = limit
+	c.notifyTaskChangedLocked()
+	c.mu.Unlock()
 }
 
 // Start 启动采集器
@@ -138,6 +173,7 @@ func (c *Collector) Start() error {
 	c.deviceSyncResetChan = make(chan time.Duration, 1)
 	c.commandPollResetChan = make(chan time.Duration, 1)
 	c.tasks = make(map[int64]*collectTask)
+	c.activeCollects = 0
 	h := &taskHeap{}
 	heap.Init(h)
 	c.taskHeap = h
@@ -193,7 +229,7 @@ func (c *Collector) loadEnabledDevices() error {
 	return nil
 }
 
-// executeLoop 主采集循环（资源串行）
+// executeLoop 主采集循环（设备并发，资源串行由执行器内部锁保证）
 func (c *Collector) executeLoop() {
 	defer c.wg.Done()
 	for {
@@ -216,25 +252,27 @@ func (c *Collector) executeLoop() {
 			continue
 		}
 
+		if c.activeCollects >= c.maxConcurrentCollects {
+			c.mu.Unlock()
+			if c.waitForStopOrWake(0) {
+				return
+			}
+			continue
+		}
+
 		task = c.popNextCurrentTaskLocked()
-		c.mu.Unlock()
 		if task == nil {
+			c.mu.Unlock()
 			continue
 		}
 
-		if !c.isTaskCurrent(task) {
+		if !c.tryStartCollectTaskLocked(task) {
+			c.mu.Unlock()
 			continue
-		}
-
-		// 实际采集
-		c.collectOnce(task)
-
-		c.mu.Lock()
-		if c.isTaskCurrentLocked(task) {
-			task.nextRun = time.Now().Add(task.interval)
-			heap.Push(c.taskHeap, task)
 		}
 		c.mu.Unlock()
+
+		c.dispatchCollectTask(task)
 
 		select {
 		case <-c.stopChan:
@@ -242,6 +280,44 @@ func (c *Collector) executeLoop() {
 		default:
 		}
 	}
+}
+
+func (c *Collector) tryStartCollectTaskLocked(task *collectTask) bool {
+	if task == nil || c.activeCollects >= c.maxConcurrentCollects {
+		return false
+	}
+	if !c.isTaskCurrentLocked(task) {
+		return false
+	}
+	c.activeCollects++
+	return true
+}
+
+func (c *Collector) dispatchCollectTask(task *collectTask) {
+	if task == nil {
+		c.finishCollectTask(nil)
+		return
+	}
+
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		c.collectOnce(task)
+		c.finishCollectTask(task)
+	}()
+}
+
+func (c *Collector) finishCollectTask(task *collectTask) {
+	c.mu.Lock()
+	if c.activeCollects > 0 {
+		c.activeCollects--
+	}
+	if task != nil && c.isTaskCurrentLocked(task) {
+		task.nextRun = time.Now().Add(task.interval)
+		heap.Push(c.taskHeap, task)
+	}
+	c.notifyTaskChangedLocked()
+	c.mu.Unlock()
 }
 
 // collectOnce 执行单次采集

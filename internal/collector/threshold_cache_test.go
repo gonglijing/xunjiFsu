@@ -241,3 +241,34 @@ func TestGetDeviceThresholds_DoesNotCacheEmptyMiss(t *testing.T) {
 		t.Fatalf("expected 1 threshold after insert, got %d", len(thresholds))
 	}
 }
+
+func TestGetDeviceThresholdRules_RebuildsMissingRulesCache(t *testing.T) {
+	InvalidateAllCache()
+
+	cache.mu.Lock()
+	cache.thresholds[99] = []*models.Threshold{
+		{ID: 1, DeviceID: 99, FieldName: " temp ", Operator: ">", Value: 30},
+	}
+	cache.lastRefresh = time.Now()
+	cache.mu.Unlock()
+
+	rules, err := getDeviceThresholdRules(99)
+	if err != nil {
+		t.Fatalf("getDeviceThresholdRules failed: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rebuilt rule, got %d", len(rules))
+	}
+	if rules[0].fieldName != "temp" {
+		t.Fatalf("expected trimmed field name temp, got %q", rules[0].fieldName)
+	}
+	if rules[0].normalizedFieldName != "temp" {
+		t.Fatalf("expected normalized field name temp, got %q", rules[0].normalizedFieldName)
+	}
+
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	if len(cache.rules[99]) != 1 {
+		t.Fatalf("expected rules cache rebuilt for device 99")
+	}
+}

@@ -16,6 +16,7 @@ import (
 type gatewayRuntimeConfig struct {
 	CollectorDeviceSyncInterval     string `json:"collector_device_sync_interval"`
 	CollectorCommandPollInterval    string `json:"collector_command_poll_interval"`
+	CollectorWorkers                *int   `json:"collector_workers"`
 	NorthboundMQTTReconnectInterval string `json:"northbound_mqtt_reconnect_interval"`
 	DriverSerialReadTimeout         string `json:"driver_serial_read_timeout"`
 	DriverTCPDialTimeout            string `json:"driver_tcp_dial_timeout"`
@@ -87,6 +88,9 @@ func (h *Handler) applyGatewayRuntimeConfig(payload *gatewayRuntimeConfig) (map[
 	if err := applyGatewayDurationConfigChange(changes, "collector_command_poll_interval", payload.CollectorCommandPollInterval, &h.appConfig.CollectorCommandPollInterval); err != nil {
 		return nil, err
 	}
+	if err := applyGatewayPositiveIntConfigChange(changes, "collector_workers", payload.CollectorWorkers, &h.appConfig.CollectorWorkers); err != nil {
+		return nil, err
+	}
 	if err := applyGatewayDurationConfigChange(changes, "northbound_mqtt_reconnect_interval", payload.NorthboundMQTTReconnectInterval, &h.appConfig.NorthboundMQTTReconnectInterval); err != nil {
 		return nil, err
 	}
@@ -115,6 +119,7 @@ func (h *Handler) applyGatewayRuntimeConfig(payload *gatewayRuntimeConfig) (map[
 
 	if h.collector != nil {
 		h.collector.SetRuntimeIntervals(h.appConfig.CollectorDeviceSyncInterval, h.appConfig.CollectorCommandPollInterval)
+		h.collector.SetMaxConcurrentCollects(h.appConfig.CollectorWorkers)
 	}
 
 	if h.driverExecutor != nil {
@@ -220,6 +225,7 @@ func (h *Handler) gatewayRuntimeConfigView() map[string]interface{} {
 	return map[string]interface{}{
 		"collector_device_sync_interval":     collectorDeviceSyncInterval.String(),
 		"collector_command_poll_interval":    collectorCommandPollInterval.String(),
+		"collector_workers":                  h.gatewayCollectorWorkers(),
 		"northbound_mqtt_reconnect_interval": h.appConfig.NorthboundMQTTReconnectInterval.String(),
 		"driver_serial_read_timeout":         h.appConfig.DriverSerialReadTimeout.String(),
 		"driver_tcp_dial_timeout":            h.appConfig.DriverTCPDialTimeout.String(),
@@ -236,6 +242,13 @@ func (h *Handler) gatewayCollectorRuntimeIntervals() (time.Duration, time.Durati
 		return h.appConfig.CollectorDeviceSyncInterval, h.appConfig.CollectorCommandPollInterval
 	}
 	return h.collector.GetRuntimeIntervals()
+}
+
+func (h *Handler) gatewayCollectorWorkers() int {
+	if h.collector == nil {
+		return h.appConfig.CollectorWorkers
+	}
+	return h.collector.GetMaxConcurrentCollects()
 }
 
 func applyGatewayDurationConfigChange(changes map[string]runtimeConfigChange, key, raw string, target *time.Duration) error {
@@ -255,6 +268,19 @@ func applyGatewayRetryConfigChange(changes map[string]runtimeConfigChange, key s
 	}
 	if *value < 0 {
 		return fmt.Errorf("%s must be >= 0", key)
+	}
+
+	recordRuntimeConfigChange(changes, key, *target, *value)
+	*target = *value
+	return nil
+}
+
+func applyGatewayPositiveIntConfigChange(changes map[string]runtimeConfigChange, key string, value *int, target *int) error {
+	if value == nil {
+		return nil
+	}
+	if *value <= 0 {
+		return fmt.Errorf("%s must be > 0", key)
 	}
 
 	recordRuntimeConfigChange(changes, key, *target, *value)

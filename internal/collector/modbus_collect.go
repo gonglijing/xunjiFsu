@@ -3,7 +3,6 @@ package collector
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"time"
 
@@ -41,7 +40,7 @@ func (c *Collector) persistCollectData(task *collectTask, collect *models.Collec
 
 	storeHistory := shouldStoreHistory(task, collect.Timestamp)
 	// 实时缓存始终写入，历史按设备 storage_interval 控制。
-	if err := database.InsertCollectDataWithOptions(collect, storeHistory); err != nil {
+	if err := database.EnqueueCollectDataWrite(collect, storeHistory); err != nil {
 		log.Printf("Failed to insert data points: %v", err)
 	}
 	c.markTaskCollected(task, collect.Timestamp, storeHistory)
@@ -63,7 +62,7 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		res = &driver.DriverResult{}
 	}
 
-	fields := resultFieldsForCollect(res)
+	fields, points := resultFieldsForCollect(res)
 	ts := res.Timestamp
 	if ts.IsZero() {
 		ts = time.Now()
@@ -80,6 +79,7 @@ func driverResultToCollectData(device *models.Device, res *driver.DriverResult) 
 		DeviceKey:  strings.TrimSpace(device.DeviceKey),
 		Timestamp:  ts,
 		Fields:     fields,
+		Points:     points,
 	}
 }
 
@@ -129,27 +129,27 @@ func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate stri
 	return cached
 }
 
-func resultFieldsForCollect(res *driver.DriverResult) map[string]string {
+func resultFieldsForCollect(res *driver.DriverResult) (map[string]string, []models.CollectPoint) {
 	if res == nil {
-		return nil
+		return nil, nil
 	}
 
 	if len(res.Points) == 0 {
-		return normalizedDataFields(res.Data)
+		return normalizedDataFields(res.Data), nil
+	}
+	points := normalizedCollectPoints(res.Points)
+	if len(res.Data) == 0 {
+		return nil, points
 	}
 
 	fields := normalizedDataFields(res.Data)
 	if fields == nil {
-		fields = make(map[string]string, len(res.Points))
+		fields = make(map[string]string, len(points))
 	}
-	for _, p := range res.Points {
-		name := strings.TrimSpace(p.FieldName)
-		if name == "" {
-			continue
-		}
-		fields[name] = driverPointValueToString(p.Value)
+	for _, p := range points {
+		fields[p.FieldName] = models.CollectPointValueString(p.Value)
 	}
-	return fields
+	return fields, points
 }
 
 func normalizedDataFields(data map[string]string) map[string]string {
@@ -174,6 +174,27 @@ func normalizedDataFields(data map[string]string) map[string]string {
 	return fields
 }
 
+func normalizedCollectPoints(points []driver.DriverPoint) []models.CollectPoint {
+	if len(points) == 0 {
+		return nil
+	}
+
+	write := 0
+	for i := range points {
+		name := strings.TrimSpace(points[i].FieldName)
+		if name == "" {
+			continue
+		}
+		points[i].FieldName = name
+		points[write] = points[i]
+		write++
+	}
+	if write == 0 {
+		return nil
+	}
+	return points[:write]
+}
+
 func canReuseCollectedDataFields(data map[string]string) bool {
 	for key := range data {
 		if strings.TrimSpace(key) == "" {
@@ -184,43 +205,4 @@ func canReuseCollectedDataFields(data map[string]string) bool {
 		}
 	}
 	return true
-}
-
-func driverPointValueToString(value interface{}) string {
-	switch v := value.(type) {
-	case nil:
-		return ""
-	case string:
-		return v
-	case []byte:
-		return string(v)
-	case bool:
-		return strconv.FormatBool(v)
-	case int:
-		return strconv.Itoa(v)
-	case int8:
-		return strconv.FormatInt(int64(v), 10)
-	case int16:
-		return strconv.FormatInt(int64(v), 10)
-	case int32:
-		return strconv.FormatInt(int64(v), 10)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case uint:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint8:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint16:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint32:
-		return strconv.FormatUint(uint64(v), 10)
-	case uint64:
-		return strconv.FormatUint(v, 10)
-	case float32:
-		return strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		return fmt.Sprintf("%v", v)
-	}
 }

@@ -31,20 +31,17 @@ var ErrDriverBadOutput = errors.New("driver output invalid")
 
 // DriverResult 驱动执行结果
 type DriverResult struct {
-	Success    bool              `json:"success"`
-	Data       map[string]string `json:"data"`
-	Points     []DriverPoint     `json:"points"`
-	ProductKey string            `json:"productKey,omitempty"`
-	Error      string            `json:"error"`
-	Timestamp  time.Time         `json:"timestamp"`
+	Success       bool              `json:"success"`
+	Data          map[string]string `json:"data"`
+	Points        []DriverPoint     `json:"points"`
+	ProductKey    string            `json:"productKey,omitempty"`
+	ProductKeyAlt string            `json:"product_key,omitempty"`
+	Error         string            `json:"error"`
+	Timestamp     time.Time         `json:"timestamp"`
 }
 
 // DriverPoint 驱动测点数据
-type DriverPoint struct {
-	FieldName string      `json:"field_name"`
-	Value     interface{} `json:"value"`
-	RW        string      `json:"rw"`
-}
+type DriverPoint = models.CollectPoint
 
 // DriverContext 驱动上下文
 type DriverContext struct {

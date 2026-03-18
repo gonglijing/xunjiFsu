@@ -44,6 +44,12 @@ func TestApplyGatewayRuntimeConfig_NegativeRetries(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for negative driver_tcp_dial_retries")
 	}
+
+	zero := 0
+	_, err = h.applyGatewayRuntimeConfig(&gatewayRuntimeConfig{CollectorWorkers: &zero})
+	if err == nil {
+		t.Fatalf("expected error for non-positive collector_workers")
+	}
 }
 
 func TestApplyGatewayDurationConfigChange(t *testing.T) {
@@ -76,6 +82,24 @@ func TestApplyGatewayRetryConfigChange(t *testing.T) {
 	negative := -1
 	if err := applyGatewayRetryConfigChange(changes, "driver_tcp_dial_retries", &negative, &target); err == nil {
 		t.Fatal("expected negative retry error")
+	}
+}
+
+func TestApplyGatewayPositiveIntConfigChange(t *testing.T) {
+	changes := make(map[string]runtimeConfigChange)
+	target := 4
+	value := 6
+
+	if err := applyGatewayPositiveIntConfigChange(changes, "collector_workers", &value, &target); err != nil {
+		t.Fatalf("applyGatewayPositiveIntConfigChange returned error: %v", err)
+	}
+	if target != 6 {
+		t.Fatalf("target = %d, want 6", target)
+	}
+
+	zero := 0
+	if err := applyGatewayPositiveIntConfigChange(changes, "collector_workers", &zero, &target); err == nil {
+		t.Fatal("expected non-positive value error")
 	}
 }
 

@@ -48,6 +48,9 @@ func (h *Handler) UpdateResource(w http.ResponseWriter, r *http.Request) {
 		writeServerErrorWithLog(w, apiErrUpdateResourceFailed, err)
 		return
 	}
+	if h.driverExecutor != nil {
+		h.driverExecutor.RefreshResource(resource)
+	}
 	WriteSuccess(w, resource)
 }
 
@@ -60,6 +63,9 @@ func (h *Handler) DeleteResource(w http.ResponseWriter, r *http.Request) {
 	if err := database.DeleteResource(id); err != nil {
 		writeServerErrorWithLog(w, apiErrDeleteResourceFailed, err)
 		return
+	}
+	if h.driverExecutor != nil {
+		h.driverExecutor.CloseResource(id)
 	}
 	WriteDeleted(w)
 }
@@ -77,6 +83,9 @@ func (h *Handler) ToggleResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resource.Enabled = newState
+	if h.driverExecutor != nil {
+		h.driverExecutor.RefreshResource(resource)
+	}
 	WriteSuccess(w, resource)
 }
 

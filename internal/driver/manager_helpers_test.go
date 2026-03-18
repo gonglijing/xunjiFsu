@@ -428,6 +428,89 @@ func TestEnsureResourcePathLoadsFromResourcePath(t *testing.T) {
 	}
 }
 
+func TestEnsureResourcePathPrefersCachedValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	paramPath := filepath.Join(tmpDir, "param.db")
+	originalParamDB := database.ParamDB
+	t.Cleanup(func() {
+		if database.ParamDB != nil {
+			_ = database.ParamDB.Close()
+		}
+		database.ParamDB = originalParamDB
+	})
+
+	if err := database.InitParamDBWithPath(paramPath); err != nil {
+		t.Fatalf("InitParamDBWithPath failed: %v", err)
+	}
+	if _, err := database.ParamDB.Exec(`CREATE TABLE IF NOT EXISTS resources (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		path TEXT,
+		enabled INTEGER DEFAULT 1,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create resources table failed: %v", err)
+	}
+
+	resourceID, err := database.AddResource(&models.Resource{
+		Name:    "net-r2",
+		Type:    "net",
+		Path:    "192.168.10.20:502",
+		Enabled: 1,
+	})
+	if err != nil {
+		t.Fatalf("AddResource failed: %v", err)
+	}
+
+	executor := NewDriverExecutor(NewDriverManager())
+	device := &models.Device{}
+
+	executor.ensureResourcePath(resourceID, "net", device)
+	if got := executor.GetResourcePath(resourceID); got != "192.168.10.20:502" {
+		t.Fatalf("resource path = %q, want %q", got, "192.168.10.20:502")
+	}
+
+	if err := database.UpdateResource(&models.Resource{
+		ID:      resourceID,
+		Name:    "net-r2",
+		Type:    "net",
+		Path:    "192.168.10.20:503",
+		Enabled: 1,
+	}); err != nil {
+		t.Fatalf("UpdateResource failed: %v", err)
+	}
+
+	executor.ensureResourcePath(resourceID, "net", device)
+	if got := executor.GetResourcePath(resourceID); got != "192.168.10.20:502" {
+		t.Fatalf("cached resource path = %q, want %q", got, "192.168.10.20:502")
+	}
+}
+
+func TestRefreshResourceClosesDisabledNetConnection(t *testing.T) {
+	executor := NewDriverExecutor(NewDriverManager())
+
+	c1, c2 := net.Pipe()
+	defer c2.Close()
+
+	executor.RegisterTCP(7, c1)
+	executor.SetResourcePath(7, "127.0.0.1:502")
+	executor.RefreshResource(&models.Resource{
+		ID:      7,
+		Type:    "net",
+		Path:    "127.0.0.1:502",
+		Enabled: 0,
+	})
+
+	if got := executor.GetResourcePath(7); got != "" {
+		t.Fatalf("resource path = %q, want empty", got)
+	}
+	if _, err := c1.Write([]byte("x")); err == nil {
+		t.Fatalf("expected closed conn after resource disable")
+	}
+}
+
 func TestRecoverMissingDriverBindingByDriverType(t *testing.T) {
 	tmpDir := t.TempDir()
 	paramPath := filepath.Join(tmpDir, "param.db")

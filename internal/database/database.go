@@ -15,7 +15,7 @@ const (
 	DefaultParamDBFile            = "param.db"      // 配置数据库文件名
 	DataDBFile                    = "data.db"       // 数据数据库文件名
 	MaxDataPoints                 = 100000          // 内存数据库最大数据点数
-	MaxDataCache                  = 10000           // 内存缓存最大条目数
+	MaxDataCache                  = 100000          // 内存缓存最大条目数，默认可覆盖万级测点设备
 	DefaultRetentionDays          = 30              // 默认历史保留天数
 	DefaultStorageIntervalSeconds = 300             // 默认存储周期(s)
 

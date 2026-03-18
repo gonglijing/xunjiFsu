@@ -21,7 +21,7 @@ func normalizeDriverResultIdentity(result *DriverResult, rawOutput []byte) {
 		return
 	}
 
-	result.ProductKey = strings.TrimSpace(result.ProductKey)
+	result.ProductKey = firstNonEmptyTrimmed(result.ProductKey, result.ProductKeyAlt)
 	if result.ProductKey == "" {
 		result.ProductKey = resolveDriverProductKeyFromResultData(result.Data)
 	}
@@ -29,6 +29,7 @@ func normalizeDriverResultIdentity(result *DriverResult, rawOutput []byte) {
 		result.ProductKey = parseDriverProductKeyFromResultOutput(rawOutput)
 	}
 
+	result.ProductKeyAlt = ""
 	removeDriverProductKeyFields(result.Data)
 }
 

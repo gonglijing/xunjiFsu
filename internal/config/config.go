@@ -92,7 +92,7 @@ func DefaultConfig() *Config {
 		LogLevel:                        "info",
 		LogJSON:                         false,
 		CollectorEnabled:                true,
-		CollectorWorkers:                10,
+		CollectorWorkers:                4,
 		SyncInterval:                    5 * time.Minute,
 		CollectorDeviceSyncInterval:     10 * time.Second,
 		CollectorCommandPollInterval:    500 * time.Millisecond,
@@ -110,7 +110,7 @@ func DefaultConfig() *Config {
 		ThresholdCacheEnabled:           true,
 		ThresholdCacheTTL:               time.Minute,
 		MaxDataPoints:                   100000,
-		MaxDataCache:                    10000,
+		MaxDataCache:                    100000,
 	}
 }
 
@@ -153,6 +153,7 @@ func applyFileConfig(cfg *Config) error {
 	applyDriverFileConfig(cfg, flatCfg)
 	applyNorthboundFileConfig(cfg, flatCfg)
 	applyCollectorFileConfig(cfg, flatCfg)
+	applyDataLimitFileConfig(cfg, flatCfg)
 
 	return nil
 }
@@ -213,8 +214,18 @@ func applyCollectorFileConfig(cfg *Config, flatCfg map[string]string) {
 		return
 	}
 
+	applyPositiveIntText(&cfg.CollectorWorkers, flatCfg["collector.workers"])
 	applyDurationText(&cfg.CollectorDeviceSyncInterval, flatCfg["collector.device_sync_interval"])
 	applyDurationText(&cfg.CollectorCommandPollInterval, flatCfg["collector.command_poll_interval"])
+}
+
+func applyDataLimitFileConfig(cfg *Config, flatCfg map[string]string) {
+	if cfg == nil {
+		return
+	}
+
+	applyPositiveIntText(&cfg.MaxDataPoints, flatCfg["data.max_data_points"])
+	applyPositiveIntText(&cfg.MaxDataCache, flatCfg["data.max_data_cache"])
 }
 
 func parseFlatYAML(data []byte) (map[string]string, error) {

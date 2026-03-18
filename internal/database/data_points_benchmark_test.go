@@ -109,3 +109,19 @@ func BenchmarkInsertCollectDataWithOptions_CacheOnly_32Fields(b *testing.B) {
 func BenchmarkInsertCollectDataWithOptions_WithHistory_32Fields(b *testing.B) {
 	benchmarkInsertCollectDataWithOptions(b, 32, true)
 }
+
+func BenchmarkInsertCollectDataWithOptions_CacheOnly_1000Fields(b *testing.B) {
+	benchmarkInsertCollectDataWithOptions(b, 1000, false)
+}
+
+func BenchmarkInsertCollectDataWithOptions_WithHistory_1000Fields(b *testing.B) {
+	benchmarkInsertCollectDataWithOptions(b, 1000, true)
+}
+
+func BenchmarkInsertCollectDataWithOptions_CacheOnly_10000Fields(b *testing.B) {
+	benchmarkInsertCollectDataWithOptions(b, 10000, false)
+}
+
+func BenchmarkInsertCollectDataWithOptions_WithHistory_10000Fields(b *testing.B) {
+	benchmarkInsertCollectDataWithOptions(b, 10000, true)
+}

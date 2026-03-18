@@ -2,6 +2,7 @@ package collector
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,10 +14,17 @@ import (
 type thresholdCache struct {
 	mu          sync.RWMutex
 	thresholds  map[int64][]*models.Threshold // deviceID -> thresholds
+	rules       map[int64][]thresholdEvalRule
 	lastRefresh time.Time
 	interval    time.Duration
 	stopChan    chan struct{}
 	running     bool
+}
+
+type thresholdEvalRule struct {
+	threshold           *models.Threshold
+	fieldName           string
+	normalizedFieldName string
 }
 
 // 缓存实例
@@ -26,6 +34,7 @@ var cache *thresholdCache
 func init() {
 	cache = &thresholdCache{
 		thresholds:  make(map[int64][]*models.Threshold),
+		rules:       make(map[int64][]thresholdEvalRule),
 		interval:    time.Minute, // 缓存刷新间隔
 		lastRefresh: time.Time{},
 	}
@@ -101,6 +110,7 @@ func (c *thresholdCache) Refresh() {
 		validDeviceIDs[device.ID] = struct{}{}
 	}
 	next := make(map[int64][]*models.Threshold, len(validDeviceIDs))
+	nextRules := make(map[int64][]thresholdEvalRule, len(validDeviceIDs))
 
 	for _, threshold := range thresholds {
 		if threshold == nil || threshold.DeviceID == 0 {
@@ -109,11 +119,14 @@ func (c *thresholdCache) Refresh() {
 		if _, exists := validDeviceIDs[threshold.DeviceID]; !exists {
 			continue
 		}
+		normalizeThresholdForRuntime(threshold)
 		next[threshold.DeviceID] = append(next[threshold.DeviceID], threshold)
+		nextRules[threshold.DeviceID] = append(nextRules[threshold.DeviceID], buildThresholdEvalRule(threshold))
 	}
 
 	c.mu.Lock()
 	c.thresholds = next
+	c.rules = nextRules
 	c.lastRefresh = time.Now()
 	c.mu.Unlock()
 
@@ -122,8 +135,19 @@ func (c *thresholdCache) Refresh() {
 
 // GetDeviceThresholds 获取设备的阈值配置（优先从缓存获取）
 func GetDeviceThresholds(deviceID int64) ([]*models.Threshold, error) {
+	thresholds, _, err := getThresholdCacheEntry(deviceID)
+	return thresholds, err
+}
+
+func getDeviceThresholdRules(deviceID int64) ([]thresholdEvalRule, error) {
+	_, rules, err := getThresholdCacheEntry(deviceID)
+	return rules, err
+}
+
+func getThresholdCacheEntry(deviceID int64) ([]*models.Threshold, []thresholdEvalRule, error) {
 	cache.mu.RLock()
 	thresholds, exists := cache.thresholds[deviceID]
+	rules := cache.rules[deviceID]
 	needsRefresh := time.Since(cache.lastRefresh) > cache.interval*2 // 超过2倍刷新间隔需要刷新
 	cache.mu.RUnlock()
 
@@ -131,29 +155,56 @@ func GetDeviceThresholds(deviceID int64) ([]*models.Threshold, error) {
 		cache.Refresh()
 		cache.mu.RLock()
 		thresholds, exists = cache.thresholds[deviceID]
+		rules = cache.rules[deviceID]
 		cache.mu.RUnlock()
 	}
 
 	if !exists {
 		loaded, err := database.GetThresholdsByDeviceID(deviceID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(loaded) > 0 {
+			loadedRules := make([]thresholdEvalRule, 0, len(loaded))
+			for _, threshold := range loaded {
+				if threshold == nil {
+					continue
+				}
+				normalizeThresholdForRuntime(threshold)
+				loadedRules = append(loadedRules, buildThresholdEvalRule(threshold))
+			}
 			cache.mu.Lock()
 			cache.thresholds[deviceID] = loaded
+			cache.rules[deviceID] = loadedRules
 			cache.mu.Unlock()
+			return loaded, loadedRules, nil
 		}
-		return loaded, nil
+		return loaded, nil, nil
 	}
 
-	return thresholds, nil
+	if len(thresholds) > 0 && len(rules) == 0 {
+		rebuiltRules := make([]thresholdEvalRule, 0, len(thresholds))
+		for _, threshold := range thresholds {
+			if threshold == nil {
+				continue
+			}
+			normalizeThresholdForRuntime(threshold)
+			rebuiltRules = append(rebuiltRules, buildThresholdEvalRule(threshold))
+		}
+		cache.mu.Lock()
+		cache.rules[deviceID] = rebuiltRules
+		cache.mu.Unlock()
+		rules = rebuiltRules
+	}
+
+	return thresholds, rules, nil
 }
 
 // InvalidateDeviceCache 使指定设备的缓存失效
 func InvalidateDeviceCache(deviceID int64) {
 	cache.mu.Lock()
 	delete(cache.thresholds, deviceID)
+	delete(cache.rules, deviceID)
 	cache.mu.Unlock()
 }
 
@@ -161,6 +212,28 @@ func InvalidateDeviceCache(deviceID int64) {
 func InvalidateAllCache() {
 	cache.mu.Lock()
 	cache.thresholds = make(map[int64][]*models.Threshold)
+	cache.rules = make(map[int64][]thresholdEvalRule)
 	cache.lastRefresh = time.Time{}
 	cache.mu.Unlock()
+}
+
+func normalizeThresholdForRuntime(threshold *models.Threshold) {
+	if threshold == nil {
+		return
+	}
+	threshold.FieldName = strings.TrimSpace(threshold.FieldName)
+}
+
+func buildThresholdEvalRule(threshold *models.Threshold) thresholdEvalRule {
+	fieldName := ""
+	normalized := ""
+	if threshold != nil {
+		fieldName = strings.TrimSpace(threshold.FieldName)
+		normalized = normalizeFieldName(fieldName)
+	}
+	return thresholdEvalRule{
+		threshold:           threshold,
+		fieldName:           fieldName,
+		normalizedFieldName: normalized,
+	}
 }

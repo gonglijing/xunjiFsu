@@ -220,6 +220,7 @@ func (e *DriverExecutor) GetTCPConn(resourceID int64) net.Conn {
 
 // SetResourcePath 设置资源路径 (用于TCP懒连接)
 func (e *DriverExecutor) SetResourcePath(resourceID int64, path string) {
+	path = strings.TrimSpace(path)
 	e.mu.Lock()
 	if prev, ok := e.resourcePaths[resourceID]; ok && prev != "" && prev != path {
 		if conn, ok := e.tcpConns[resourceID]; ok {
@@ -227,8 +228,33 @@ func (e *DriverExecutor) SetResourcePath(resourceID int64, path string) {
 			delete(e.tcpConns, resourceID)
 		}
 	}
+	if path == "" {
+		delete(e.resourcePaths, resourceID)
+		e.mu.Unlock()
+		return
+	}
 	e.resourcePaths[resourceID] = path
 	e.mu.Unlock()
+}
+
+// RefreshResource syncs executor-side resource cache after resource CRUD changes.
+func (e *DriverExecutor) RefreshResource(resource *models.Resource) {
+	if e == nil || resource == nil || resource.ID <= 0 {
+		return
+	}
+
+	if resource.Enabled != 1 {
+		e.CloseResource(resource.ID)
+		return
+	}
+
+	resourceType := strings.ToLower(strings.TrimSpace(resource.Type))
+	if resourceType != "net" {
+		e.CloseResource(resource.ID)
+		return
+	}
+
+	e.SetResourcePath(resource.ID, resource.Path)
 }
 
 // SetTimeouts overrides default timeouts. Use zero to keep defaults.

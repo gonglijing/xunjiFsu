@@ -50,9 +50,11 @@ func TestApplySyncInterval(t *testing.T) {
 func TestTriggerSyncIfNeeded(t *testing.T) {
 	oldTrigger := syncBatchTrigger
 	oldFn := syncDataToDiskFn
+	dataSyncTriggered.Store(false)
 	defer func() {
 		syncBatchTrigger = oldTrigger
 		syncDataToDiskFn = oldFn
+		dataSyncTriggered.Store(false)
 	}()
 
 	syncBatchTrigger = 2
@@ -111,6 +113,52 @@ func TestTriggerSyncIfNeeded(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatalf("sync function was not called")
+	}
+}
+
+func TestTriggerDataSyncAsync_DeduplicatesConcurrentTriggers(t *testing.T) {
+	oldFn := syncDataToDiskFn
+	dataSyncTriggered.Store(false)
+	defer func() {
+		syncDataToDiskFn = oldFn
+		dataSyncTriggered.Store(false)
+	}()
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	done := make(chan struct{})
+	var calls atomic.Int32
+	syncDataToDiskFn = func() error {
+		calls.Add(1)
+		started <- struct{}{}
+		<-release
+		close(done)
+		return nil
+	}
+
+	if !triggerDataSyncAsync() {
+		t.Fatalf("expected first async trigger to start")
+	}
+	<-started
+
+	if triggerDataSyncAsync() {
+		t.Fatalf("expected duplicate async trigger to be skipped while sync running")
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for triggered sync to finish")
+	}
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("syncDataToDiskFn calls = %d, want 1", got)
+	}
+
+	if !triggerDataSyncAsync() {
+		t.Fatalf("expected trigger after completion to start again")
 	}
 }
 

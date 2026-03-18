@@ -1,6 +1,11 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
 
 // User 用户模型
 type User struct {
@@ -189,6 +194,75 @@ type CollectData struct {
 	DeviceKey  string            `json:"device_key"`
 	Timestamp  time.Time         `json:"timestamp"`
 	Fields     map[string]string `json:"fields"`
+	Points     []CollectPoint    `json:"points,omitempty"`
+}
+
+type CollectPoint struct {
+	FieldName string      `json:"field_name"`
+	Value     interface{} `json:"value"`
+	RW        string      `json:"rw,omitempty"`
+}
+
+func (c *CollectData) EnsureFields() map[string]string {
+	if c == nil {
+		return nil
+	}
+	if len(c.Fields) > 0 || len(c.Points) == 0 {
+		return c.Fields
+	}
+
+	fields := make(map[string]string, len(c.Points))
+	for _, point := range c.Points {
+		name := strings.TrimSpace(point.FieldName)
+		if name == "" {
+			continue
+		}
+		fields[name] = CollectPointValueString(point.Value)
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	c.Fields = fields
+	return c.Fields
+}
+
+func CollectPointValueString(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	case bool:
+		return strconv.FormatBool(v)
+	case int:
+		return strconv.Itoa(v)
+	case int8:
+		return strconv.FormatInt(int64(v), 10)
+	case int16:
+		return strconv.FormatInt(int64(v), 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // AlarmPayload 报警载荷

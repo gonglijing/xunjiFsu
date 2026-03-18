@@ -192,6 +192,9 @@ func (e *DriverExecutor) ensureResourcePath(resourceID int64, resourceType strin
 	if resourceType != "net" || resourceID <= 0 {
 		return
 	}
+	if e.GetResourcePath(resourceID) != "" {
+		return
+	}
 	if res, err := database.GetResourceByID(resourceID); err == nil && res != nil {
 		path := strings.TrimSpace(res.Path)
 		if path != "" {

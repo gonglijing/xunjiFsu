@@ -338,6 +338,9 @@ func (m *NorthboundManager) RemoveAdapter(name string) {
 
 // SendData 发送数据到所有启用的北向
 func (m *NorthboundManager) SendData(data *models.CollectData) {
+	if data != nil {
+		data.EnsureFields()
+	}
 	for _, ref := range m.enabledAdapterRefs() {
 		// 内置适配器自己管理发送，不需要通过熔断器
 		if err := ref.adapter.Send(data); err != nil {

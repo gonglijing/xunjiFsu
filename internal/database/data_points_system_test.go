@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -244,6 +245,104 @@ func TestInsertCollectDataWithOptions_StoreHistoryFlag(t *testing.T) {
 	}
 	if historyCount != 2 {
 		t.Fatalf("expected history count 2 when storeHistory=true, got %d", historyCount)
+	}
+}
+
+func TestInsertCollectDataWithOptions_LargeFieldSet(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldTrigger := syncBatchTrigger
+	oldSyncFn := syncDataToDiskFn
+	syncBatchTrigger = int(^uint(0) >> 1)
+	syncDataToDiskFn = func() error { return nil }
+	t.Cleanup(func() {
+		syncBatchTrigger = oldTrigger
+		syncDataToDiskFn = oldSyncFn
+	})
+
+	const fieldCount = 10000
+	fields := make(map[string]string, fieldCount)
+	for i := 0; i < fieldCount; i++ {
+		fields[fmt.Sprintf("f_%05d", i)] = fmt.Sprintf("%d", i)
+	}
+
+	data := &models.CollectData{
+		DeviceID:   88,
+		DeviceName: "dev-88",
+		Timestamp:  time.Now(),
+		Fields:     fields,
+	}
+
+	if err := InsertCollectDataWithOptions(data, false); err != nil {
+		t.Fatalf("InsertCollectDataWithOptions(storeHistory=false): %v", err)
+	}
+
+	var cacheCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_cache WHERE device_id = ?", data.DeviceID).Scan(&cacheCount); err != nil {
+		t.Fatalf("count data_cache after cache-only write: %v", err)
+	}
+	if cacheCount != fieldCount {
+		t.Fatalf("expected cache count %d after cache-only write, got %d", fieldCount, cacheCount)
+	}
+
+	if err := InsertCollectDataWithOptions(data, true); err != nil {
+		t.Fatalf("InsertCollectDataWithOptions(storeHistory=true): %v", err)
+	}
+
+	var historyCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ?", data.DeviceID).Scan(&historyCount); err != nil {
+		t.Fatalf("count data_points after history write: %v", err)
+	}
+	if historyCount != fieldCount {
+		t.Fatalf("expected history count %d after history write, got %d", fieldCount, historyCount)
+	}
+}
+
+func TestCollectDataWriter_StopFlushesPendingWrites(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldTrigger := syncBatchTrigger
+	oldSyncFn := syncDataToDiskFn
+	syncBatchTrigger = int(^uint(0) >> 1)
+	syncDataToDiskFn = func() error { return nil }
+	t.Cleanup(func() {
+		syncBatchTrigger = oldTrigger
+		syncDataToDiskFn = oldSyncFn
+		StopCollectDataWriter()
+	})
+
+	StartCollectDataWriter()
+
+	data := &models.CollectData{
+		DeviceID:   301,
+		DeviceName: "dev-301",
+		Timestamp:  time.Now(),
+		Points: []models.CollectPoint{
+			{FieldName: "temperature", Value: 23.5},
+			{FieldName: "humidity", Value: 61},
+		},
+	}
+
+	if err := EnqueueCollectDataWrite(data, true); err != nil {
+		t.Fatalf("EnqueueCollectDataWrite: %v", err)
+	}
+
+	StopCollectDataWriter()
+
+	var cacheCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_cache WHERE device_id = ?", data.DeviceID).Scan(&cacheCount); err != nil {
+		t.Fatalf("count data_cache: %v", err)
+	}
+	if cacheCount != 2 {
+		t.Fatalf("expected cache count 2, got %d", cacheCount)
+	}
+
+	var historyCount int
+	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points WHERE device_id = ?", data.DeviceID).Scan(&historyCount); err != nil {
+		t.Fatalf("count data_points: %v", err)
+	}
+	if historyCount != 2 {
+		t.Fatalf("expected history count 2, got %d", historyCount)
 	}
 }
 

@@ -125,11 +125,6 @@ func (c *SystemStatsCollector) collect() {
 	stats := c.collectSystemStats()
 	data := c.statsToCollectData(stats)
 
-	// 保存到数据库
-	if err := database.InsertCollectDataWithOptions(data, true); err != nil {
-		log.Printf("SystemStatsCollector: failed to insert data: %v", err)
-	}
-
 	// 发送到北向
 	c.mu.RLock()
 	mgr := c.northboundMgr
@@ -140,6 +135,11 @@ func (c *SystemStatsCollector) collect() {
 		mgr.SendData(data)
 	} else {
 		log.Printf("SystemStatsCollector: northbound manager is nil")
+	}
+
+	// 保存到数据库
+	if err := database.EnqueueCollectDataWrite(data, true); err != nil {
+		log.Printf("SystemStatsCollector: failed to insert data: %v", err)
 	}
 
 	log.Printf("SystemStatsCollector: collected cpu=%.1f%% mem=%.1f%% disk=%.1f%%",

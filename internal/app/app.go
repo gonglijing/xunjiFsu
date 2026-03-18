@@ -85,6 +85,9 @@ func Run(cfg *config.Config) error {
 }
 
 func startBackgroundTasks(cfg *config.Config) {
+	logger.Info("Starting collect data writer...")
+	database.StartCollectDataWriter()
+
 	logger.Info("Starting data sync task...")
 	database.StartDataSync()
 
@@ -189,6 +192,12 @@ func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector
 		if sysCollector != nil {
 			return sysCollector.Stop()
 		}
+		return nil
+	})
+
+	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
+		logger.Info("Stopping collect data writer...")
+		database.StopCollectDataWriter()
 		return nil
 	})
 

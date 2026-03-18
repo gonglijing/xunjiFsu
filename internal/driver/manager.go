@@ -57,12 +57,13 @@ func outputPreview(b []byte, max int) string {
 
 // DriverResult 驱动执行结果
 type DriverResult struct {
-	Success    bool              `json:"success"`
-	Data       map[string]string `json:"data"`   // 旧格式: {"temperature": "25.3"}
-	Points     []DriverPoint     `json:"points"` // 新格式: [{"field_name":"temperature","value":25.3,"rw":"R"}]
-	ProductKey string            `json:"productKey,omitempty"`
-	Error      string            `json:"error"`
-	Timestamp  time.Time         `json:"timestamp"`
+	Success       bool              `json:"success"`
+	Data          map[string]string `json:"data"`   // 旧格式: {"temperature": "25.3"}
+	Points        []DriverPoint     `json:"points"` // 新格式: [{"field_name":"temperature","value":25.3,"rw":"R"}]
+	ProductKey    string            `json:"productKey,omitempty"`
+	ProductKeyAlt string            `json:"product_key,omitempty"`
+	Error         string            `json:"error"`
+	Timestamp     time.Time         `json:"timestamp"`
 }
 
 func isReadFunction(function string, driverCtx *DriverContext) bool {
@@ -80,11 +81,7 @@ func isReadFunction(function string, driverCtx *DriverContext) bool {
 }
 
 // DriverPoint 驱动测点数据
-type DriverPoint struct {
-	FieldName string      `json:"field_name"`
-	Value     interface{} `json:"value"` // 支持 string 或 float64
-	RW        string      `json:"rw"`    // "R" | "W" | "RW"
-}
+type DriverPoint = models.CollectPoint
 
 // DriverContext 驱动上下文
 type DriverContext struct {

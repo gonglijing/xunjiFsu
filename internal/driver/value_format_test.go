@@ -111,6 +111,22 @@ func TestNormalizeDriverResultIdentity(t *testing.T) {
 	}
 }
 
+func TestNormalizeDriverResultIdentity_UsesLegacyTopLevelField(t *testing.T) {
+	result := &DriverResult{
+		ProductKeyAlt: " prod-legacy ",
+		Data:          map[string]string{"temp": "1"},
+	}
+
+	normalizeDriverResultIdentity(result, nil)
+
+	if result.ProductKey != "prod-legacy" {
+		t.Fatalf("product key mismatch: %s", result.ProductKey)
+	}
+	if result.ProductKeyAlt != "" {
+		t.Fatalf("legacy product key field should be cleared: %q", result.ProductKeyAlt)
+	}
+}
+
 func TestNormalizeDriverResultIdentity_FromRawOutput(t *testing.T) {
 	result := &DriverResult{Data: map[string]string{"temp": "1"}}
 	raw := []byte(`{"success":true,"data":{"productKey":"prodX"}}`)

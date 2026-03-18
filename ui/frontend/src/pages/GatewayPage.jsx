@@ -9,6 +9,7 @@ import { usePageLoader } from '../utils/pageLoader';
 const auditFieldLabels = {
   collector_device_sync_interval: '采集设备同步周期',
   collector_command_poll_interval: '采集命令轮询周期',
+  collector_workers: '采集并发数',
   northbound_mqtt_reconnect_interval: 'MQTT 重连间隔',
   driver_serial_read_timeout: '串口读超时',
   driver_tcp_dial_timeout: 'TCP 建连超时',
@@ -48,6 +49,7 @@ function GatewayPage() {
   const [runtimeForm, setRuntimeForm] = createSignal({
     collector_device_sync_interval: '10s',
     collector_command_poll_interval: '500ms',
+    collector_workers: 4,
     northbound_mqtt_reconnect_interval: '5s',
     driver_serial_read_timeout: '200ms',
     driver_tcp_dial_timeout: '5s',
@@ -71,6 +73,7 @@ function GatewayPage() {
     setRuntimeForm({
       collector_device_sync_interval: runtime.collector_device_sync_interval || '10s',
       collector_command_poll_interval: runtime.collector_command_poll_interval || '500ms',
+      collector_workers: runtime.collector_workers ?? 4,
       northbound_mqtt_reconnect_interval: runtime.northbound_mqtt_reconnect_interval || '5s',
       driver_serial_read_timeout: runtime.driver_serial_read_timeout || '200ms',
       driver_tcp_dial_timeout: runtime.driver_tcp_dial_timeout || '5s',
@@ -116,6 +119,7 @@ function GatewayPage() {
     setRuntimeSaving(true);
     api.gateway.updateGatewayRuntimeConfig({
       ...runtimeForm(),
+      collector_workers: Number(runtimeForm().collector_workers || 0),
       driver_serial_open_retries: Number(runtimeForm().driver_serial_open_retries || 0),
       driver_tcp_dial_retries: Number(runtimeForm().driver_tcp_dial_retries || 0),
     })
@@ -123,6 +127,7 @@ function GatewayPage() {
         setRuntimeForm({
           collector_device_sync_interval: data.collector_device_sync_interval || runtimeForm().collector_device_sync_interval,
           collector_command_poll_interval: data.collector_command_poll_interval || runtimeForm().collector_command_poll_interval,
+          collector_workers: data.collector_workers ?? runtimeForm().collector_workers,
           northbound_mqtt_reconnect_interval: data.northbound_mqtt_reconnect_interval || runtimeForm().northbound_mqtt_reconnect_interval,
           driver_serial_read_timeout: data.driver_serial_read_timeout || runtimeForm().driver_serial_read_timeout,
           driver_tcp_dial_timeout: data.driver_tcp_dial_timeout || runtimeForm().driver_tcp_dial_timeout,
@@ -202,6 +207,13 @@ function GatewayPage() {
             <input class="form-input" value={runtimeForm().collector_command_poll_interval}
               onInput={(e) => setRuntimeForm({ ...runtimeForm(), collector_command_poll_interval: e.target.value })}
               placeholder="例如 500ms" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">采集并发数</label>
+            <input class="form-input" type="number" min="1" value={runtimeForm().collector_workers}
+              onInput={(e) => setRuntimeForm({ ...runtimeForm(), collector_workers: e.target.value })}
+              placeholder="例如 4" />
+            <div class="form-hint">控制设备采集的并发派发数量，资源级串行锁仍然生效</div>
           </div>
           <div class="form-group">
             <label class="form-label">MQTT 重连间隔</label>

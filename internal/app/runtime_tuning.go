@@ -14,6 +14,7 @@ func applyRuntimeTuning(cfg *config.Config, collect *collector.Collector, driver
 
 	if collect != nil {
 		collect.SetRuntimeIntervals(cfg.CollectorDeviceSyncInterval, cfg.CollectorCommandPollInterval)
+		collect.SetMaxConcurrentCollects(cfg.CollectorWorkers)
 	}
 
 	if driverExecutor != nil {

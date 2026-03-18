@@ -20,10 +20,16 @@ auth:
 
 # 采集器配置
 collector:
+  workers: 4
   default_interval: 5000   # 默认采集周期，毫秒
   default_upload_interval: 10000  # 默认上传周期，毫秒
   device_sync_interval: 10s
   command_poll_interval: 500ms
+
+# 数据缓存限制
+data:
+  max_data_points: 100000
+  max_data_cache: 100000
 
 # 日志配置
 logging:

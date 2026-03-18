@@ -251,6 +251,81 @@ func TestMarkTaskFailed_OnlyUpdatesCurrentTask(t *testing.T) {
 	}
 }
 
+func TestTryStartCollectTaskLocked_RespectsConcurrencyAndCurrentTask(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+	c.maxConcurrentCollects = 1
+
+	device := &models.Device{ID: 601, CollectInterval: 1000, StorageInterval: 60}
+	task := newCollectTask(device, nil)
+	stale := newCollectTask(device, nil)
+
+	c.mu.Lock()
+	c.tasks[device.ID] = task
+
+	if !c.tryStartCollectTaskLocked(task) {
+		c.mu.Unlock()
+		t.Fatalf("expected current task to start")
+	}
+	if c.activeCollects != 1 {
+		c.mu.Unlock()
+		t.Fatalf("activeCollects = %d, want 1", c.activeCollects)
+	}
+	if c.tryStartCollectTaskLocked(task) {
+		c.mu.Unlock()
+		t.Fatalf("expected concurrency limit to block second start")
+	}
+
+	c.activeCollects = 0
+	if c.tryStartCollectTaskLocked(stale) {
+		c.mu.Unlock()
+		t.Fatalf("expected stale task start to fail")
+	}
+	c.mu.Unlock()
+}
+
+func TestFinishCollectTask_RequeuesCurrentTaskOnly(t *testing.T) {
+	mgr := northbound.NewNorthboundManager()
+	c := NewCollector(nil, mgr)
+
+	device := &models.Device{ID: 602, CollectInterval: 1000, StorageInterval: 60}
+	current := newCollectTask(device, nil)
+	stale := newCollectTask(device, nil)
+	before := time.Now()
+
+	c.mu.Lock()
+	c.tasks[device.ID] = current
+	c.activeCollects = 2
+	c.mu.Unlock()
+
+	c.finishCollectTask(stale)
+
+	c.mu.RLock()
+	if c.activeCollects != 1 {
+		c.mu.RUnlock()
+		t.Fatalf("activeCollects after stale finish = %d, want 1", c.activeCollects)
+	}
+	if current.index >= 0 {
+		c.mu.RUnlock()
+		t.Fatalf("stale finish should not requeue current task")
+	}
+	c.mu.RUnlock()
+
+	c.finishCollectTask(current)
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.activeCollects != 0 {
+		t.Fatalf("activeCollects after current finish = %d, want 0", c.activeCollects)
+	}
+	if current.index < 0 {
+		t.Fatalf("current task should be requeued")
+	}
+	if !current.nextRun.After(before) {
+		t.Fatalf("nextRun should move forward, got %v", current.nextRun)
+	}
+}
+
 func TestClassifyCollectError(t *testing.T) {
 	if got := classifyCollectError(nil); got != collectErrorKindNone {
 		t.Fatalf("nil error kind = %s, want %s", got, collectErrorKindNone)
@@ -311,7 +386,7 @@ func TestParseFloatFieldValue(t *testing.T) {
 func TestNumericFieldLookup_CacheParsedValue(t *testing.T) {
 	lookup := newNumericFieldLookup(map[string]string{
 		"temperature": "42.1",
-	})
+	}, nil)
 	if lookup.parsed != nil {
 		t.Fatalf("parsed cache should be lazily initialized")
 	}
@@ -352,11 +427,15 @@ func TestDriverResultToCollectData_TrimAndOverrideFields(t *testing.T) {
 	if collect.ProductKey != "pk" || collect.DeviceKey != "dk" {
 		t.Fatalf("expected trimmed identity, got product=%q device=%q", collect.ProductKey, collect.DeviceKey)
 	}
-	if got := collect.Fields["temp"]; got != "11.2" {
+	fields := collect.EnsureFields()
+	if got := fields["temp"]; got != "11.2" {
 		t.Fatalf("expected point value override temp=11.2, got %q", got)
 	}
-	if _, exists := collect.Fields[""]; exists {
+	if _, exists := fields[""]; exists {
 		t.Fatalf("blank field name should be ignored")
+	}
+	if len(collect.Points) != 1 {
+		t.Fatalf("expected normalized points size 1, got %d", len(collect.Points))
 	}
 }
 
@@ -389,8 +468,8 @@ func TestDriverResultToCollectData_EmptyResultKeepsNilFields(t *testing.T) {
 	if collect == nil {
 		t.Fatalf("collect data should not be nil")
 	}
-	if collect.Fields != nil {
-		t.Fatalf("expected nil fields for empty result, got %#v", collect.Fields)
+	if collect.Fields != nil || collect.Points != nil {
+		t.Fatalf("expected nil fields/points for empty result, got fields=%#v points=%#v", collect.Fields, collect.Points)
 	}
 }
 
@@ -493,7 +572,7 @@ func TestRemoveTaskLocked_KeepsSharedDriverProductKeyCache(t *testing.T) {
 	}
 }
 
-func TestDriverPointValueToString(t *testing.T) {
+func TestCollectPointValueString(t *testing.T) {
 	cases := []struct {
 		name  string
 		input interface{}
@@ -508,7 +587,7 @@ func TestDriverPointValueToString(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		if got := driverPointValueToString(tc.input); got != tc.want {
+		if got := models.CollectPointValueString(tc.input); got != tc.want {
 			t.Fatalf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
