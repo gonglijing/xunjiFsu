@@ -151,11 +151,11 @@ func TestNormalizePaginationPageSize(t *testing.T) {
 	}
 }
 
-func TestNewDataPointsPage(t *testing.T) {
+func TestBuildDataPointsPage(t *testing.T) {
 	points := []*database.DataPoint{{DeviceID: 1}, {DeviceID: 2}}
 	params := PaginationParams{Page: 1, PageSize: 2}
 
-	page := newDataPointsPage(points, params)
+	page := buildDataPointsPage(points, params)
 	if page["page"].(int) != 1 {
 		t.Fatalf("page = %v, want %d", page["page"], 1)
 	}

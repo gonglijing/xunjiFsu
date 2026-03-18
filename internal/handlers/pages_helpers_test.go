@@ -7,9 +7,9 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func TestSummarizeDeviceStats(t *testing.T) {
+func TestBuildDeviceStats(t *testing.T) {
 	devices := []*models.Device{{Enabled: 1}, {Enabled: 0}, nil, {Enabled: 1}}
-	stats := summarizeDeviceStats(devices)
+	stats := buildDeviceStats(devices)
 
 	if stats.Total != 4 {
 		t.Fatalf("Total = %d, want %d", stats.Total, 4)
@@ -19,9 +19,9 @@ func TestSummarizeDeviceStats(t *testing.T) {
 	}
 }
 
-func TestSummarizeNorthboundStats(t *testing.T) {
+func TestBuildNorthboundStats(t *testing.T) {
 	configs := []*models.NorthboundConfig{{Enabled: 1}, {Enabled: 0}, nil}
-	stats := summarizeNorthboundStats(configs)
+	stats := buildNorthboundStats(configs)
 
 	if stats.Total != 3 {
 		t.Fatalf("Total = %d, want %d", stats.Total, 3)
@@ -31,7 +31,7 @@ func TestSummarizeNorthboundStats(t *testing.T) {
 	}
 }
 
-func TestSummarizeAlarmStats(t *testing.T) {
+func TestBuildAlarmStats(t *testing.T) {
 	now := time.Date(2026, 2, 8, 12, 0, 0, 0, time.UTC)
 	today := now.Truncate(24 * time.Hour)
 	alarms := []*models.AlarmLog{
@@ -40,7 +40,7 @@ func TestSummarizeAlarmStats(t *testing.T) {
 		nil,
 	}
 
-	stats := summarizeAlarmStats(alarms, now)
+	stats := buildAlarmStats(alarms, now)
 	if stats.Total != 3 {
 		t.Fatalf("Total = %d, want %d", stats.Total, 3)
 	}

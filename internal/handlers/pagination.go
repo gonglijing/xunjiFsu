@@ -139,7 +139,7 @@ func queryPaginatedDataPoints(deviceID int64, pageSize int) ([]*database.DataPoi
 	return database.GetLatestDataPoints(pageSize)
 }
 
-func newDataPointsPage(points []*database.DataPoint, params PaginationParams) map[string]interface{} {
+func buildDataPointsPage(points []*database.DataPoint, params PaginationParams) map[string]interface{} {
 	return map[string]interface{}{
 		"items":     points,
 		"page":      params.Page,
@@ -179,5 +179,5 @@ func GetPaginatedDataPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteSuccess(w, newDataPointsPage(points, params))
+	WriteSuccess(w, buildDataPointsPage(points, params))
 }

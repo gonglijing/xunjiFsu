@@ -6,7 +6,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func summarizeDeviceStats(devices []*models.Device) DeviceStats {
+func buildDeviceStats(devices []*models.Device) DeviceStats {
 	stats := DeviceStats{Total: len(devices)}
 	for _, device := range devices {
 		if device != nil && device.Enabled == 1 {
@@ -16,7 +16,7 @@ func summarizeDeviceStats(devices []*models.Device) DeviceStats {
 	return stats
 }
 
-func summarizeNorthboundStats(configs []*models.NorthboundConfig) NorthboundStats {
+func buildNorthboundStats(configs []*models.NorthboundConfig) NorthboundStats {
 	stats := NorthboundStats{Total: len(configs)}
 	for _, config := range configs {
 		if config != nil && config.Enabled == 1 {
@@ -26,7 +26,7 @@ func summarizeNorthboundStats(configs []*models.NorthboundConfig) NorthboundStat
 	return stats
 }
 
-func summarizeAlarmStats(alarms []*models.AlarmLog, now time.Time) AlarmStats {
+func buildAlarmStats(alarms []*models.AlarmLog, now time.Time) AlarmStats {
 	stats := AlarmStats{Total: len(alarms)}
 	today := now.Truncate(24 * time.Hour)
 	for _, alarm := range alarms {
@@ -53,9 +53,9 @@ func buildStatusData(
 ) StatusData {
 	return StatusData{
 		CollectorRunning: collectorRunning,
-		Devices:          summarizeDeviceStats(devices),
-		Northbound:       summarizeNorthboundStats(configs),
-		Alarms:           summarizeAlarmStats(alarms, now),
+		Devices:          buildDeviceStats(devices),
+		Northbound:       buildNorthboundStats(configs),
+		Alarms:           buildAlarmStats(alarms, now),
 		Drivers: DriverStats{
 			Total: driverCount,
 		},
