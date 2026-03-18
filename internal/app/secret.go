@@ -10,29 +10,20 @@ import (
 )
 
 func loadOrGenerateSecretKey() []byte {
-	if key := os.Getenv("SESSION_SECRET"); key != "" {
-		h := sha256.Sum256([]byte(key))
-		return h[:]
+	if key, ok := loadSecretKeyFromEnv(); ok {
+		return key
 	}
 
-	configDir := "config"
-	keyFile := filepath.Join(configDir, "session_secret.key")
-	if data, err := os.ReadFile(keyFile); err == nil {
-		key := string(data)
-		if len(key) >= 32 {
-			h := sha256.Sum256([]byte(key))
-			return h[:]
-		}
+	keyFile := resolveSessionSecretFilePath()
+	if key, ok := loadSecretKeyFromFile(keyFile); ok {
+		return key
 	}
 
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(keyFile), 0755); err != nil {
 		logger.Warn("Failed to create config directory", "error", err)
 	}
 
-	newKey := make([]byte, 32)
-	if _, err := rand.Read(newKey); err != nil {
-		logger.Fatal("Failed to generate secret key", err)
-	}
+	newKey := generateSessionSecretKey()
 
 	if err := os.WriteFile(keyFile, newKey, 0600); err != nil {
 		logger.Warn("Failed to save session secret key", "error", err)
@@ -40,6 +31,38 @@ func loadOrGenerateSecretKey() []byte {
 		logger.Info("Generated new session secret key")
 	}
 
-	h := sha256.Sum256(newKey)
+	return hashSessionSecret(newKey)
+}
+
+func loadSecretKeyFromEnv() ([]byte, bool) {
+	key := os.Getenv("SESSION_SECRET")
+	if key == "" {
+		return nil, false
+	}
+	return hashSessionSecret([]byte(key)), true
+}
+
+func resolveSessionSecretFilePath() string {
+	return filepath.Join("config", "session_secret.key")
+}
+
+func loadSecretKeyFromFile(path string) ([]byte, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) < 32 {
+		return nil, false
+	}
+	return hashSessionSecret(data), true
+}
+
+func generateSessionSecretKey() []byte {
+	newKey := make([]byte, 32)
+	if _, err := rand.Read(newKey); err != nil {
+		logger.Fatal("Failed to generate secret key", err)
+	}
+	return newKey
+}
+
+func hashSessionSecret(key []byte) []byte {
+	h := sha256.Sum256(key)
 	return h[:]
 }
