@@ -44,6 +44,7 @@ var (
 	dataPointBatchSQLCache          = newCollectDataBatchSQLCache(buildDataPointBatchSQL)
 	latestDataPointBatchSQLCache    = newCollectDataBatchSQLCache(buildLatestDataPointBatchSQL)
 	dataPointQueryStmtCache         dbStmtCache
+	latestDeviceFieldQueryStmtCache dbStmtCache
 	collectDataArgsPool             = sync.Pool{
 		New: func() any {
 			return make([]any, 0, collectDataCacheBatchSize*5)
@@ -1230,7 +1231,27 @@ type latestDeviceFieldRow struct {
 	CollectedAt time.Time
 }
 
-const latestDeviceFieldRowsFromCacheQuery = `SELECT device_id, '' AS device_name, field_name, value, collected_at
+func queryRowsWithCachedStmt(db *sql.DB, cache *dbStmtCache, query string, args ...any) (*sql.Rows, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db is nil")
+	}
+	if query == "" {
+		return nil, fmt.Errorf("query is empty")
+	}
+	if cache == nil {
+		return db.Query(query, args...)
+	}
+	stmt, err := cache.get(db, query)
+	if err != nil {
+		return nil, err
+	}
+	if stmt == nil {
+		return nil, fmt.Errorf("stmt is nil")
+	}
+	return stmt.Query(args...)
+}
+
+const latestDeviceFieldRowsFromCacheQuery = `SELECT device_id, field_name, value, collected_at
 	FROM data_cache
 	ORDER BY device_id ASC, collected_at DESC`
 
@@ -1269,15 +1290,8 @@ func appendLatestDeviceFieldRow(item *LatestDeviceData, fieldTimes map[latestDev
 	}
 }
 
-func appendLatestDeviceFieldRows(db *sql.DB, query string, result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64) ([]*LatestDeviceData, error) {
-	if db == nil {
-		return nil, fmt.Errorf("db is nil")
-	}
-	if query == "" {
-		return result, nil
-	}
-
-	rows, err := db.Query(query)
+func appendLatestDeviceFieldRowsFromHistory(db *sql.DB, result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64) ([]*LatestDeviceData, error) {
+	rows, err := queryRowsWithCachedStmt(db, &latestDeviceFieldQueryStmtCache, latestDeviceFieldRowsFromHistoryQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -1312,6 +1326,16 @@ func appendLatestDeviceFieldRows(db *sql.DB, query string, result []*LatestDevic
 		return result, nil
 	}
 
+	if deviceIndex == nil {
+		deviceIndex = make(map[int64]int, len(result)+64)
+		for i, item := range result {
+			if item == nil {
+				continue
+			}
+			deviceIndex[item.DeviceID] = i
+		}
+	}
+
 	var currentDeviceID int64
 	var currentItem *LatestDeviceData
 	for rows.Next() {
@@ -1332,6 +1356,88 @@ func appendLatestDeviceFieldRows(db *sql.DB, query string, result []*LatestDevic
 					DeviceID:   item.DeviceID,
 					DeviceName: item.DeviceName,
 					Fields:     make(map[string]string, latestDeviceFieldsInitialCap),
+				})
+			}
+			currentDeviceID = item.DeviceID
+			currentItem = result[idx]
+		}
+		appendLatestDeviceFieldRow(currentItem, fieldTimes, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func appendLatestDeviceFieldRowsFromCache(db *sql.DB, result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64) ([]*LatestDeviceData, error) {
+	rows, err := queryRowsWithCachedStmt(db, &latestDeviceFieldQueryStmtCache, latestDeviceFieldRowsFromCacheQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if fieldTimes == nil && len(result) == 0 {
+		var currentDeviceID int64
+		var currentItem *LatestDeviceData
+		for rows.Next() {
+			var deviceID int64
+			var fieldName, value string
+			var collectedAt time.Time
+			if err := rows.Scan(&deviceID, &fieldName, &value, &collectedAt); err != nil {
+				return nil, err
+			}
+			fieldName = trimDataPointFieldName(fieldName)
+			if deviceID == 0 || fieldName == "" {
+				continue
+			}
+			if currentItem == nil || currentDeviceID != deviceID {
+				currentDeviceID = deviceID
+				currentItem = &LatestDeviceData{
+					DeviceID: deviceID,
+					Fields:   make(map[string]string, latestDeviceFieldsInitialCap),
+				}
+				result = append(result, currentItem)
+			}
+			currentItem.Fields[fieldName] = value
+			if collectedAt.After(currentItem.CollectedAt) {
+				currentItem.CollectedAt = collectedAt
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+
+	if deviceIndex == nil {
+		deviceIndex = make(map[int64]int, len(result)+64)
+		for i, item := range result {
+			if item == nil {
+				continue
+			}
+			deviceIndex[item.DeviceID] = i
+		}
+	}
+
+	var currentDeviceID int64
+	var currentItem *LatestDeviceData
+	for rows.Next() {
+		var item latestDeviceFieldRow
+		if err := rows.Scan(&item.DeviceID, &item.FieldName, &item.Value, &item.CollectedAt); err != nil {
+			return nil, err
+		}
+		item.FieldName = trimDataPointFieldName(item.FieldName)
+		if item.DeviceID == 0 || item.FieldName == "" {
+			continue
+		}
+		if currentItem == nil || currentDeviceID != item.DeviceID {
+			idx, exists := deviceIndex[item.DeviceID]
+			if !exists {
+				idx = len(result)
+				deviceIndex[item.DeviceID] = idx
+				result = append(result, &LatestDeviceData{
+					DeviceID: item.DeviceID,
+					Fields:   make(map[string]string, latestDeviceFieldsInitialCap),
 				})
 			}
 			currentDeviceID = item.DeviceID
@@ -1406,19 +1512,18 @@ func fillLatestDeviceNamesFromParamDB(items []*LatestDeviceData) {
 
 // GetAllDevicesLatestData 获取所有设备的最新数据（每个设备每个字段仅保留最新值）
 func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
-	deviceIndex := make(map[int64]int, 64)
 	var fieldTimes map[latestDeviceFieldKey]int64
 	if dataDBFile != "" {
 		fieldTimes = make(map[latestDeviceFieldKey]int64, 256)
 	}
-	result, err := appendLatestDeviceFieldRows(DataDB, latestDeviceFieldRowsFromCacheQuery, make([]*LatestDeviceData, 0, 64), deviceIndex, fieldTimes)
+	result, err := appendLatestDeviceFieldRowsFromCache(DataDB, make([]*LatestDeviceData, 0, 64), nil, fieldTimes)
 	if err != nil {
-		result, err = appendLatestDeviceFieldRows(DataDB, latestDeviceFieldRowsFromHistoryQuery, make([]*LatestDeviceData, 0, 64), deviceIndex, fieldTimes)
+		result, err = appendLatestDeviceFieldRowsFromHistory(DataDB, make([]*LatestDeviceData, 0, 64), nil, fieldTimes)
 		if err != nil {
 			return nil, err
 		}
 	} else if len(result) == 0 {
-		result, err = appendLatestDeviceFieldRows(DataDB, latestDeviceFieldRowsFromHistoryQuery, result, deviceIndex, fieldTimes)
+		result, err = appendLatestDeviceFieldRowsFromHistory(DataDB, result, nil, fieldTimes)
 		if err != nil {
 			return nil, err
 		}
@@ -1437,7 +1542,15 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 		return result, nil
 	}
 
-	result, err = appendLatestDeviceFieldRows(diskDB, latestDeviceFieldRowsFromHistoryQuery, result, deviceIndex, fieldTimes)
+	deviceIndex := make(map[int64]int, len(result)+64)
+	for i, item := range result {
+		if item == nil {
+			continue
+		}
+		deviceIndex[item.DeviceID] = i
+	}
+
+	result, err = appendLatestDeviceFieldRowsFromHistory(diskDB, result, deviceIndex, fieldTimes)
 	if err != nil {
 		log.Printf("Failed to query latest device fields from disk: %v", err)
 		fillLatestDeviceNamesFromParamDB(result)
