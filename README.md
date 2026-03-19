@@ -26,7 +26,7 @@
 
 ## 2. 技术栈
 
-- 后端：Go（`go.mod` 当前为 `1.24.0`）
+- 后端：Go（规则目标与 `go.mod` 统一为 `1.26.0`）
 - Web：`gorilla/mux`
 - 数据库：SQLite（`param.db` + `data.db`）
 - 驱动：Extism + TinyGo WASM
@@ -369,6 +369,11 @@ Schema 接口：
 ---
 
 ## 12. 本地开发与构建
+
+前提：
+
+- Go `1.26.0+`
+- Node.js 与 npm（用于前端）
 
 ### 后端
 

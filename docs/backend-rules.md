@@ -1,209 +1,553 @@
-# 后端分析与开发约束
+# 后端规则（Go 1.26 / RAM First）
 
-本文档面向 FSU 当前后端实现，目标不是重画一套理想架构，而是基于现有 `Go + SQLite + Extism/TinyGo WASM` 网关系统，建立一套可执行、可评审、可持续收敛的开发约束。
+本文档不是空谈式“理想架构”。它面向 FSU 当前后端，给出一套能直接落地的规则：目录怎么摆，文件怎么命名，函数怎么命名，什么能力优先用 Go 1.26 和标准库，什么写法必须因为内存成本而禁止。
 
-## 1. 当前后端现状
+## 1. 总原则
 
-后端主要集中在 `internal/`，当前模块边界已经相对清晰：
+后端规则按以下优先级执行：
 
-- `app/`：应用启动、路由注册、运行时调优接入
-- `handlers/`：HTTP API 层
-- `database/`：参数库 / 数据库访问与运行时数据写入、同步、保留
-- `collector/`：设备采集调度、阈值检查、北向命令执行、运行态
-- `driver/`：WASM 驱动加载、执行器、资源访问、Extism/TinyGo 插件调用
-- `northbound/`：北向管理器与适配器实现
-- `models/`：领域模型
-- `auth/`、`config/`、`logger/`、`errors/` 等：基础设施
+1. 少用 RAM。
+2. 标准库优先。
+3. Go 1.26 优先。
+4. 边界清晰，热路径保守。
+5. 命名优美、稳定、可长期扩展。
 
-当前实现已经具备以下基础：
+这里的“少用 RAM”不是一句口号，而是默认决策原则：
 
-- 采集、驱动、数据库、北向四层职责大体独立
-- 热路径上已经有一轮较深入的优化与基准
-- `handlers/` 与底层模块是显式依赖注入，不是全局单例直接乱调
-- `database/` 内部已有大量单测和系统测试
-- `driver/`、`collector/` 对性能敏感路径已有基准测试
+- 能用结构体，不用 `map[string]any`
+- 能流式处理，不先全量读入
+- 能复用切片，不重复分配
+- 能在调用方提供缓冲区时完成，不在函数内部偷偷 new 大对象
+- 能返回单值或迭代，不默认返回大切片
+- 能在标准库里解决，不再引入新框架
 
-但目前也存在几个典型风险：
+## 2. Go 版本与能力基线
 
-- `handlers/` 容易继续膨胀为“参数校验 + 业务编排 + 数据访问”混合层
-- `database/` 很容易被继续塞入跨层业务逻辑，破坏“只管持久化与查询”的边界
-- `collector/` 和 `driver/` 都是热点模块，任何“顺手写点逻辑”的改动都可能放大到采集主路径
-- `northbound/` 适配器实现需要保持统一行为，否则同类北向会逐渐分叉
-- 运行时热更新与配置变更路径较多，若无规则，容易出现“更新了数据库但没更新内存状态”的双写不一致
+后端规则目标版本统一为 `Go 1.26.x`。
 
-## 2. 总体目标
+当前仓库的落地要求也统一到 `go.mod = 1.26.0`。新代码允许直接采用 Go 1.26 API；旧代码在被修改时一并向 1.26 风格收敛，不再继续按 1.24 心智写新逻辑。
 
-后端后续演进遵循四个目标：
+### 2.1 必须优先使用的标准库能力
 
-1. 明确边界，防止 `handlers`、`database`、`collector` 相互侵蚀。
-2. 热路径优先保守，所有性能优化必须以测试或基准验证为准。
-3. 运行时状态更新必须显式，避免“库里改了、内存里没生效”。
-4. 新增能力优先沿用既有模式，不再扩散模块内的特殊实现。
+- HTTP：`net/http`
+- 路由：优先 `http.ServeMux`；存量 `gorilla/mux` 可渐进迁移，不强制一次性替换
+- 日志：`log/slog`
+- 上下文：`context`
+- 错误：`errors`, `fmt`, `errors.Join`
+- 持久化入口：`database/sql`
+- JSON：`encoding/json`
+- 配置：`os`, `flag`, `encoding/json`, `time`
+- 排序与集合：`slices`, `maps`, `cmp`
+- 并发：`sync`, `sync/atomic`, `context`
+- 观测：`expvar`, `runtime/metrics`, `net/http/pprof`
 
-## 3. 强制规则
+### 2.2 Go 1.26 可以优先引入的能力
 
-以下规则默认为强制要求。没有特殊说明时，新代码必须遵守。
+以下能力适合新代码优先采用，但要遵守“可读性和内存优先”：
 
-### 3.1 分层规则
+- `new(expr)`：只在表达“可选指针值”时更清爽时使用，不为炫技引入
+- `bytes.Buffer.Peek`：适合协议解析、探测头部，避免额外复制
+- `runtime/metrics` 新调度指标：优先用于采集器、northbound、driver 的运行时观测
+- `testing.T.ArtifactDir()`：用于输出集成测试产物，不再把测试垃圾散落到仓库根目录
+- `reflect` 的 iterator API：只允许用于工具层、元数据层，不允许进入热路径
 
-- `handlers/` 只负责：
-  - 解析请求
-  - 基础参数校验
-  - 调用下层模块
-  - 统一写响应
-- `handlers/` 不允许直接承载复杂业务编排、缓存策略、批量合并逻辑。
-- `database/` 只负责：
-  - schema
-  - CRUD
-  - 查询
-  - 批量写入 / 同步 / 保留等数据层行为
-- `database/` 不允许引入 HTTP、collector 调度、northbound 发送等上层语义。
-- `collector/` 只负责设备采集调度、采集结果处理、阈值和北向命令编排。
-- `driver/` 只负责驱动执行、资源复用、Extism/TinyGo WASM 调用。
-- `northbound/` 只负责适配器管理和发送，不允许反向吞并采集调度逻辑。
+### 2.3 实验能力规则
 
-### 3.2 Handler 规则
+Go 1.26 的实验能力默认关闭，只允许按需、显式、可回退地使用：
 
-- 新增接口必须优先复用现有响应封装和错误输出模式。
-- `handlers/` 不允许直接写原始 JSON 字符串响应。
-- 请求解析必须统一走已有 `parseRequest...` / `WriteBadRequest...` 风格工具。
-- 同类接口的参数校验必须保持一致，不允许相同字段在不同 handler 中定义出不同语义。
-- `handlers/` 不应直接操作多个数据库表来完成业务拼装；如果需要跨模块编排，应下沉到明确的业务函数。
+- `runtime/pprof` 的 `goroutineleak` profile：仅用于排障或 CI 专项检查
+- `runtime/secret`：仅用于秘密材料清理，不允许在普通业务逻辑里铺开
+- `simd/archsimd`：默认禁用；只有基准证明收益明确且架构绑定可接受时才允许
 
-### 3.3 Database 规则
+## 3. 可落地的后端目录结构树
 
-- 数据库层新增查询必须明确所属库：
-  - 配置类数据进 `ParamDB`
-  - 运行时数据进 `DataDB`
-- 所有高频查询、批量写入、内存-磁盘合并路径改动都必须附测试或基准。
-- 热路径查询优先考虑：
-  - 固定 SQL 分支
-  - 结果容量预估
-  - 避免无意义 map / slice 分配
-  - 避免重复打开磁盘库
-- `database/` 不允许为了“方便”返回一堆未约束的 `map[string]any`。
-- 查询函数命名必须体现过滤条件与返回语义，避免一个函数承担多种查询用途。
+目标不是把当前仓库一次性推翻，而是让新代码和重构代码按下面的树落位。新功能默认按此结构实现；存量代码逐步迁移，不做“大爆炸式”重写。
 
-### 3.4 Collector 规则
+```text
+internal/
+├── app/
+│   ├── bootstrap.go            # 启动顺序、依赖装配
+│   ├── server_http.go          # HTTP server 构造与启动
+│   ├── routes_api.go           # API 路由挂载
+│   ├── routes_page.go          # 页面/静态资源路由
+│   └── runtime_apply.go        # 运行时配置应用入口
+├── httpapi/
+│   ├── middleware_auth.go      # 认证中间件
+│   ├── middleware_gzip.go      # 压缩中间件
+│   ├── response.go             # 响应封装
+│   ├── decode_json.go          # 请求解码
+│   ├── gateway_read.go         # 网关读接口
+│   ├── gateway_write.go        # 网关写接口
+│   ├── device_read.go          # 设备读接口
+│   ├── device_write.go         # 设备写接口
+│   ├── device_exec.go          # 设备执行接口
+│   ├── driver_read.go          # 驱动读接口
+│   ├── driver_write.go         # 驱动写接口
+│   ├── north_read.go           # 北向读接口
+│   └── north_write.go          # 北向写接口
+├── service/
+│   ├── gateway_service.go      # 业务编排
+│   ├── device_service.go
+│   ├── driver_service.go
+│   ├── north_service.go
+│   ├── runtime_service.go
+│   └── alarm_service.go
+├── store/
+│   ├── db.go                   # DB 装配
+│   ├── migration.go            # schema / migration
+│   ├── gateway_store.go        # 网关持久化
+│   ├── device_store.go         # 设备持久化
+│   ├── driver_store.go         # 驱动持久化
+│   ├── north_store.go          # 北向持久化
+│   ├── point_store.go          # 测点数据
+│   ├── alarm_store.go          # 告警数据
+│   ├── runtime_audit_store.go  # 运行时配置审计
+│   └── retention_job.go        # 保留清理
+├── collect/
+│   ├── scheduler.go            # 调度器
+│   ├── job_heap.go             # 任务堆
+│   ├── cycle_run.go            # 单轮采集
+│   ├── threshold_eval.go       # 阈值评估
+│   ├── command_poll.go         # 北向写命令轮询
+│   ├── runtime_snapshot.go     # 运行态快照
+│   └── memory_budget.go        # 采集链路内存预算
+├── driver/
+│   ├── loader.go               # 驱动加载
+│   ├── catalog.go              # 驱动索引与元数据
+│   ├── executor.go             # 执行器
+│   ├── prepared_exec.go        # PreparedExecution
+│   ├── transport_serial.go     # 串口访问
+│   ├── transport_tcp.go        # TCP 访问
+│   ├── wasm_runtime.go         # WASM runtime
+│   └── result_decode.go        # 执行结果解析
+├── north/
+│   ├── registry.go             # 适配器注册
+│   ├── manager.go              # 北向实例管理
+│   ├── schema.go               # 类型 schema 入口
+│   ├── mqtt_adapter.go
+│   ├── pandax_adapter.go
+│   ├── ithings_adapter.go
+│   └── sagoo_adapter.go
+├── model/
+│   ├── gateway.go
+│   ├── resource.go
+│   ├── device.go
+│   ├── driver.go
+│   ├── northbound.go
+│   ├── threshold.go
+│   └── alarm.go
+├── platform/
+│   ├── auth/
+│   ├── config/
+│   ├── logger/
+│   ├── clock/
+│   └── graceful/
+└── testkit/
+    ├── httpcase.go
+    ├── sqlitecase.go
+    └── fixture.go
+```
 
-- `collector/` 中任何新增逻辑都必须区分：
-  - 调度路径
-  - 单次采集路径
-  - 阈值路径
-  - 北向命令路径
-- 单次采集路径不得引入额外数据库往返，除非有明确必要且已验证。
-- `collectTask` 上允许缓存“静态或低频变化”数据，但缓存更新点必须明确。
-- 调度循环中禁止加入阻塞式高成本逻辑。
-- 任何采集轮询、任务堆、任务刷新逻辑变更都必须考虑并发安全和任务陈旧节点问题。
+## 4. 分层边界
 
-### 3.5 Driver / Extism / TinyGo WASM 规则
+### 4.1 `httpapi`
 
-- `driver/` 热路径优先保守，执行入口改动必须附基准或至少单测验证。
-- 插件导出函数、版本元数据等静态信息应在加载阶段缓存，不得在执行路径反复查询。
-- 插件执行输入优先使用强类型结构，不回退到 `map[string]any` 或无约束 JSON 拼装。
-- 串口 / TCP 连接访问必须经过执行器，不允许页面式新增“临时通信入口”绕开资源管理。
-- 对 Extism 插件调用结果的错误处理必须统一，不允许不同调用点各自发明错误语义。
-- `no_extism` 分支与默认分支的导出接口必须保持一致。
+只做五件事：
 
-### 3.6 Northbound 规则
+- 解析请求
+- 做轻量校验
+- 调用 `service`
+- 写统一响应
+- 把错误映射为 HTTP 语义
 
-- 新增北向类型时必须遵循现有适配器模式，不允许直接在 handler 中写某个北向的业务特判。
-- 北向 schema、类型注册、适配器实现必须同步落地，不允许只加一种入口。
-- 北向发送失败、连接态、重连策略必须保留统一运行态出口。
-- 设备身份或 `productKey/deviceKey` 的来源规则必须清晰，禁止在适配器内部偷偷改写设备模型。
+禁止：
 
-### 3.7 Runtime Config 规则
+- 直接拼复杂 SQL
+- 直接调多个 `store` 做事务编排
+- 直接维护运行时缓存
+- 把采集、驱动、北向细节写在 handler 里
 
-- 所有运行时热更新参数必须同时考虑三层：
-  - 持久化存储
-  - 内存中当前值
-  - 运行中组件的即时生效
-- 任何新增热更新项，都必须明确：
-  - 默认值
-  - 更新入口
-  - 应用位置
-  - 审计记录
-- 只写数据库不通知运行时组件，视为不完整实现。
+### 4.2 `service`
 
-### 3.8 并发与锁规则
+这是默认业务编排层。
 
-- 对热路径状态，优先使用“更窄范围锁”或原子变量，不得默认扩大锁粒度。
-- 资源级互斥只能保护资源访问，不要顺手塞入其他非资源逻辑。
-- 所有双重检查、懒加载、连接建立逻辑必须明确并发语义，避免重复拨号、重复打开串口、重复建 DB 连接。
-- 新增 goroutine 必须有明确退出路径与生命周期归属。
+只做四件事：
 
-### 3.9 错误处理规则
+- 串联多个 `store`
+- 驱动 `collect` / `driver` / `north`
+- 维护业务级事务边界
+- 明确更新内存态与持久态
 
-- 错误必须保留上下文，禁止只返回裸 `err`。
-- 包装错误时应包含对象标识，如：
-  - `device id`
-  - `driver id`
-  - `resource id`
-  - `northbound id`
-- 热路径日志要克制，不能把成功路径打成高频日志噪音。
-- 对用户可预期的错误和系统性错误要区分，不要一律当“内部错误”处理。
+禁止：
 
-### 3.10 测试规则
+- 持有 HTTP 请求对象
+- 输出 HTTP 响应结构
+- 吞掉底层错误上下文
 
-- 新增后端复杂逻辑时，至少补一种测试：
-  - 单元测试
-  - 系统测试
-  - 基准测试
-- 涉及数据库查询/写入语义变更时，优先补数据库层测试。
-- 涉及采集、驱动、读写热点变更时，优先补基准。
-- 不允许只改热路径却完全没有验证。
+### 4.3 `store`
 
-## 4. 推荐规则
+只负责数据读写与数据层约束。
 
-以下规则不是硬性阻塞项，但默认推荐遵守。
+必须：
 
-- 优先在模块内提供小而稳定的 helper，而不是堆积超长函数
-- 热路径函数优先写出“快速返回分支”
-- 对批量操作优先考虑 chunk / pool / cache
-- 模块对外暴露结构应尽量收敛，不要让调用方知道太多内部细节
-- 新增运行态字段时优先考虑是否能复用已有 snapshot / runtime 输出结构
+- 面向明确模型返回
+- 用 `database/sql` 风格组织查询
+- 为热点查询提供固定 SQL 分支
+- 明确参数库与数据库职责
 
-## 5. 针对当前代码的重点整改建议
+禁止：
 
-### 5.1 `handlers/`
+- 混入 HTTP、采集调度、MQTT 重连之类上层语义
+- 返回“万能 map”
+- 在查询函数里偷偷做跨领域拼装
 
-- 继续收敛公共请求解析、参数错误输出、分页和响应包装逻辑
-- 对重复的“查库 + 更新运行态 + 返回结果”模式考虑继续抽 helper
-- 避免在 handler 中扩散 northbound / runtime config 特判
+### 4.4 `collect` / `driver` / `north`
 
-### 5.2 `database/`
+这三个包属于运行时热区。
 
-- 继续把热路径查询保持在小函数和固定 SQL 分支中
-- 对 `GetAllDevicesLatestData`、最新值查询、历史值合并等热点继续坚持“先 benchmark，再保留”
-- 不要在查询层回退到更泛化但更慢的通用结构
+热区规则：
 
-### 5.3 `collector/`
+- 改动前先判断是否会进入每轮采集
+- 默认先写基准，再谈抽象
+- 不允许为了“统一风格”引入额外分配
+- 不允许把反射、接口装箱、动态 map 扔进主路径
 
-- 把任务对象缓存继续控制在“设备静态值”范围，不扩散临时态缓存
-- 继续避免在单次采集路径上做无必要数据库查询
-- 把轮询、告警、北向命令路径的状态更新继续显式化
+## 5. 文件名命名规范
 
-### 5.4 `driver/`
+### 5.1 文件名总规则
 
-- `PreparedExecution`、插件导出函数、版本元数据等静态信息继续走缓存
-- 插件执行前后如再加逻辑，优先考虑是否会进入每次采集的固定成本
-- `manager.go` / `executor.go` 中的高频路径应持续用 benchmark 守住
+- 全部小写
+- 只用 ASCII
+- 单词之间用下划线 `_`
+- 文件名必须体现“领域 + 职责”
+- 禁止无意义名字
 
-### 5.5 `northbound/`
+禁止的文件名：
 
-- 新增适配器时先补类型 schema 和运行态输出，再补发送逻辑
-- 同类适配器之间保持配置字段语义一致，避免同名字段不同含义
+- `common.go`
+- `util.go`
+- `utils.go`
+- `helper.go`
+- `misc.go`
+- `temp.go`
+- `base.go`
+- `manager2.go`
 
-## 6. 评审检查清单
+推荐的文件名：
 
-后端改动提交前，至少检查以下问题：
+- `device_read.go`
+- `device_write.go`
+- `device_exec.go`
+- `runtime_apply.go`
+- `transport_serial.go`
+- `result_decode.go`
+- `threshold_eval.go`
 
-- 是否把业务逻辑错误地下沉到了 `database/` 或错误地塞进了 `handlers/`？
-- 是否改动了热路径却没有测试或基准？
-- 是否新增了运行时状态，但没有明确更新与失效机制？
-- 是否新增了连接/协程/缓存，却没有说明生命周期？
-- 是否把用户输入一路透传到底层而没有做边界校验？
-- 是否让日志变成高频噪音？
-- 是否引入了新的跨模块耦合？
+### 5.2 文件名格式
 
-如果以上任意问题答案为“是”，应优先整改后再合并。
+统一采用以下格式之一：
+
+- `<domain>_<action>.go`
+- `<domain>_<role>.go`
+- `<domain>_<role>_test.go`
+- `<domain>_<role>_bench_test.go`
+
+其中：
+
+- `domain` 是业务名词，如 `device`、`gateway`、`north`
+- `action` 是清晰动作，如 `read`、`write`、`exec`、`apply`
+- `role` 是稳定职责，如 `store`、`adapter`、`scheduler`、`runtime`
+
+### 5.3 角色后缀白名单
+
+后缀尽量收敛到下面这些词，避免团队里每人发明一套：
+
+- `api`
+- `middleware`
+- `service`
+- `store`
+- `scheduler`
+- `runtime`
+- `adapter`
+- `schema`
+- `policy`
+- `cache`
+- `decode`
+- `encode`
+- `transport`
+- `audit`
+- `bench_test`
+
+### 5.4 现有仓库的落地策略
+
+不要求一次性重命名全仓。
+
+从现在开始：
+
+- 新增文件必须遵守新规范
+- 旧文件只要被大改，顺手改成新规范
+- 一次 PR 内只做同一领域的小范围迁移，不做全仓改名
+
+## 6. 函数名命名规范
+
+### 6.1 总规则
+
+- 导出函数：`VerbNoun`
+- 包内函数：`verbNoun`
+- 布尔判断：`isX` / `hasX` / `canX` / `shouldX`
+- 构造函数：`NewType`
+- 返回快照：`Snapshot`
+- 返回视图：`View`
+- 返回迭代：`Walk` / `Visit`
+- 追加到缓冲区：`Append`
+
+函数名要短，但不能空。
+
+禁止：
+
+- `Do`
+- `Handle`
+- `Process`
+- `RunThing`
+- `Helper`
+- `Util`
+- `Manage`
+- `Exec1`
+
+推荐：
+
+- `LoadDevice`
+- `ListDevices`
+- `CreateDriver`
+- `UpdateGateway`
+- `ApplyRuntimeConfig`
+- `ScheduleCollect`
+- `RunCollectCycle`
+- `DecodeDriverResult`
+- `AppendMetricLine`
+- `WalkLatestPoints`
+
+### 6.2 动词白名单
+
+读路径优先使用：
+
+- `Get`：只用于“按唯一键直取单值”
+- `Load`：需要加载依赖或额外开销
+- `List`：返回列表
+- `Scan`：逐行扫描或轻量读取
+- `Walk`：回调式遍历，避免构造大切片
+- `Visit`：访问者模式或遍历输出
+
+写路径优先使用：
+
+- `Create`
+- `Update`
+- `Replace`
+- `Delete`
+- `Patch`
+- `Upsert`
+- `Ack`
+
+运行时优先使用：
+
+- `Start`
+- `Stop`
+- `Reload`
+- `Apply`
+- `Schedule`
+- `Dispatch`
+- `Acquire`
+- `Release`
+- `Reset`
+
+编解码优先使用：
+
+- `Decode`
+- `Encode`
+- `Marshal`
+- `Unmarshal`
+- `Append`
+- `WriteTo`
+
+### 6.3 RAM First 命名约束
+
+命名必须显式暴露“这段逻辑会不会分配”。
+
+优先使用：
+
+- `AppendX(dst []byte, ...) []byte`
+- `ScanX(rows *sql.Rows) (...)`
+- `WalkX(fn func(...) error) error`
+- `WriteXTo(w io.Writer, ...) error`
+- `FillX(dst *X, ...) error`
+
+谨慎使用：
+
+- `BuildX`
+- `MakeX`
+- `CollectX`
+
+除非函数真的在“构造一个新对象”，否则不要用这些词，因为它们通常暗示分配。
+
+### 6.4 参数命名规则
+
+- `ctx context.Context` 必须是第一个参数
+- `dst` 代表可复用目标缓冲区
+- `src` 代表输入对象
+- `id` 只用于单一主键
+- `ids` 只用于主键集合
+- `cfg` 只用于配置
+- `opt` 只用于小型可选参数结构
+- `buf` 只用于 `[]byte` 或 `bytes.Buffer`
+
+禁止：
+
+- `data interface{}`
+- `obj any`
+- `temp`
+- `info`
+- `ret`
+- `res1`
+
+### 6.5 当前仓库的函数命名映射示例
+
+下面这些例子是给当前 FSU 仓库直接套用的。
+
+- 读配置：`GetGatewayConfig` 优先收敛为 `LoadGateway`
+- 列表查询：`GetAllDevices` 优先收敛为 `ListDevices`
+- 单设备运行态：`GetDeviceRuntimeStatus` 优先收敛为 `LoadDeviceRuntime`
+- 采集调度入口：`StartCollector` / `StopCollector` 可以保留，但内部轮次函数优先叫 `RunCollectCycle`
+- 北向重载：`ReloadNorthbound` 比 `RefreshNorthboundManager` 更清晰
+- 数据点最新值遍历：优先 `WalkLatestPoints`，而不是 `GetAllDevicesLatestData`
+- 结果格式化：优先 `DecodeDriverResult` / `AppendDriverResultJSON`，避免 `FormatResult` 这类空泛名字
+
+## 7. 面向少用 RAM 的编码规则
+
+### 7.1 数据结构
+
+- 热路径优先结构体，不用 `map[string]any`
+- 固定字段优先显式字段，不做动态 key 组装
+- 大对象优先按需字段，不默认整对象复制
+- 查询结果优先预估容量：`make([]T, 0, n)`
+
+### 7.2 数据流
+
+- 能边读边写，就不要先读满
+- 能按页返回，就不要一次性查全量
+- 能走 callback，就不要先拼切片
+- 能写入调用方缓冲区，就不要返回新缓冲区
+
+### 7.3 JSON
+
+- 外部协议仍用 `encoding/json`
+- 内部热路径不要把结构体转 `map` 再转 JSON
+- 不允许为了省几行代码引入反射型 JSON 包
+
+### 7.4 SQL
+
+- 坚持 `database/sql`
+- 查询列显式列出，禁止热路径 `SELECT *`
+- 大结果集优先 `rows.Next()` 流式处理
+- 不允许仓促引入 ORM
+
+### 7.5 缓冲与池
+
+- 只对“大而短命”的缓冲区使用 `sync.Pool`
+- 小对象池化前必须有基准
+- 池里的对象必须可完全复位
+- 不能把业务状态对象长期塞进池里
+
+## 8. 标准库优先清单
+
+新增依赖前，先按下面的顺序否决自己一次：
+
+### 8.1 HTTP
+
+- 先看 `net/http`
+- 再看是否真的需要第三方 router
+
+### 8.2 日志
+
+- 先用 `log/slog`
+- 不再新增其他日志框架
+
+### 8.3 重试、超时、取消
+
+- 先用 `context`
+- 重试策略用小函数本地实现
+- 不要引入“万能 resilience 框架”
+
+### 8.4 数据处理
+
+- 排序/裁剪/比较先用 `slices` / `maps` / `cmp`
+- 缓冲区先用 `bytes`
+- 文本拼接先用 `strings.Builder` 或 `bytes.Buffer`
+
+## 9. 评审硬规则
+
+出现以下任一情况，默认不合并：
+
+- 新代码继续往 `handlers` 里塞业务编排
+- 新函数名含糊到读不出职责
+- 新文件名是 `utils` / `common` / `helper`
+- 热路径引入 `map[string]any`、反射或额外 JSON 往返
+- 查询路径无上限地构造大切片
+- 为了统一抽象牺牲内存占用
+- 引入第三方库但标准库足够
+
+## 10. 迁移顺序建议
+
+按下面顺序落地，成本最低：
+
+1. 新增代码先遵守文件名和函数名规则。
+2. `handlers` 新逻辑先下沉到 `service`。
+3. `database` 新查询按 `store` 风格命名。
+4. 热路径函数逐步改成 `Append` / `Walk` / `Scan` 风格。
+5. 路由层在触达时逐步向 `net/http` / `ServeMux` 收敛。
+
+## 11. 从当前仓库到目标结构的映射
+
+这一步是给当前 FSU 仓库直接执行的，不是抽象建议。
+
+### 11.1 包级迁移映射
+
+- `internal/handlers` 逐步迁到 `internal/httpapi`
+- `internal/database` 逐步迁到 `internal/store`
+- `internal/models` 逐步迁到 `internal/model`
+- `internal/collector` 可逐步收敛命名到 `internal/collect`
+- `internal/northbound` 可逐步收敛命名到 `internal/north`
+- `internal/auth`、`internal/config`、`internal/logger`、`internal/graceful` 逐步收拢到 `internal/platform/*`
+
+### 11.2 不应立即迁动的热点文件
+
+以下文件在没有配套测试和基准前，不做“纯命名式迁移”：
+
+- `internal/collector/collector.go`
+- `internal/collector/modbus_collect.go`
+- `internal/driver/executor.go`
+- `internal/driver/manager.go`
+- `internal/database/data_points.go`
+- `internal/database/data_cache.go`
+
+这些文件先做“职责收敛”，再做“包路径迁移”。顺序反了，风险会很高。
+
+### 11.3 新增文件的首选命名
+
+如果你今天继续往现有目录加文件，先按新命名法写，不必等全量迁移完成。
+
+- 在 `internal/handlers` 中新增文件时，优先使用 `device_read.go`、`device_write.go`、`gateway_read.go` 这种名字
+- 在 `internal/database` 中新增文件时，优先使用 `device_store.go`、`alarm_store.go`、`point_store.go`
+- 在 `internal/collector` 中新增文件时，优先使用 `scheduler.go`、`cycle_run.go`、`runtime_snapshot.go`
+- 在 `internal/northbound/adapters` 中新增文件时，优先使用 `<type>_adapter.go`、`<type>_runtime.go`、`<type>_schema.go`
+
+## 12. 评审检查清单
+
+- 这个函数名是否一眼能看出动作和对象？
+- 这个文件名是否体现了领域和职责？
+- 这段逻辑是否真的需要新分配？
+- 这条数据流能否改成流式或 callback？
+- 这处能力是否能直接用标准库完成？
+- 这段代码是否适合放在热路径？
+- 这次改动是否让运行态与持久态保持一致？
+
+如果以上任何一项答案不清楚，这段代码就还没写完。

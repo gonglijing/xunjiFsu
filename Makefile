@@ -2,6 +2,7 @@
 # 支持多平台交叉编译
 
 .PHONY: all clean build build-mini build-native build-minimal build-tiny test fmt vet ui ui-install ui-dev run help northbound-plugins \
+        check-go-version \
         deploy deploy-arm32 deploy-arm64 deploy-darwin deploy-darwin-arm64 deploy-windows arm32 arm64
 
 # 默认目标: 编译前端 + 本地运行
@@ -53,6 +54,8 @@ help:
 PROJECT_NAME := gogw
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo "dev")
 BUILD_TIME := $(shell date +%Y%m%d-%H%M%S)
+GO_REQUIRED_MAJOR := 1
+GO_REQUIRED_MINOR := 26
 NORTHBOUND_PLUGIN_DIR := plugin_north
 NORTHBOUND_PLUGIN_CMDS := northbound-xunji northbound-http northbound-mqtt
 NORTHBOUND_PLUGINS := $(addprefix $(NORTHBOUND_PLUGIN_DIR)/,$(NORTHBOUND_PLUGIN_CMDS))
@@ -74,14 +77,27 @@ DEPLOY_DIR := deploy
 COMMON_LDFLAGS := -s -w -buildid=
 BUILD_FLAGS := -trimpath -ldflags "$(COMMON_LDFLAGS)"
 
+check-go-version:
+	@version=$$(GOTOOLCHAIN=local go version 2>/dev/null | awk '{print $$3}' | sed 's/^go//'); \
+	if [ -z "$$version" ]; then \
+		echo "未检测到 Go 工具链"; \
+		exit 1; \
+	fi; \
+	major=$$(echo "$$version" | awk -F. '{print $$1}'); \
+	minor=$$(echo "$$version" | awk -F. '{print $$2}'); \
+	if [ "$$major" -lt "$(GO_REQUIRED_MAJOR)" ] || { [ "$$major" -eq "$(GO_REQUIRED_MAJOR)" ] && [ "$$minor" -lt "$(GO_REQUIRED_MINOR)" ]; }; then \
+		echo "需要 Go $(GO_REQUIRED_MAJOR).$(GO_REQUIRED_MINOR)+，当前为 $$version"; \
+		exit 1; \
+	fi
+
 # 编译当前平台版本
-build:
+build: check-go-version
 	@echo "=== 构建 $(PROJECT_NAME) $(VERSION) ==="
 	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
 
 # 编译最小体积版本
-build-mini:
+build-mini: check-go-version
 	@echo "=== 构建最小体积 $(PROJECT_NAME) $(VERSION) ==="
 	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
@@ -92,14 +108,14 @@ build-mini:
 	@ls -lh $(PROJECT_NAME)
 
 # 编译原生依赖最少版本（去掉 paho mqtt）
-build-native:
+build-native: check-go-version
 	@echo "=== 构建原生依赖最少版本 $(PROJECT_NAME) $(VERSION) ==="
 	CGO_ENABLED=0 go build -tags "no_paho_mqtt" $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
 	@ls -lh $(PROJECT_NAME)
 
 # 编译最小依赖版本（去掉 paho mqtt + extism）
-build-minimal:
+build-minimal: check-go-version
 	@echo "=== 构建最小依赖版本 $(PROJECT_NAME) $(VERSION) ==="
 	CGO_ENABLED=0 go build -tags "no_paho_mqtt no_extism" $(BUILD_FLAGS) -o $(PROJECT_NAME) $(MAIN_SRC)
 	@echo "✅ 构建完成: $(PROJECT_NAME)"
@@ -117,19 +133,19 @@ build-tiny: build-minimal
 northbound-plugins: $(NORTHBOUND_PLUGINS)
 	@echo "✅ 北向插件构建完成: $(NORTHBOUND_PLUGIN_DIR)"
 
-$(NORTHBOUND_PLUGIN_DIR)/northbound-%: plugin_north/src/northbound-%/main.go
+$(NORTHBOUND_PLUGIN_DIR)/northbound-%: plugin_north/src/northbound-%/main.go check-go-version
 	@mkdir -p $(NORTHBOUND_PLUGIN_DIR)
 	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $@ ./plugin_north/src/northbound-$*
 	@if command -v upx >/dev/null 2>&1; then upx --best --lzma $@ >/dev/null 2>&1 || true; fi
 
-test:
+test: check-go-version
 	go test ./...
 
-fmt:
+fmt: check-go-version
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
 	@if command -v goimports >/dev/null 2>&1; then goimports -w $$(find . -name '*.go' -not -path './vendor/*'); else echo "goimports 未安装，跳过"; fi
 
-vet:
+vet: check-go-version
 	go vet ./...
 
 # 前端依赖安装 (SolidJS)
@@ -162,7 +178,7 @@ ui-dev:
 	npm --prefix ui/frontend run dev --host
 
 # 启动后端服务
-run:
+run: check-go-version
 	@echo "=== 启动服务 (go run ./cmd/main.go) ==="
 	@echo "访问 http://localhost:8080"
 	@echo "按 Ctrl+C 停止服务"
@@ -188,7 +204,7 @@ prepare-deploy:
 	@echo "✅ 目录准备完成"
 
 # Linux ARM32 编译
-deploy-arm32: prepare-deploy ui
+deploy-arm32: check-go-version prepare-deploy ui
 	@echo "=== 编译 Linux ARM32 版本 ==="
 	rm -rf $(DEPLOY_DIR)/arm32/*
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
@@ -206,7 +222,7 @@ deploy-arm32: prepare-deploy ui
 	@ls -la $(DEPLOY_DIR)/arm32/
 
 # Linux ARM32 编译 (快捷方式)
-arm32: prepare-deploy ui
+arm32: check-go-version prepare-deploy ui
 	@echo "=== 编译 Linux ARM32 版本 ==="
 	rm -rf $(DEPLOY_DIR)/arm32/*
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "$(COMMON_LDFLAGS) -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)" -o $(DEPLOY_DIR)/arm32/$(PROJECT_NAME) $(MAIN_SRC)
