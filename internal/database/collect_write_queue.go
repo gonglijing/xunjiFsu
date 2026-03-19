@@ -157,7 +157,7 @@ func writeCollectDataBatch(items []collectWriteRequest) error {
 }
 
 func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
-	args := getCollectDataArgs(collectDataCacheBatchSize * 4)
+	args := getCollectDataArgs(collectDataCacheBatchSize * 3)
 	defer putCollectDataArgs(args)
 	batchRows := 0
 
@@ -165,7 +165,7 @@ func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
 		if batchRows == 0 {
 			return nil
 		}
-		stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheBatchSQLCache.get(batchRows))
+		stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheStringBatchSQLCache.get(batchRows))
 		if err != nil {
 			return fmt.Errorf("failed to prepare data cache batch statement: %w", err)
 		}
@@ -204,7 +204,7 @@ func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, h
 	if tx == nil {
 		return fmt.Errorf("nil tx")
 	}
-	cacheStmtCache := newCollectDataStmtCache(tx, collectDataCacheBatchSQLCache.get)
+	cacheStmtCache := newCollectDataStmtCache(tx, collectDataCacheStringBatchSQLCache.get)
 	defer cacheStmtCache.close()
 
 	var historyStmtCache *collectDataStmtCache
@@ -215,7 +215,7 @@ func writeCollectDataBatchItemsWithTx(tx *sql.Tx, items []collectWriteRequest, h
 	}()
 	for _, item := range items {
 		if item.storeHistory && historyStmtCache == nil {
-			historyStmtCache = newCollectDataStmtCache(tx, collectDataHistoryBatchSQLCache.get)
+			historyStmtCache = newCollectDataStmtCache(tx, collectDataHistoryStringBatchSQLCache.get)
 		}
 		written, err := insertCollectDataWithOptionsTx(tx, item.data, item.storeHistory, cacheStmtCache, historyStmtCache)
 		if err != nil {
