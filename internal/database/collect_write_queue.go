@@ -181,7 +181,8 @@ func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
 		if item.storeHistory {
 			return fmt.Errorf("history write present")
 		}
-		rows := countCollectDataCacheRows(item.data)
+		shape := buildCollectDataCacheShape(item.data)
+		rows := shape.rows
 		if rows == 0 {
 			continue
 		}
@@ -193,7 +194,7 @@ func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
 				return err
 			}
 		}
-		args = appendCollectDataCacheArgsForData(args, item.data)
+		args = appendCollectDataCacheArgsForDataWithShape(args, item.data, shape)
 		batchRows += rows
 	}
 	return flush()

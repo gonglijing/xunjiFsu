@@ -43,6 +43,7 @@ var (
 	collectDataHistoryBatchSQLCache = newCollectDataBatchSQLCache(buildCollectDataHistoryBatchSQL)
 	dataPointBatchSQLCache          = newCollectDataBatchSQLCache(buildDataPointBatchSQL)
 	latestDataPointBatchSQLCache    = newCollectDataBatchSQLCache(buildLatestDataPointBatchSQL)
+	dataPointQueryStmtCache         dbStmtCache
 	collectDataArgsPool             = sync.Pool{
 		New: func() any {
 			return make([]any, 0, collectDataCacheBatchSize*5)
@@ -136,7 +137,11 @@ func listDataPointsLimit(db *sql.DB, query string, limit int, args ...any) ([]*D
 
 func queryDataPointsByDevice(db *sql.DB, deviceID int64, limit int, before time.Time) ([]*DataPoint, error) {
 	if before.IsZero() {
-		return listDataPointsLimit(db, selectDataPointFieldsByDeviceLimit, limit, deviceID, limit)
+		stmt, err := dataPointQueryStmtCache.get(db, selectDataPointFieldsByDeviceLimit)
+		if err != nil {
+			return nil, err
+		}
+		return listDataPointsStmtLimit(stmt, limit, deviceID, limit)
 	}
 	query := selectDataPointFields + " WHERE device_id = ?"
 	args := []any{deviceID}
@@ -149,7 +154,11 @@ func queryDataPointsByDevice(db *sql.DB, deviceID int64, limit int, before time.
 
 func queryLatestDataPoints(db *sql.DB, limit int, before time.Time) ([]*DataPoint, error) {
 	if before.IsZero() {
-		return listDataPointsLimit(db, selectDataPointFieldsLatestLimit, limit, limit)
+		stmt, err := dataPointQueryStmtCache.get(db, selectDataPointFieldsLatestLimit)
+		if err != nil {
+			return nil, err
+		}
+		return listDataPointsStmtLimit(stmt, limit, limit)
 	}
 	query := selectDataPointFields
 	args := make([]any, 0, 2)
@@ -190,6 +199,36 @@ func queryDataPointsByDeviceFieldAndTime(db *sql.DB, deviceID int64, fieldName s
 	query += " ORDER BY collected_at DESC LIMIT ?"
 	args = append(args, limit)
 	return listDataPointsLimit(db, query, limit, args...)
+}
+
+func listDataPointsStmtLimit(stmt *sql.Stmt, limit int, args ...any) ([]*DataPoint, error) {
+	if stmt == nil {
+		return nil, fmt.Errorf("stmt is nil")
+	}
+
+	rows, err := stmt.Query(args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if limit < 0 {
+		limit = 0
+	}
+	points := make([]DataPoint, 0, limit)
+	list := make([]*DataPoint, 0, limit)
+	for rows.Next() {
+		points = append(points, DataPoint{})
+		point := &points[len(points)-1]
+		if err := scanDataPoint(rows, point); err != nil {
+			return nil, err
+		}
+		list = append(list, point)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 // DataPointEntry 单个数据点条目
@@ -357,13 +396,55 @@ func normalizedCollectDataValueType(valueType string) string {
 	return valueType
 }
 
-func collectOverriddenPointFieldNames(fields map[string]string, points []models.CollectPoint) map[string]struct{} {
-	if len(fields) == 0 || len(points) == 0 {
+func normalizeCollectPointFieldNames(points []models.CollectPoint) ([]string, int) {
+	if len(points) == 0 {
+		return nil, 0
+	}
+	names := make([]string, len(points))
+	validCount := 0
+	for i, point := range points {
+		name := trimDataPointFieldName(point.FieldName)
+		if name == "" {
+			continue
+		}
+		names[i] = name
+		validCount++
+	}
+	return names, validCount
+}
+
+type collectDataCacheShape struct {
+	normalizedPointFields []string
+	pointFieldNames       map[string]struct{}
+	rows                  int
+}
+
+func buildCollectDataCacheShape(data *models.CollectData) collectDataCacheShape {
+	if data == nil {
+		return collectDataCacheShape{}
+	}
+	normalizedPointFields, validPointCount := normalizeCollectPointFieldNames(data.Points)
+	pointFieldNames := collectOverriddenPointFieldNames(data.Fields, normalizedPointFields)
+	rows := validPointCount
+	for field := range data.Fields {
+		if _, overridden := pointFieldNames[field]; overridden {
+			continue
+		}
+		rows++
+	}
+	return collectDataCacheShape{
+		normalizedPointFields: normalizedPointFields,
+		pointFieldNames:       pointFieldNames,
+		rows:                  rows,
+	}
+}
+
+func collectOverriddenPointFieldNames(fields map[string]string, normalizedPointFields []string) map[string]struct{} {
+	if len(fields) == 0 || len(normalizedPointFields) == 0 {
 		return nil
 	}
 	var names map[string]struct{}
-	for _, point := range points {
-		name := trimDataPointFieldName(point.FieldName)
+	for _, name := range normalizedPointFields {
 		if name == "" {
 			continue
 		}
@@ -371,7 +452,7 @@ func collectOverriddenPointFieldNames(fields map[string]string, points []models.
 			continue
 		}
 		if names == nil {
-			names = make(map[string]struct{}, len(fields))
+			names = make(map[string]struct{}, len(normalizedPointFields))
 		}
 		names[name] = struct{}{}
 	}
@@ -382,46 +463,25 @@ func collectOverriddenPointFieldNames(fields map[string]string, points []models.
 }
 
 func countCollectDataCacheRows(data *models.CollectData) int {
-	if data == nil {
-		return 0
-	}
-	pointFieldNames := collectOverriddenPointFieldNames(data.Fields, data.Points)
-	count := len(data.Points)
-	for field := range data.Fields {
-		if _, overridden := pointFieldNames[field]; overridden {
-			continue
-		}
-		count++
-	}
-	if count == 0 {
-		return 0
-	}
-	if len(data.Fields) == 0 {
-		validPoints := 0
-		for _, point := range data.Points {
-			if trimDataPointFieldName(point.FieldName) == "" {
-				continue
-			}
-			validPoints++
-		}
-		return validPoints
-	}
-	return count
+	return buildCollectDataCacheShape(data).rows
 }
 
 func appendCollectDataCacheArgsForData(dst []any, data *models.CollectData) []any {
+	return appendCollectDataCacheArgsForDataWithShape(dst, data, buildCollectDataCacheShape(data))
+}
+
+func appendCollectDataCacheArgsForDataWithShape(dst []any, data *models.CollectData, shape collectDataCacheShape) []any {
 	if data == nil {
 		return dst
 	}
-	pointFieldNames := collectOverriddenPointFieldNames(data.Fields, data.Points)
 	for field, value := range data.Fields {
-		if _, overridden := pointFieldNames[field]; overridden {
+		if _, overridden := shape.pointFieldNames[field]; overridden {
 			continue
 		}
 		dst = appendCollectDataCacheArg(dst, data.DeviceID, field, value)
 	}
-	for _, point := range data.Points {
-		field := trimDataPointFieldName(point.FieldName)
+	for i, point := range data.Points {
+		field := shape.normalizedPointFields[i]
 		if field == "" {
 			continue
 		}
@@ -1170,7 +1230,11 @@ type latestDeviceFieldRow struct {
 	CollectedAt time.Time
 }
 
-const latestDeviceFieldRowsQuery = `SELECT p.device_id, p.device_name, p.field_name, p.value, p.collected_at
+const latestDeviceFieldRowsFromCacheQuery = `SELECT device_id, '' AS device_name, field_name, value, collected_at
+	FROM data_cache
+	ORDER BY device_id ASC, collected_at DESC`
+
+const latestDeviceFieldRowsFromHistoryQuery = `SELECT p.device_id, p.device_name, p.field_name, p.value, p.collected_at
 	FROM data_points p
 	INNER JOIN (
 		SELECT device_id, field_name, MAX(collected_at) AS max_collected_at
@@ -1184,27 +1248,15 @@ const latestDeviceFieldRowsQuery = `SELECT p.device_id, p.device_name, p.field_n
 
 const latestDeviceFieldsInitialCap = 24
 
-func appendLatestDeviceDataRow(result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64, row latestDeviceFieldRow) []*LatestDeviceData {
-	if row.DeviceID == 0 || row.FieldName == "" {
-		return result
+func appendLatestDeviceFieldRow(item *LatestDeviceData, fieldTimes map[latestDeviceFieldKey]int64, row latestDeviceFieldRow) {
+	if item == nil || row.DeviceID == 0 || row.FieldName == "" {
+		return
 	}
-	idx, exists := deviceIndex[row.DeviceID]
-	if !exists {
-		idx = len(result)
-		deviceIndex[row.DeviceID] = idx
-		result = append(result, &LatestDeviceData{
-			DeviceID:   row.DeviceID,
-			DeviceName: row.DeviceName,
-			Fields:     make(map[string]string, latestDeviceFieldsInitialCap),
-		})
-	}
-
-	item := result[idx]
 	if fieldTimes != nil {
 		key := latestDeviceFieldKey{deviceID: row.DeviceID, fieldName: row.FieldName}
 		collectedAtNS := row.CollectedAt.UnixNano()
 		if existingAtNS, ok := fieldTimes[key]; ok && existingAtNS > collectedAtNS {
-			return result
+			return
 		}
 		fieldTimes[key] = collectedAtNS
 	}
@@ -1215,32 +1267,141 @@ func appendLatestDeviceDataRow(result []*LatestDeviceData, deviceIndex map[int64
 	if row.CollectedAt.After(item.CollectedAt) {
 		item.CollectedAt = row.CollectedAt
 	}
-	return result
 }
 
-func appendLatestDeviceFieldRows(db *sql.DB, result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64) ([]*LatestDeviceData, error) {
+func appendLatestDeviceFieldRows(db *sql.DB, query string, result []*LatestDeviceData, deviceIndex map[int64]int, fieldTimes map[latestDeviceFieldKey]int64) ([]*LatestDeviceData, error) {
 	if db == nil {
 		return nil, fmt.Errorf("db is nil")
 	}
+	if query == "" {
+		return result, nil
+	}
 
-	rows, err := db.Query(latestDeviceFieldRowsQuery)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	if fieldTimes == nil && len(result) == 0 {
+		var currentDeviceID int64
+		var currentItem *LatestDeviceData
+		for rows.Next() {
+			var item latestDeviceFieldRow
+			if err := rows.Scan(&item.DeviceID, &item.DeviceName, &item.FieldName, &item.Value, &item.CollectedAt); err != nil {
+				return nil, err
+			}
+			item.FieldName = trimDataPointFieldName(item.FieldName)
+			if item.DeviceID == 0 || item.FieldName == "" {
+				continue
+			}
+			if currentItem == nil || currentDeviceID != item.DeviceID {
+				currentDeviceID = item.DeviceID
+				currentItem = &LatestDeviceData{
+					DeviceID:   item.DeviceID,
+					DeviceName: item.DeviceName,
+					Fields:     make(map[string]string, latestDeviceFieldsInitialCap),
+				}
+				result = append(result, currentItem)
+			}
+			appendLatestDeviceFieldRow(currentItem, nil, item)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+
+	var currentDeviceID int64
+	var currentItem *LatestDeviceData
 	for rows.Next() {
 		var item latestDeviceFieldRow
 		if err := rows.Scan(&item.DeviceID, &item.DeviceName, &item.FieldName, &item.Value, &item.CollectedAt); err != nil {
 			return nil, err
 		}
 		item.FieldName = trimDataPointFieldName(item.FieldName)
-		result = appendLatestDeviceDataRow(result, deviceIndex, fieldTimes, item)
+		if item.DeviceID == 0 || item.FieldName == "" {
+			continue
+		}
+		if currentItem == nil || currentDeviceID != item.DeviceID {
+			idx, exists := deviceIndex[item.DeviceID]
+			if !exists {
+				idx = len(result)
+				deviceIndex[item.DeviceID] = idx
+				result = append(result, &LatestDeviceData{
+					DeviceID:   item.DeviceID,
+					DeviceName: item.DeviceName,
+					Fields:     make(map[string]string, latestDeviceFieldsInitialCap),
+				})
+			}
+			currentDeviceID = item.DeviceID
+			currentItem = result[idx]
+		}
+		appendLatestDeviceFieldRow(currentItem, fieldTimes, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+func fillLatestDeviceNamesFromParamDB(items []*LatestDeviceData) {
+	if len(items) == 0 || ParamDB == nil {
+		return
+	}
+
+	missingIDs := make([]int64, 0, len(items))
+	itemByID := make(map[int64]*LatestDeviceData, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if item.DeviceID == models.SystemStatsDeviceID {
+			item.DeviceName = models.SystemStatsDeviceName
+			continue
+		}
+		if strings.TrimSpace(item.DeviceName) != "" || item.DeviceID == 0 {
+			continue
+		}
+		if _, exists := itemByID[item.DeviceID]; exists {
+			continue
+		}
+		itemByID[item.DeviceID] = item
+		missingIDs = append(missingIDs, item.DeviceID)
+	}
+	if len(missingIDs) == 0 {
+		return
+	}
+
+	query := strings.Builder{}
+	query.Grow(len(missingIDs)*3 + 48)
+	query.WriteString("SELECT id, name FROM devices WHERE id IN (")
+	args := make([]any, 0, len(missingIDs))
+	for i, id := range missingIDs {
+		if i > 0 {
+			query.WriteByte(',')
+		}
+		query.WriteByte('?')
+		args = append(args, id)
+	}
+	query.WriteByte(')')
+
+	rows, err := ParamDB.Query(query.String(), args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var deviceID int64
+		var deviceName string
+		if err := rows.Scan(&deviceID, &deviceName); err != nil {
+			return
+		}
+		if item := itemByID[deviceID]; item != nil {
+			item.DeviceName = strings.TrimSpace(deviceName)
+		}
+	}
 }
 
 // GetAllDevicesLatestData 获取所有设备的最新数据（每个设备每个字段仅保留最新值）
@@ -1250,28 +1411,40 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 	if dataDBFile != "" {
 		fieldTimes = make(map[latestDeviceFieldKey]int64, 256)
 	}
-	result, err := appendLatestDeviceFieldRows(DataDB, make([]*LatestDeviceData, 0, 64), deviceIndex, fieldTimes)
+	result, err := appendLatestDeviceFieldRows(DataDB, latestDeviceFieldRowsFromCacheQuery, make([]*LatestDeviceData, 0, 64), deviceIndex, fieldTimes)
 	if err != nil {
-		return nil, err
+		result, err = appendLatestDeviceFieldRows(DataDB, latestDeviceFieldRowsFromHistoryQuery, make([]*LatestDeviceData, 0, 64), deviceIndex, fieldTimes)
+		if err != nil {
+			return nil, err
+		}
+	} else if len(result) == 0 {
+		result, err = appendLatestDeviceFieldRows(DataDB, latestDeviceFieldRowsFromHistoryQuery, result, deviceIndex, fieldTimes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if dataDBFile == "" {
+		fillLatestDeviceNamesFromParamDB(result)
 		return result, nil
 	}
 
 	diskDB, err := openDataDiskDB()
 	if err != nil {
+		fillLatestDeviceNamesFromParamDB(result)
 		if !os.IsNotExist(err) {
 			log.Printf("Failed to read latest device fields from disk: %v", err)
 		}
 		return result, nil
 	}
 
-	result, err = appendLatestDeviceFieldRows(diskDB, result, deviceIndex, fieldTimes)
+	result, err = appendLatestDeviceFieldRows(diskDB, latestDeviceFieldRowsFromHistoryQuery, result, deviceIndex, fieldTimes)
 	if err != nil {
 		log.Printf("Failed to query latest device fields from disk: %v", err)
+		fillLatestDeviceNamesFromParamDB(result)
 		return result, nil
 	}
 
+	fillLatestDeviceNamesFromParamDB(result)
 	return result, nil
 }
 
@@ -1307,7 +1480,8 @@ func insertCollectDataWithOptionsTx(tx *sql.Tx, data *models.CollectData, storeH
 	}
 	batchCount := 0
 	historyCount := 0
-	pointFieldNames := collectOverriddenPointFieldNames(data.Fields, data.Points)
+	normalizedPointFields, _ := normalizeCollectPointFieldNames(data.Points)
+	pointFieldNames := collectOverriddenPointFieldNames(data.Fields, normalizedPointFields)
 
 	appendField := func(field, value string) error {
 		cacheArgs = appendCollectDataCacheArg(cacheArgs, data.DeviceID, field, value)
@@ -1338,8 +1512,8 @@ func insertCollectDataWithOptionsTx(tx *sql.Tx, data *models.CollectData, storeH
 			return 0, err
 		}
 	}
-	for _, point := range data.Points {
-		field := trimDataPointFieldName(point.FieldName)
+	for i, point := range data.Points {
+		field := normalizedPointFields[i]
 		if field == "" {
 			continue
 		}

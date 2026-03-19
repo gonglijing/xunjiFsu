@@ -173,6 +173,56 @@ func TestGetAllDevicesLatestData_FallbackWhenDiskMissing(t *testing.T) {
 	}
 }
 
+func TestGetAllDevicesLatestData_UsesCacheAndFillsDeviceNameFromParamDB(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	oldParamDB := ParamDB
+	t.Cleanup(func() {
+		if ParamDB != nil {
+			_ = ParamDB.Close()
+		}
+		ParamDB = oldParamDB
+	})
+
+	var err error
+	ParamDB, err = openSQLite(":memory:", 1, 1)
+	if err != nil {
+		t.Fatalf("open param db: %v", err)
+	}
+
+	_, err = ParamDB.Exec(`CREATE TABLE devices (
+		id INTEGER PRIMARY KEY,
+		name TEXT NOT NULL
+	)`)
+	if err != nil {
+		t.Fatalf("create devices table: %v", err)
+	}
+	_, err = ParamDB.Exec(`INSERT INTO devices (id, name) VALUES (9, 'dev-9')`)
+	if err != nil {
+		t.Fatalf("insert device row: %v", err)
+	}
+
+	_, err = DataDB.Exec(`INSERT INTO data_cache (device_id, field_name, value, value_type, collected_at)
+		VALUES (9, 'humidity', '77', 'string', datetime('now'))`)
+	if err != nil {
+		t.Fatalf("insert cache row: %v", err)
+	}
+
+	items, err := GetAllDevicesLatestData()
+	if err != nil {
+		t.Fatalf("GetAllDevicesLatestData: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 device, got %d", len(items))
+	}
+	if items[0].DeviceName != "dev-9" {
+		t.Fatalf("device name = %q, want %q", items[0].DeviceName, "dev-9")
+	}
+	if got := items[0].Fields["humidity"]; got != "77" {
+		t.Fatalf("expected humidity=77, got %q", got)
+	}
+}
+
 func TestGetLatestDataPoints_MemoryLimitSkipsDisk(t *testing.T) {
 	prepareDataPointsTestDB(t)
 
