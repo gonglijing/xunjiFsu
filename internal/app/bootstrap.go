@@ -11,7 +11,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/graceful"
-	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
@@ -51,7 +51,7 @@ func Run(cfg *config.Config) error {
 	collect := collector.NewCollectorWithIntervals(driverExecutor, northboundMgr, cfg.CollectorDeviceSyncInterval, cfg.CollectorCommandPollInterval)
 	applyRuntimeTuning(cfg, collect, driverExecutor, northboundMgr)
 	authManager := auth.NewJWTManager(secretKey)
-	pageHandler := handlers.NewHandler(authManager)
+	pageHandler := httpapi.NewAuthHandler(authManager)
 	apiDeps := newAPIRouteDeps(cfg, collect, driverExecutor, driverManager, northboundMgr, authManager)
 
 	router := buildRouter(pageHandler, apiDeps, authManager)

@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"net"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
-	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/service"
 )
@@ -58,7 +57,7 @@ func TestUpdateResourceRefreshesDriverExecutorCache(t *testing.T) {
 
 	executor.RegisterTCP(resourceID, c1)
 	executor.SetResourcePath(resourceID, "127.0.0.1:502")
-	api := httpapi.NewResourceAPI(service.NewResourceService(executor))
+	api := NewResourceAPI(service.NewResourceService(executor))
 
 	req := httptest.NewRequest(http.MethodPut, "/resources/"+strconv.FormatInt(resourceID, 10), strings.NewReader(`{"name":"r1","type":"net","path":"127.0.0.1:503","enabled":1}`))
 	req.Header.Set("Content-Type", "application/json")

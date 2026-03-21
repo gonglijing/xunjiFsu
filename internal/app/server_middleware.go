@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/config"
-	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
@@ -18,15 +18,15 @@ const (
 func buildHandlerChain(cfg *config.Config, router *http.ServeMux) http.Handler {
 	allowedOrigins := cfg.GetAllowedOrigins()
 	loggingHandler := requestLoggingMiddleware(router)
-	gzipHandler := handlers.GzipMiddleware(loggingHandler)
+	gzipHandler := httpapi.GzipMiddleware(loggingHandler)
 	corsHandler := corsMiddleware(allowedOrigins)(gzipHandler)
 
-	timeoutConfig := handlers.DefaultTimeoutConfig()
+	timeoutConfig := httpapi.DefaultTimeoutConfig()
 	timeoutConfig.ReadTimeout = cfg.HTTPReadTimeout
 	timeoutConfig.WriteTimeout = cfg.HTTPWriteTimeout
 	timeoutConfig.IdleTimeout = cfg.HTTPIdleTimeout
 
-	return handlers.TimeoutMiddleware(timeoutConfig)(corsHandler)
+	return httpapi.TimeoutMiddleware(timeoutConfig)(corsHandler)
 }
 
 func requestLoggingMiddleware(next http.Handler) http.Handler {

@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"net/http"
@@ -7,10 +7,10 @@ import (
 
 // TimeoutConfig 超时配置
 type TimeoutConfig struct {
-	ReadTimeout     time.Duration // 读取超时
-	WriteTimeout    time.Duration // 写入超时
-	IdleTimeout     time.Duration // 空闲超时
-	ShutdownTimeout time.Duration // 关闭超时
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
 }
 
 // DefaultTimeoutConfig 默认超时配置

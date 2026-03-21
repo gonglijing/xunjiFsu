@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"net/http"
@@ -7,9 +7,9 @@ import (
 )
 
 func TestBuildHealthStatus_UsesRuntimeSnapshot(t *testing.T) {
-	originalStartTime := startTime
-	startTime = time.Date(2026, 3, 18, 11, 59, 30, 0, time.UTC)
-	defer func() { startTime = originalStartTime }()
+	originalStartTime := appStartTime
+	appStartTime = time.Date(2026, 3, 18, 11, 59, 30, 0, time.UTC)
+	defer func() { appStartTime = originalStartTime }()
 
 	now := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
 	status := buildHealthStatus(now)
@@ -35,7 +35,6 @@ func TestResolveOverallHealthStatus_PreservesExistingStatus(t *testing.T) {
 	checks := map[string]Check{
 		"database": {Status: "fail", Message: "db down"},
 	}
-
 	if got := resolveOverallHealthStatus(checks, "degraded"); got != "degraded" {
 		t.Fatalf("resolveOverallHealthStatus() = %q, want degraded", got)
 	}
@@ -46,7 +45,6 @@ func TestResolveOverallHealthStatus_DetectsCheckFailures(t *testing.T) {
 		"database":    {Status: "pass", Message: "Connected"},
 		"data_points": {Status: "fail", Message: "query failed"},
 	}
-
 	if got := resolveOverallHealthStatus(checks, ""); got != "degraded" {
 		t.Fatalf("resolveOverallHealthStatus() = %q, want degraded", got)
 	}
@@ -57,7 +55,6 @@ func TestResolveOverallHealthStatus_DefaultsHealthy(t *testing.T) {
 		"database":    {Status: "pass", Message: "Connected"},
 		"data_points": {Status: "pass", Message: "10"},
 	}
-
 	if got := resolveOverallHealthStatus(checks, ""); got != "healthy" {
 		t.Fatalf("resolveOverallHealthStatus() = %q, want healthy", got)
 	}

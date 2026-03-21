@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
-func TestSanitizeUser(t *testing.T) {
+func TestSanitizeUser_ClearsPassword(t *testing.T) {
 	user := &models.User{
 		ID:       1,
 		Username: "demo",
@@ -17,14 +17,14 @@ func TestSanitizeUser(t *testing.T) {
 	got := service.SanitizeUser(user)
 
 	if got != user {
-		t.Fatal("sanitizeUser should return the same pointer")
+		t.Fatal("SanitizeUser should return the same pointer")
 	}
 	if got.Password != "" {
 		t.Fatalf("got.Password = %q, want empty", got.Password)
 	}
 }
 
-func TestSanitizeUsers(t *testing.T) {
+func TestSanitizeUsers_ClearsAllPasswords(t *testing.T) {
 	users := []*models.User{
 		{Username: "a", Password: "x"},
 		nil,

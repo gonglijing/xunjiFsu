@@ -30,6 +30,23 @@ var formDefaultValues = map[string]any{
 	"stop_bits":      1,
 }
 
+func parseIDOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := ParseID(r)
+	if err != nil {
+		WriteBadRequestDef(w, apiErrInvalidID)
+		return 0, false
+	}
+	return id, true
+}
+
+func parseRequestOrWriteBadRequestDefault(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := ParseRequest(r, dst); err != nil {
+		WriteBadRequestDef(w, apiErrInvalidRequestBody)
+		return false
+	}
+	return true
+}
+
 func ParseRequest(r *http.Request, dst any) error {
 	if isJSONRequest(r.Header.Get("Content-Type")) {
 		return json.NewDecoder(r.Body).Decode(dst)

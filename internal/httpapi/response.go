@@ -2,8 +2,16 @@ package httpapi
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+
+	"github.com/gonglijing/xunjiFsu/internal/logger"
+)
+
+const (
+	defaultBadRequestCode  = "E_BAD_REQUEST"
+	defaultUnauthorizedCode = "E_UNAUTHORIZED"
+	defaultNotFoundCode    = "E_NOT_FOUND"
+	defaultServerErrorCode = "E_SERVER_ERROR"
 )
 
 type APIErrorDef struct {
@@ -37,8 +45,12 @@ func WriteDeleted(w http.ResponseWriter) {
 	WriteSuccess(w, nil)
 }
 
+func WriteUnauthorized(w http.ResponseWriter, message string) {
+	WriteErrorCode(w, http.StatusUnauthorized, defaultUnauthorizedCode, message)
+}
+
 func WriteBadRequest(w http.ResponseWriter, message string) {
-	WriteErrorCode(w, http.StatusBadRequest, "E_BAD_REQUEST", message)
+	WriteErrorCode(w, http.StatusBadRequest, defaultBadRequestCode, message)
 }
 
 func WriteBadRequestCode(w http.ResponseWriter, code, message string) {
@@ -54,7 +66,7 @@ func WriteNotFoundDef(w http.ResponseWriter, def APIErrorDef) {
 }
 
 func WriteNotFound(w http.ResponseWriter, message string) {
-	WriteErrorCode(w, http.StatusNotFound, "E_NOT_FOUND", message)
+	WriteErrorCode(w, http.StatusNotFound, defaultNotFoundCode, message)
 }
 
 func WriteServerErrorDef(w http.ResponseWriter, def APIErrorDef) {
@@ -79,11 +91,11 @@ func writeSuccessStatus(w http.ResponseWriter, status int, data any) {
 
 func writeServerErrorWithLog(w http.ResponseWriter, def APIErrorDef, err error) {
 	if err != nil {
-		if def.Code != "" {
-			log.Printf("%s: %v", def.Code, err)
-		} else {
-			log.Printf("%s: %v", def.Message, err)
+		code := def.Code
+		if code == "" {
+			code = def.Message
 		}
+		logger.Error(code, err)
 	}
 	WriteServerErrorDef(w, def)
 }

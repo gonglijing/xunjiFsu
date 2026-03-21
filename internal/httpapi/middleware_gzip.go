@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"compress/gzip"
@@ -35,19 +35,16 @@ func GzipMiddleware(next http.Handler) http.Handler {
 			gzipWriterPool.Put(gz)
 		}()
 
-		// 包装ResponseWriter
 		gzw := &gzipResponseWriter{
 			ResponseWriter: w,
 			Writer:         gz,
 		}
-		// 设置响应头
 		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", appendVaryToken(w.Header().Get("Vary"), "Accept-Encoding"))
+		w.Header().Set("Vary", appendVaryGzipToken(w.Header().Get("Vary"), "Accept-Encoding"))
 		next.ServeHTTP(gzw, r)
 	})
 }
 
-// gzipResponseWriter gzip响应写入器
 type gzipResponseWriter struct {
 	http.ResponseWriter
 	Writer *gzip.Writer
@@ -93,7 +90,7 @@ func headerContainsToken(value string, token string) bool {
 	return false
 }
 
-func appendVaryToken(existing string, token string) string {
+func appendVaryGzipToken(existing string, token string) string {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return existing

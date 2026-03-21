@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"compress/gzip"
@@ -85,8 +85,8 @@ func TestHasUpgradeConnection(t *testing.T) {
 	}
 }
 
-func TestAppendVaryToken_NoDuplicate(t *testing.T) {
-	got := appendVaryToken("Accept-Encoding", "accept-encoding")
+func TestAppendVaryGzipToken_NoDuplicate(t *testing.T) {
+	got := appendVaryGzipToken("Accept-Encoding", "accept-encoding")
 	if got != "Accept-Encoding" {
 		t.Fatalf("vary=%q, want=%q", got, "Accept-Encoding")
 	}

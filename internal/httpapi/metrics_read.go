@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"encoding/json"
@@ -50,27 +50,25 @@ type CollectorMetrics struct {
 	TaskCount   int  `json:"task_count"`
 }
 
-// startTime 程序启动时间
 var metricsStartTime = time.Now()
 
 // Metrics 指标接口
 func Metrics(w http.ResponseWriter, r *http.Request) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
+
 	systemTotal, systemUsed, _ := readSystemMemoryMB()
 	systemUsage := 0.0
 	if systemTotal > 0 {
 		systemUsage = (systemUsed / systemTotal) * 100
 	}
-	gcPauseMS := readLastGCPauseMS(&m)
 
-	// 获取数据库指标
 	paramStats := database.ParamDB.Stats()
 	dataStats := database.DataDB.Stats()
 
 	var dataPointsCount, cacheCount int
-	database.DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&dataPointsCount)
-	database.DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&cacheCount)
+	_ = database.DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&dataPointsCount)
+	_ = database.DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&cacheCount)
 
 	metrics := SystemMetrics{
 		Timestamp: time.Now(),
@@ -86,7 +84,7 @@ func Metrics(w http.ResponseWriter, r *http.Request) {
 			SystemMemoryUsed:  systemUsed,
 			SystemMemoryUsage: systemUsage,
 			NumGC:             m.NumGC,
-			GCPause:           gcPauseMS,
+			GCPause:           readLastGCPauseMS(&m),
 		},
 		Database: DatabaseMetrics{
 			ParamDBConns:     paramStats.OpenConnections,
@@ -97,19 +95,18 @@ func Metrics(w http.ResponseWriter, r *http.Request) {
 			CacheCount:       cacheCount,
 		},
 		Collector: CollectorMetrics{
-			Running: false, // 需要从外部设置
+			Running: false,
 		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(metrics)
+	_ = json.NewEncoder(w).Encode(metrics)
 }
 
 func readLastGCPauseMS(memStats *runtime.MemStats) float64 {
 	if memStats == nil || memStats.NumGC == 0 {
 		return 0
 	}
-
 	lastPauseIndex := (memStats.NumGC - 1) % uint32(len(memStats.PauseNs))
 	return float64(memStats.PauseNs[lastPauseIndex]) / float64(time.Millisecond)
 }

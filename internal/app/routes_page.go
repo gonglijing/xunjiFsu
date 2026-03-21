@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
-	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 )
 
 var spaBlockedPrefixes = []string{
@@ -23,7 +23,7 @@ var spaBlockedPaths = map[string]struct{}{
 	"/logout":  {},
 }
 
-func registerPageRoutes(r *http.ServeMux, h *handlers.Handler, authManager *auth.JWTManager) {
+func registerPageRoutes(r *http.ServeMux, h *httpapi.AuthHandler, authManager *auth.JWTManager) {
 	r.HandleFunc("GET /login", h.Login)
 	r.HandleFunc("POST /login", h.LoginPost)
 	r.HandleFunc("GET /logout", h.Logout)

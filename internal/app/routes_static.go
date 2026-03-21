@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
-	"github.com/gonglijing/xunjiFsu/internal/handlers"
+	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
-func buildRouter(h *handlers.Handler, apiDeps *apiRouteDeps, authManager *auth.JWTManager) *http.ServeMux {
+func buildRouter(h *httpapi.AuthHandler, apiDeps *apiRouteDeps, authManager *auth.JWTManager) *http.ServeMux {
 	r := http.NewServeMux()
 
 	staticDir := resolveStaticDir()

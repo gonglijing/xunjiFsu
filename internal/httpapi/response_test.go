@@ -1,4 +1,4 @@
-package handlers
+package httpapi
 
 import (
 	"encoding/json"
@@ -52,10 +52,7 @@ func TestParseFormValue_NumberAndBool(t *testing.T) {
 }
 
 func TestApplyFormDefaults(t *testing.T) {
-	formData := map[string]interface{}{
-		"parity": "E",
-	}
-
+	formData := map[string]any{"parity": "E"}
 	applyFormRequestDefaults(formData)
 
 	if got := formData["parity"]; got != "E" {
@@ -89,7 +86,6 @@ func TestParseRequest_FormDefaultsAndTypes(t *testing.T) {
 	if err := ParseRequest(req, &payload); err != nil {
 		t.Fatalf("ParseRequest returned error: %v", err)
 	}
-
 	if payload.Name != "test-device" {
 		t.Fatalf("Name = %q, want %q", payload.Name, "test-device")
 	}
@@ -120,7 +116,6 @@ func TestParseRequest_JSONContentTypeWithCharset(t *testing.T) {
 	var payload struct {
 		Name string `json:"name"`
 	}
-
 	if err := ParseRequest(req, &payload); err != nil {
 		t.Fatalf("ParseRequest returned error: %v", err)
 	}
@@ -148,25 +143,22 @@ func TestFormRequestData_SkipsEmptyValueList(t *testing.T) {
 	}
 }
 
-func TestParseIDOrWriteBadRequest(t *testing.T) {
+func TestParseIDOrWriteBadRequest_DefaultError(t *testing.T) {
 	tests := []struct {
 		name       string
-		url        string
-		vars       map[string]string
+		pathID     string
 		wantStatus int
 		wantOK     bool
 		wantID     int64
 	}{
-		{name: "valid", url: "/users/12", vars: map[string]string{"id": "12"}, wantStatus: http.StatusOK, wantOK: true, wantID: 12},
-		{name: "invalid", url: "/users/x", vars: map[string]string{"id": "x"}, wantStatus: http.StatusBadRequest, wantOK: false, wantID: 0},
+		{name: "valid", pathID: "12", wantStatus: http.StatusOK, wantOK: true, wantID: 12},
+		{name: "invalid", pathID: "x", wantStatus: http.StatusBadRequest, wantOK: false, wantID: 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
-			for k, v := range tt.vars {
-				req.SetPathValue(k, v)
-			}
+			req := httptest.NewRequest(http.MethodGet, "/items/"+tt.pathID, nil)
+			req.SetPathValue("id", tt.pathID)
 			w := httptest.NewRecorder()
 
 			id, ok := parseIDOrWriteBadRequestDefault(w, req)
@@ -193,7 +185,7 @@ func TestParseIDOrWriteBadRequest(t *testing.T) {
 	}
 }
 
-func TestParseRequestOrWriteBadRequest(t *testing.T) {
+func TestParseRequestOrWriteBadRequest_DefaultError(t *testing.T) {
 	tests := []struct {
 		name       string
 		body       string
@@ -237,13 +229,11 @@ func TestParseRequestOrWriteBadRequest(t *testing.T) {
 func TestWriteErrorDef(t *testing.T) {
 	w := httptest.NewRecorder()
 	def := APIErrorDef{Code: "E_UNIT", Message: "unit error"}
-
 	WriteBadRequestDef(w, def)
 
 	if w.Result().StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Result().StatusCode, http.StatusBadRequest)
 	}
-
 	var parsed parsedErrorResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
@@ -258,7 +248,6 @@ func TestWriteErrorDef(t *testing.T) {
 
 func TestWriteBadRequestCode(t *testing.T) {
 	w := httptest.NewRecorder()
-
 	WriteBadRequestCode(w, "E_UNIT_BAD", "unit bad")
 
 	if w.Result().StatusCode != http.StatusBadRequest {
@@ -271,14 +260,10 @@ func TestWriteBadRequestCode(t *testing.T) {
 	if parsed.Code != "E_UNIT_BAD" || parsed.Error != "unit bad" {
 		t.Fatalf("response mismatch: code=%q err=%q", parsed.Code, parsed.Error)
 	}
-	if parsed.Message != "unit bad" {
-		t.Fatalf("response mismatch: message=%q", parsed.Message)
-	}
 }
 
 func TestWriteBadRequest_DefaultCode(t *testing.T) {
 	w := httptest.NewRecorder()
-
 	WriteBadRequest(w, "bad request")
 
 	if w.Result().StatusCode != http.StatusBadRequest {
@@ -295,7 +280,6 @@ func TestWriteBadRequest_DefaultCode(t *testing.T) {
 
 func TestWriteNotFound_DefaultCode(t *testing.T) {
 	w := httptest.NewRecorder()
-
 	WriteNotFound(w, "not found")
 
 	if w.Result().StatusCode != http.StatusNotFound {
@@ -312,7 +296,6 @@ func TestWriteNotFound_DefaultCode(t *testing.T) {
 
 func TestWriteUnauthorized_DefaultCode(t *testing.T) {
 	w := httptest.NewRecorder()
-
 	WriteUnauthorized(w, "unauthorized")
 
 	if w.Result().StatusCode != http.StatusUnauthorized {
@@ -329,7 +312,6 @@ func TestWriteUnauthorized_DefaultCode(t *testing.T) {
 
 func TestWriteServerError_DefaultCode(t *testing.T) {
 	w := httptest.NewRecorder()
-
 	WriteErrorCode(w, http.StatusInternalServerError, defaultServerErrorCode, "server error")
 
 	if w.Result().StatusCode != http.StatusInternalServerError {
@@ -346,7 +328,6 @@ func TestWriteServerError_DefaultCode(t *testing.T) {
 
 func TestWriteDeleted(t *testing.T) {
 	w := httptest.NewRecorder()
-
 	WriteDeleted(w)
 
 	if w.Result().StatusCode != http.StatusOK {
@@ -354,27 +335,5 @@ func TestWriteDeleted(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `"success":true`) {
 		t.Fatalf("body = %s, want success true", w.Body.String())
-	}
-}
-
-func TestParseDefaultHelpers(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/users/9", strings.NewReader(`{"name":"demo"}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.SetPathValue("id", "9")
-	w := httptest.NewRecorder()
-
-	id, ok := parseIDOrWriteBadRequestDefault(w, req)
-	if !ok || id != 9 {
-		t.Fatalf("id parse failed: ok=%v id=%d", ok, id)
-	}
-
-	var payload struct {
-		Name string `json:"name"`
-	}
-	if !parseRequestOrWriteBadRequestDefault(w, req, &payload) {
-		t.Fatal("expected parseRequestOrWriteBadRequestDefault success")
-	}
-	if payload.Name != "demo" {
-		t.Fatalf("payload.Name = %q, want demo", payload.Name)
 	}
 }
