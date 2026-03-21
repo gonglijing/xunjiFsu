@@ -1,10 +1,6 @@
 package handlers
 
-import (
-	"net/http"
-
-	"github.com/gonglijing/xunjiFsu/internal/auth"
-)
+import "net/http"
 
 // ==================== 认证相关 ====================
 
@@ -42,30 +38,4 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.authManager.Logout(w, r)
 	http.Redirect(w, r, "/login", http.StatusFound)
-}
-
-// ChangePassword 修改密码
-func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		OldPassword string `json:"old_password"`
-		NewPassword string `json:"new_password"`
-	}
-
-	if err := ParseRequest(r, &req); err != nil {
-		WriteBadRequestDef(w, apiErrInvalidRequestBody)
-		return
-	}
-
-	session, _ := h.authManager.GetSession(r)
-	if session == nil {
-		WriteUnauthorized(w, "not authenticated")
-		return
-	}
-
-	if err := auth.ChangePassword(session.UserID, req.OldPassword, req.NewPassword); err != nil {
-		WriteBadRequestCode(w, "E_CHANGE_PASSWORD_FAILED", err.Error())
-		return
-	}
-
-	WriteDeleted(w)
 }

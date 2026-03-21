@@ -91,14 +91,15 @@ func BatchSaveDataCacheEntries(entries []DataPointEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
+	defaultValueType := allEntriesUseDefaultCollectDataValueType(entries)
 	if len(entries) <= collectDataCacheBatchSize {
-		if err := batchSaveDataCacheEntriesDirect(entries); err != nil {
+		if err := batchSaveDataCacheEntriesDirect(entries, defaultValueType); err != nil {
 			return err
 		}
 		maybeEnforceDataCacheLimit()
 		return nil
 	}
-	if err := batchSaveDataCacheEntriesChunkedDirect(entries); err != nil {
+	if err := batchSaveDataCacheEntriesChunkedDirect(entries, defaultValueType); err != nil {
 		return err
 	}
 
@@ -106,15 +107,27 @@ func BatchSaveDataCacheEntries(entries []DataPointEntry) error {
 	return nil
 }
 
-func batchSaveDataCacheEntriesDirect(entries []DataPointEntry) error {
-	args := getCollectDataArgs(len(entries) * 4)
+func batchSaveDataCacheEntriesDirect(entries []DataPointEntry, defaultValueType bool) error {
+	argsPerEntry := 4
+	if defaultValueType {
+		argsPerEntry = 3
+	}
+	args := getCollectDataArgs(len(entries) * argsPerEntry)
 	defer putCollectDataArgs(args)
 
 	for _, entry := range entries {
-		args = appendDataCacheEntryArg(args, entry)
+		if defaultValueType {
+			args = appendDataCacheEntryStringArg(args, entry)
+		} else {
+			args = appendDataCacheEntryArg(args, entry)
+		}
 	}
 
-	stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheBatchSQLCache.get(len(entries)))
+	sqlCache := collectDataCacheBatchSQLCache
+	if defaultValueType {
+		sqlCache = collectDataCacheStringBatchSQLCache
+	}
+	stmt, err := dataCacheExecStmtCache.get(DataDB, sqlCache.get(len(entries)))
 	if err != nil {
 		return err
 	}
@@ -122,8 +135,12 @@ func batchSaveDataCacheEntriesDirect(entries []DataPointEntry) error {
 	return err
 }
 
-func batchSaveDataCacheEntriesChunkedDirect(entries []DataPointEntry) error {
-	args := getCollectDataArgs(collectDataCacheBatchSize * 4)
+func batchSaveDataCacheEntriesChunkedDirect(entries []DataPointEntry, defaultValueType bool) error {
+	argsPerEntry := 4
+	if defaultValueType {
+		argsPerEntry = 3
+	}
+	args := getCollectDataArgs(collectDataCacheBatchSize * argsPerEntry)
 	defer putCollectDataArgs(args)
 
 	batchCount := 0
@@ -131,7 +148,11 @@ func batchSaveDataCacheEntriesChunkedDirect(entries []DataPointEntry) error {
 		if batchCount == 0 {
 			return nil
 		}
-		stmt, err := dataCacheExecStmtCache.get(DataDB, collectDataCacheBatchSQLCache.get(batchCount))
+		sqlCache := collectDataCacheBatchSQLCache
+		if defaultValueType {
+			sqlCache = collectDataCacheStringBatchSQLCache
+		}
+		stmt, err := dataCacheExecStmtCache.get(DataDB, sqlCache.get(batchCount))
 		if err != nil {
 			return err
 		}
@@ -144,7 +165,11 @@ func batchSaveDataCacheEntriesChunkedDirect(entries []DataPointEntry) error {
 	}
 
 	for _, entry := range entries {
-		args = appendDataCacheEntryArg(args, entry)
+		if defaultValueType {
+			args = appendDataCacheEntryStringArg(args, entry)
+		} else {
+			args = appendDataCacheEntryArg(args, entry)
+		}
 		batchCount++
 		if batchCount < collectDataCacheBatchSize {
 			continue

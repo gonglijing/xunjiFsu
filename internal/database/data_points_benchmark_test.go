@@ -292,6 +292,37 @@ func BenchmarkBatchSaveDataPoints_32Fields(b *testing.B) {
 	}
 }
 
+func BenchmarkBatchSaveDataPoints_1000Fields(b *testing.B) {
+	prepareDataPointsBenchmarkDB(b)
+
+	oldSyncBatchTrigger := syncBatchTrigger
+	oldMaxDataPointsLimit := maxDataPointsLimit
+	oldMaxDataCacheLimit := maxDataCacheLimit
+	b.Cleanup(func() {
+		syncBatchTrigger = oldSyncBatchTrigger
+		maxDataPointsLimit = oldMaxDataPointsLimit
+		maxDataCacheLimit = oldMaxDataCacheLimit
+	})
+
+	syncBatchTrigger = int(^uint(0) >> 1)
+	maxDataPointsLimit = int(^uint(0) >> 1)
+	maxDataCacheLimit = int(^uint(0) >> 1)
+
+	entries := makeBenchmarkDataPointEntries(1000)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		deviceID := int64(i + 1)
+		for j := range entries {
+			entries[j].DeviceID = deviceID
+		}
+		if err := BatchSaveDataPoints(entries); err != nil {
+			b.Fatalf("BatchSaveDataPoints error: %v", err)
+		}
+	}
+}
+
 func BenchmarkBatchSaveLatestDataPoints_32Fields(b *testing.B) {
 	prepareDataPointsBenchmarkDB(b)
 

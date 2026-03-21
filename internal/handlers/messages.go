@@ -68,6 +68,7 @@ var (
 	apiErrUpdateUserFailed                = newAPIError("E_UPDATE_USER_FAILED", "更新用户失败")
 	apiErrDeleteUserFailed                = newAPIError("E_DELETE_USER_FAILED", "删除用户失败")
 	apiErrGetGatewayConfigFailed          = newAPIError("E_GET_GATEWAY_CONFIG_FAILED", "获取网关配置失败")
+	apiErrGetStatusFailed                 = newAPIError("E_GET_STATUS_FAILED", "获取系统状态失败")
 	apiErrUpdateGatewayConfigFailed       = newAPIError("E_UPDATE_GATEWAY_CONFIG_FAILED", "更新网关配置失败")
 	apiErrUpdateRuntimeConfigFailed       = newAPIError("E_UPDATE_RUNTIME_CONFIG_FAILED", "更新运行时参数失败")
 	apiErrListRuntimeConfigAuditsFailed   = newAPIError("E_LIST_RUNTIME_CONFIG_AUDITS_FAILED", "查询运行时参数审计日志失败")

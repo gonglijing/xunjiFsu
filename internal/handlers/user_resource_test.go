@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
 func TestSanitizeUser(t *testing.T) {
@@ -13,7 +14,7 @@ func TestSanitizeUser(t *testing.T) {
 		Password: "secret",
 	}
 
-	got := sanitizeUser(user)
+	got := service.SanitizeUser(user)
 
 	if got != user {
 		t.Fatal("sanitizeUser should return the same pointer")
@@ -30,21 +31,12 @@ func TestSanitizeUsers(t *testing.T) {
 		{Username: "b", Password: "y"},
 	}
 
-	got := sanitizeUsers(users)
+	got := service.SanitizeUsers(users)
 
 	if len(got) != 3 {
 		t.Fatalf("len(got) = %d, want 3", len(got))
 	}
 	if got[0].Password != "" || got[2].Password != "" {
 		t.Fatalf("passwords were not cleared: %#v", got)
-	}
-}
-
-func TestNextResourceEnabledState(t *testing.T) {
-	if nextResourceEnabledState(0) != 1 {
-		t.Fatal("nextResourceEnabledState(0) should return 1")
-	}
-	if nextResourceEnabledState(1) != 0 {
-		t.Fatal("nextResourceEnabledState(1) should return 0")
 	}
 }

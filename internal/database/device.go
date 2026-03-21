@@ -151,19 +151,34 @@ func CreateDevice(device *models.Device) (int64, error) {
 	return result.LastInsertId()
 }
 
+// LoadDevice 根据ID获取设备
+func LoadDevice(id int64) (*models.Device, error) {
+	return loadDevice(selectDeviceFields+" WHERE id = ?", id)
+}
+
+// LoadDeviceByIdentity 按 product_key/device_key 获取设备
+func LoadDeviceByIdentity(productKey, deviceKey string) (*models.Device, error) {
+	return loadDevice(selectDeviceFields+" WHERE product_key = ? AND device_key = ? LIMIT 1", productKey, deviceKey)
+}
+
+// ListDevices 获取所有设备
+func ListDevices() ([]*models.Device, error) {
+	return listDevices(selectDeviceFields+" ORDER BY id", nil)
+}
+
 // GetDeviceByID 根据ID获取设备
 func GetDeviceByID(id int64) (*models.Device, error) {
-	return loadDevice(selectDeviceFields+" WHERE id = ?", id)
+	return LoadDevice(id)
 }
 
 // GetDeviceByIdentity 按 product_key/device_key 获取设备
 func GetDeviceByIdentity(productKey, deviceKey string) (*models.Device, error) {
-	return loadDevice(selectDeviceFields+" WHERE product_key = ? AND device_key = ? LIMIT 1", productKey, deviceKey)
+	return LoadDeviceByIdentity(productKey, deviceKey)
 }
 
 // GetAllDevices 获取所有设备
 func GetAllDevices() ([]*models.Device, error) {
-	return listDevices(selectDeviceFields+" ORDER BY id", nil)
+	return ListDevices()
 }
 
 type deviceScanner interface {

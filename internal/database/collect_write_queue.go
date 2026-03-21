@@ -184,17 +184,21 @@ func writeCollectDataCacheOnlyBatchDirect(items []collectWriteRequest) error {
 		shape := buildCollectDataCacheShape(item.data)
 		rows := shape.rows
 		if rows == 0 {
+			shape.release()
 			continue
 		}
 		if rows > collectDataCacheBatchSize {
+			shape.release()
 			return fmt.Errorf("cache item too large")
 		}
 		if batchRows > 0 && batchRows+rows > collectDataCacheBatchSize {
 			if err := flush(); err != nil {
+				shape.release()
 				return err
 			}
 		}
 		args = appendCollectDataCacheArgsForDataWithShape(args, item.data, shape)
+		shape.release()
 		batchRows += rows
 	}
 	return flush()

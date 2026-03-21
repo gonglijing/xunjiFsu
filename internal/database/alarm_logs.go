@@ -31,6 +31,16 @@ func GetRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
 	return listAlarmLogs(selectAlarmLogFields+" ORDER BY triggered_at DESC LIMIT ?", []any{limit})
 }
 
+// GetAlarmLogByID 根据ID获取报警日志
+func GetAlarmLogByID(id int64) (*models.AlarmLog, error) {
+	row := ParamDB.QueryRow(selectAlarmLogFields+" WHERE id = ?", id)
+	log := &models.AlarmLog{}
+	if err := scanAlarmLog(row, log); err != nil {
+		return nil, err
+	}
+	return log, nil
+}
+
 // AcknowledgeAlarmLog 确认报警日志
 func AcknowledgeAlarmLog(id int64, acknowledgedBy string) error {
 	now := time.Now()

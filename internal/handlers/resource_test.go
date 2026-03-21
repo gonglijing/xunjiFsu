@@ -11,7 +11,9 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
+	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 	"github.com/gonglijing/xunjiFsu/internal/models"
+	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
 func TestUpdateResourceRefreshesDriverExecutorCache(t *testing.T) {
@@ -56,14 +58,14 @@ func TestUpdateResourceRefreshesDriverExecutorCache(t *testing.T) {
 
 	executor.RegisterTCP(resourceID, c1)
 	executor.SetResourcePath(resourceID, "127.0.0.1:502")
-	h := &Handler{driverExecutor: executor}
+	api := httpapi.NewResourceAPI(service.NewResourceService(executor))
 
 	req := httptest.NewRequest(http.MethodPut, "/resources/"+strconv.FormatInt(resourceID, 10), strings.NewReader(`{"name":"r1","type":"net","path":"127.0.0.1:503","enabled":1}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", strconv.FormatInt(resourceID, 10))
 	w := httptest.NewRecorder()
 
-	h.UpdateResource(w, req)
+	api.UpdateResource(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)

@@ -1,0 +1,141 @@
+package httpapi
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type historyDataQuery struct {
+	DeviceID  *int64
+	FieldName string
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+type historyPointQuery struct {
+	DeviceID  int64
+	FieldName string
+}
+
+func parseHistoryDataQuery(r *http.Request) (historyDataQuery, error) {
+	query := historyDataQuery{
+		FieldName: strings.TrimSpace(r.URL.Query().Get("field_name")),
+	}
+
+	deviceID, err := parseHistoryQueryDeviceID(r)
+	if err != nil {
+		return historyDataQuery{}, errors.New(errInvalidDeviceID)
+	}
+	query.DeviceID = deviceID
+
+	startTime, endTime, err := parseHistoryQueryTimeRange(r)
+	if err != nil {
+		return historyDataQuery{}, err
+	}
+	query.StartTime = startTime
+	query.EndTime = endTime
+
+	if err := validateHistoryDataQuery(query); err != nil {
+		return historyDataQuery{}, err
+	}
+
+	return query, nil
+}
+
+func parseHistoryPointQuery(r *http.Request) (historyPointQuery, error) {
+	deviceID, err := parseHistoryQueryDeviceID(r)
+	if err != nil || deviceID == nil {
+		return historyPointQuery{}, errors.New(errInvalidDeviceID)
+	}
+
+	query := historyPointQuery{
+		DeviceID:  *deviceID,
+		FieldName: strings.TrimSpace(r.URL.Query().Get("field_name")),
+	}
+
+	if query.DeviceID <= 0 && query.DeviceID != -1 {
+		return historyPointQuery{}, errors.New(errInvalidDeviceID)
+	}
+	if query.FieldName == "" {
+		return historyPointQuery{}, errors.New(errHistoryFieldRequired)
+	}
+
+	return query, nil
+}
+
+func validateHistoryDataQuery(query historyDataQuery) error {
+	if !isValidHistoryDeviceID(query.DeviceID) {
+		return errors.New(errInvalidDeviceID)
+	}
+	if !query.StartTime.IsZero() && !query.EndTime.IsZero() && query.StartTime.After(query.EndTime) {
+		return errors.New(errHistoryStartAfterEnd)
+	}
+	if query.DeviceID == nil {
+		hasFilter := query.FieldName != "" || !query.StartTime.IsZero() || !query.EndTime.IsZero()
+		if hasFilter {
+			return errors.New(errHistoryFilterRequires)
+		}
+	}
+	return nil
+}
+
+func parseHistoryQueryDeviceID(r *http.Request) (*int64, error) {
+	return parseOptionalInt64Query(r, "device_id")
+}
+
+func parseHistoryQueryTimeRange(r *http.Request) (time.Time, time.Time, error) {
+	startTime, err := parseOptionalTimeQuery(r, "start")
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid start time")
+	}
+
+	endTime, err := parseOptionalTimeQuery(r, "end")
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid end time")
+	}
+
+	return startTime, endTime, nil
+}
+
+func isValidHistoryDeviceID(deviceID *int64) bool {
+	return deviceID == nil || *deviceID > 0 || *deviceID == -1
+}
+
+func parseOptionalInt64Query(r *http.Request, key string) (*int64, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return nil, nil
+	}
+
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	return &parsed, nil
+}
+
+func parseOptionalTimeQuery(r *http.Request, key string) (time.Time, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	return parseTimeParam(raw)
+}
+
+func parseTimeParam(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if ts, err := time.Parse(time.RFC3339, value); err == nil {
+		return ts, nil
+	}
+	if ts, err := time.Parse("2006-01-02T15:04", value); err == nil {
+		return ts, nil
+	}
+	if ts, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+		return ts, nil
+	}
+	return time.Time{}, fmt.Errorf("invalid time format")
+}

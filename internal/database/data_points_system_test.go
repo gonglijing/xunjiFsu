@@ -534,6 +534,66 @@ func TestBatchSaveDataCacheEntries_LargeBatchDefaultsValueType(t *testing.T) {
 	}
 }
 
+func TestBatchSaveLatestDataPoints_PreservesExplicitValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := []DataPointEntry{
+		{DeviceID: 7, DeviceName: "dev-7", FieldName: "status", Value: "1", ValueType: "int"},
+	}
+
+	if err := BatchSaveLatestDataPoints(entries); err != nil {
+		t.Fatalf("BatchSaveLatestDataPoints: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_points WHERE device_id = ? AND field_name = ?`, 7, "status").Scan(&valueType); err != nil {
+		t.Fatalf("query data_points: %v", err)
+	}
+	if valueType != "int" {
+		t.Fatalf("value_type = %q, want %q", valueType, "int")
+	}
+}
+
+func TestBatchSaveDataPoints_PreservesExplicitValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := []DataPointEntry{
+		{DeviceID: 6, DeviceName: "dev-6", FieldName: "status", Value: "1", ValueType: "int"},
+	}
+
+	if err := BatchSaveDataPoints(entries); err != nil {
+		t.Fatalf("BatchSaveDataPoints: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_points WHERE device_id = ? AND field_name = ?`, 6, "status").Scan(&valueType); err != nil {
+		t.Fatalf("query data_points: %v", err)
+	}
+	if valueType != "int" {
+		t.Fatalf("value_type = %q, want %q", valueType, "int")
+	}
+}
+
+func TestBatchSaveDataCacheEntries_PreservesExplicitValueType(t *testing.T) {
+	prepareDataPointsTestDB(t)
+
+	entries := []DataPointEntry{
+		{DeviceID: 8, FieldName: "status", Value: "1", ValueType: "int"},
+	}
+
+	if err := BatchSaveDataCacheEntries(entries); err != nil {
+		t.Fatalf("BatchSaveDataCacheEntries: %v", err)
+	}
+
+	var valueType string
+	if err := DataDB.QueryRow(`SELECT value_type FROM data_cache WHERE device_id = ? AND field_name = ?`, 8, "status").Scan(&valueType); err != nil {
+		t.Fatalf("query data_cache: %v", err)
+	}
+	if valueType != "int" {
+		t.Fatalf("value_type = %q, want %q", valueType, "int")
+	}
+}
+
 func TestSaveDataCache_DefaultsValueType(t *testing.T) {
 	prepareDataPointsTestDB(t)
 
