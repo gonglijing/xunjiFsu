@@ -165,8 +165,23 @@ func TestTriggerDataSyncAsync_DeduplicatesConcurrentTriggers(t *testing.T) {
 		t.Fatalf("syncDataToDiskFn calls = %d, want 1", got)
 	}
 
+	// Replace the sync function with a non-blocking version and wait for
+	// the second trigger to complete, avoiding a data race on cleanup.
+	done2 := make(chan struct{})
+	syncDataToDiskFn = func() error {
+		calls.Add(1)
+		close(done2)
+		return nil
+	}
+
 	if !triggerDataSyncAsync() {
 		t.Fatalf("expected trigger after completion to start again")
+	}
+
+	select {
+	case <-done2:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for second triggered sync to finish")
 	}
 }
 
