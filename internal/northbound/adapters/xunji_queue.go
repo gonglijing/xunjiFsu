@@ -4,7 +4,8 @@ package adapters
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -180,5 +181,5 @@ func logXunjiSendFailure(adapterName, kind string, err error) {
 		return
 	}
 	// Shared helper keeps queue methods focused on queue flow.
-	log.Printf("Xunji [%s] send %s failed: %v", adapterName, kind, err)
+	slog.Info(fmt.Sprintf("Xunji [%s] send %s failed: %v", adapterName, kind, err))
 }

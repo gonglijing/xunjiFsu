@@ -2,7 +2,7 @@ package northbound
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -86,7 +86,7 @@ func (m *NorthboundManager) Start() {
 	m.stopChan = make(chan struct{})
 	m.mu.Unlock()
 
-	log.Println("Northbound manager started (built-in adapters)")
+	slog.Info("Northbound manager started")
 }
 
 // Stop 停止管理器
@@ -108,7 +108,7 @@ func (m *NorthboundManager) Stop() {
 	m.mu.Unlock()
 
 	m.wg.Wait()
-	log.Println("Northbound manager stopped")
+	slog.Info("Northbound manager stopped")
 }
 
 // RegisterAdapter 注册适配器
@@ -125,7 +125,7 @@ func (m *NorthboundManager) RegisterAdapter(name string, adapter adapters.Northb
 	m.selfManaged[name] = true // 内置适配器都是 self-managed
 	m.enabled[name] = true
 
-	log.Printf("Northbound adapter registered: %s (built-in)", name)
+	slog.Info("Northbound adapter registered", "name", name)
 }
 
 // UnregisterAdapter 注销适配器
@@ -143,7 +143,7 @@ func (m *NorthboundManager) UnregisterAdapter(name string) {
 	delete(m.intervals, name)
 	delete(m.breakers, name)
 
-	log.Printf("Northbound adapter unregistered: %s", name)
+	slog.Info("Northbound adapter unregistered", "name", name)
 }
 
 // GetAdapter 获取适配器
@@ -344,7 +344,7 @@ func (m *NorthboundManager) SendData(data *models.CollectData) {
 	for _, ref := range m.enabledAdapterRefs() {
 		// 内置适配器自己管理发送，不需要通过熔断器
 		if err := ref.adapter.Send(data); err != nil {
-			log.Printf("Failed to send data to %s: %v", ref.name, err)
+			slog.Error("Failed to send data", "adapter", ref.name, "error", err)
 		}
 	}
 }
@@ -353,7 +353,7 @@ func (m *NorthboundManager) SendData(data *models.CollectData) {
 func (m *NorthboundManager) SendAlarm(alarm *models.AlarmPayload) {
 	for _, ref := range m.enabledAdapterRefs() {
 		if err := ref.adapter.SendAlarm(alarm); err != nil {
-			log.Printf("Failed to send alarm to %s: %v", ref.name, err)
+			slog.Error("Failed to send alarm", "adapter", ref.name, "error", err)
 		}
 	}
 }
@@ -381,7 +381,7 @@ func (m *NorthboundManager) PullCommands(limit int) ([]*models.NorthboundCommand
 
 		pulled, err := cmdAdapter.PullCommands(remaining)
 		if err != nil {
-			log.Printf("Failed to pull commands from %s: %v", ref.name, err)
+			slog.Error("Failed to pull commands", "adapter", ref.name, "error", err)
 			continue
 		}
 		if len(pulled) == 0 {
@@ -407,7 +407,7 @@ func (m *NorthboundManager) ReportCommandResult(result *models.NorthboundCommand
 		}
 
 		if err := cmdAdapter.ReportCommandResult(result); err != nil {
-			log.Printf("Failed to report command result to %s: %v", ref.name, err)
+			slog.Error("Failed to report command result", "adapter", ref.name, "error", err)
 		}
 	}
 }

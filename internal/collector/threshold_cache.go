@@ -1,7 +1,7 @@
 package collector
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -60,7 +60,7 @@ func StartThresholdCache() {
 
 	cache.Refresh()
 	go cache.refreshLoop(stopChan)
-	log.Println("Threshold cache started")
+	slog.Info("Threshold cache started")
 }
 
 // StopThresholdCache 停止阈值缓存刷新任务
@@ -76,7 +76,7 @@ func StopThresholdCache() {
 	cache.mu.Unlock()
 
 	close(stopChan)
-	log.Println("Threshold cache stopped")
+	slog.Info("Threshold cache stopped")
 }
 
 // refreshLoop 定期刷新缓存
@@ -99,12 +99,12 @@ func (c *thresholdCache) Refresh() {
 	// 获取所有设备
 	devices, err := database.ListDevices()
 	if err != nil {
-		log.Printf("Failed to refresh threshold cache: %v", err)
+		slog.Error("Failed to refresh threshold cache", "error", err)
 		return
 	}
 	thresholds, err := database.ListThresholds()
 	if err != nil {
-		log.Printf("Failed to refresh threshold cache thresholds: %v", err)
+		slog.Error("Failed to refresh threshold cache thresholds", "error", err)
 		return
 	}
 
@@ -136,7 +136,7 @@ func (c *thresholdCache) Refresh() {
 	c.lastRefresh = time.Now()
 	c.mu.Unlock()
 
-	log.Printf("Threshold cache refreshed, %d devices with thresholds, %d thresholds", len(next), len(thresholds))
+	slog.Info("Threshold cache refreshed", "devices", len(next), "thresholds", len(thresholds))
 }
 
 func getDeviceThresholdRules(deviceID int64) ([]thresholdEvalRule, error) {

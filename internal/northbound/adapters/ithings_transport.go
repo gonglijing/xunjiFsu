@@ -2,7 +2,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -76,7 +76,7 @@ func (a *IThingsAdapter) subscribeDownTopics(client mqtt.Client) {
 			continue
 		}
 		if err := token.Error(); err != nil {
-			log.Printf("iThings subscribe failed topic=%s: %v", topic, err)
+			slog.Info(fmt.Sprintf("iThings subscribe failed topic=%s: %v", topic, err))
 		}
 	}
 }

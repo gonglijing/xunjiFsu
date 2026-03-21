@@ -4,7 +4,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -50,7 +50,7 @@ func (a *XunjiAdapter) markDisconnected() {
 }
 
 func (a *XunjiAdapter) reconnectOnce() error {
-	log.Printf("Xunji [%s] attempting to reconnect...", a.name)
+	slog.Info(fmt.Sprintf("Xunji [%s] attempting to reconnect...", a.name))
 	client, err := connectMQTT(a.broker, a.clientID, a.username, a.password, int(a.keepAlive.Seconds()), int(a.timeout.Seconds()))
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (a *XunjiAdapter) reconnectOnce() error {
 		oldClient.Disconnect(250)
 	}
 
-	log.Printf("Xunji [%s] reconnected successfully", a.name)
+	slog.Info(fmt.Sprintf("Xunji [%s] reconnected successfully", a.name))
 	return nil
 }
 

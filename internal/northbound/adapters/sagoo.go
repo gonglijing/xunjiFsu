@@ -2,7 +2,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -129,8 +129,8 @@ func (a *SagooAdapter) Initialize(configStr string) error {
 	// 订阅命令主题
 	a.subscribeCommandTopics(client)
 
-	log.Printf("Sagoo adapter initialized: %s (broker=%s, topic=%s)",
-		a.name, settings.broker, settings.topic)
+	slog.Info(fmt.Sprintf("Sagoo adapter initialized: %s (broker=%s, topic=%s))",
+		a.name, settings.broker, settings.topic))
 	return nil
 }
 

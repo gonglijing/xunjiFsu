@@ -2,7 +2,7 @@ package collector
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -23,7 +23,7 @@ func (c *Collector) processNorthboundCommands() {
 
 	commands, err := c.northboundMgr.PullCommands(20)
 	if err != nil {
-		log.Printf("pull northbound commands failed: %v", err)
+		slog.Error("pull northbound commands failed", "error", err)
 		return
 	}
 	if len(commands) == 0 {
@@ -36,8 +36,10 @@ func (c *Collector) processNorthboundCommands() {
 		}
 		err := c.executeNorthboundCommand(command)
 		if err != nil {
-			log.Printf("execute northbound command failed: source=%s request_id=%s product_key=%s device_key=%s field=%s error=%v",
-				command.Source, command.RequestID, command.ProductKey, command.DeviceKey, command.FieldName, err)
+			slog.Error("execute northbound command failed",
+				"source", command.Source, "request_id", command.RequestID,
+				"product_key", command.ProductKey, "device_key", command.DeviceKey,
+				"field", command.FieldName, "error", err)
 		}
 		c.reportCommandResult(command, err)
 	}
@@ -100,8 +102,9 @@ func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) 
 		return err
 	}
 
-	log.Printf("northbound command executed: source=%s request_id=%s device_id=%d field=%s value=%s",
-		normalizedCommand.Source, normalizedCommand.RequestID, device.ID, normalizedCommand.FieldName, normalizedCommand.Value)
+	slog.Info("northbound command executed",
+		"source", normalizedCommand.Source, "request_id", normalizedCommand.RequestID,
+		"device_id", device.ID, "field", normalizedCommand.FieldName, "value", normalizedCommand.Value)
 	return nil
 }
 

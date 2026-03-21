@@ -1,7 +1,8 @@
 package adapters
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -40,21 +41,21 @@ func executePeriodicFlushLoop(cfg periodicFlushLoopConfig) {
 				flushAlarm:      cfg.flushAlarm,
 				alarmQueueEmpty: cfg.alarmQueueEmpty,
 				onFlushError: func(err error) {
-					log.Printf("%s alarm flush failed on close: %v", cfg.logLabel, err)
+					slog.Info(fmt.Sprintf("%s alarm flush failed on close: %v", cfg.logLabel, err))
 				},
 			})
 			return
 		case <-reportTicker.C:
 			if err := cfg.flushData(); err != nil {
-				log.Printf("%s %s flush failed: %v", cfg.logLabel, cfg.reportLabel, err)
+				slog.Info(fmt.Sprintf("%s %s flush failed: %v", cfg.logLabel, cfg.reportLabel, err))
 			}
 		case <-alarmTicker.C:
 			if err := cfg.flushAlarm(); err != nil {
-				log.Printf("%s alarm flush failed: %v", cfg.logLabel, err)
+				slog.Info(fmt.Sprintf("%s alarm flush failed: %v", cfg.logLabel, err))
 			}
 		case <-cfg.flushNow:
 			if err := cfg.flushAlarm(); err != nil {
-				log.Printf("%s alarm flush failed: %v", cfg.logLabel, err)
+				slog.Info(fmt.Sprintf("%s alarm flush failed: %v", cfg.logLabel, err))
 			}
 		}
 	}

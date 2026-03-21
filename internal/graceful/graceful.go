@@ -2,7 +2,7 @@ package graceful
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -55,7 +55,7 @@ func (g *GracefulShutdown) Start() {
 	go func() {
 		defer g.wg.Done()
 		<-g.notifyChan
-		log.Println("[graceful] Received shutdown signal, starting graceful shutdown...")
+		slog.Info("Received shutdown signal, starting graceful shutdown")
 		g.Shutdown()
 	}()
 }
@@ -68,21 +68,21 @@ func (g *GracefulShutdown) Shutdown() {
 
 		// 关闭HTTP服务器
 		if g.httpServer != nil {
-			log.Println("[graceful] Shutting down HTTP server...")
+			slog.Info("Shutting down HTTP server")
 			if err := g.httpServer.Shutdown(ctx); err != nil {
-				log.Printf("[graceful] HTTP server shutdown error: %v", err)
+				slog.Error("HTTP server shutdown error", "error", err)
 			}
 		}
 
 		// 执行注册的关闭函数
 		for i, f := range g.shutdownFuncs {
-			log.Printf("[graceful] Executing shutdown function %d/%d...", i+1, len(g.shutdownFuncs))
+			slog.Info("Executing shutdown function", "step", i+1, "total", len(g.shutdownFuncs))
 			if err := f(ctx); err != nil {
-				log.Printf("[graceful] Shutdown function %d error: %v", i+1, err)
+				slog.Error("Shutdown function error", "step", i+1, "error", err)
 			}
 		}
 
-		log.Println("[graceful] Graceful shutdown completed")
+		slog.Info("Graceful shutdown completed")
 	})
 }
 

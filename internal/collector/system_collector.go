@@ -2,7 +2,7 @@ package collector
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -87,7 +87,7 @@ func (c *SystemStatsCollector) Start() error {
 	c.wg.Add(1)
 	go c.run()
 
-	log.Printf("SystemStatsCollector started, interval=%v", c.interval)
+	slog.Info("SystemStatsCollector started", "interval", c.interval)
 	return nil
 }
 
@@ -103,7 +103,7 @@ func (c *SystemStatsCollector) Stop() error {
 	c.mu.Unlock()
 
 	c.wg.Wait()
-	log.Println("SystemStatsCollector stopped")
+	slog.Info("SystemStatsCollector stopped")
 	return nil
 }
 
@@ -145,20 +145,20 @@ func (c *SystemStatsCollector) collect() {
 	mgr := c.northboundMgr
 	c.mu.RUnlock()
 	if mgr != nil {
-		log.Printf("SystemStatsCollector: sending data to northbound (deviceId=%d, deviceName=%s)",
-			data.DeviceID, data.DeviceName)
+		slog.Debug("SystemStatsCollector: sending data to northbound",
+			"device_id", data.DeviceID, "device_name", data.DeviceName)
 		mgr.SendData(data)
 	} else {
-		log.Printf("SystemStatsCollector: northbound manager is nil")
+		slog.Warn("SystemStatsCollector: northbound manager is nil")
 	}
 
 	// 保存到数据库
 	if err := database.EnqueueCollectDataWrite(data, true); err != nil {
-		log.Printf("SystemStatsCollector: failed to insert data: %v", err)
+		slog.Error("SystemStatsCollector: failed to insert data", "error", err)
 	}
 
-	log.Printf("SystemStatsCollector: collected cpu=%.1f%% mem=%.1f%% disk=%.1f%%",
-		stats.CpuUsage, stats.MemUsage, stats.DiskUsage)
+	slog.Info("SystemStatsCollector: collected",
+		"cpu", stats.CpuUsage, "mem", stats.MemUsage, "disk", stats.DiskUsage)
 }
 
 // CollectSystemStatsOnce 立即采集一次系统属性（公开方法，供北向适配器调用）
@@ -392,7 +392,7 @@ func (c *SystemStatsCollector) getMemoryInfo(stats *models.SystemStats) {
 func (c *SystemStatsCollector) getDiskInfo(stats *models.SystemStats) {
 	var statfs syscall.Statfs_t
 	if err := syscall.Statfs(c.diskPath, &statfs); err != nil {
-		log.Printf("SystemStatsCollector: failed to get disk stats: %v", err)
+		slog.Warn("SystemStatsCollector: failed to get disk stats", "error", err)
 		stats.DiskTotal = 100 // GB
 		stats.DiskUsed = 20
 		stats.DiskUsage = 20

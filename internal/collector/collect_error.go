@@ -3,7 +3,7 @@ package collector
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 )
 
@@ -61,6 +61,7 @@ func (c *Collector) handleCollectFailure(task *collectTask, err error) {
 
 	kind := classifyCollectError(err)
 	consecutive := c.markTaskFailed(task, err, kind)
-	log.Printf("Failed to collect device %s (ID:%d): kind=%s consecutive_failures=%d error=%v",
-		task.device.Name, task.device.ID, kind, consecutive, err)
+	slog.Error("Failed to collect device",
+		"name", task.device.Name, "id", task.device.ID,
+		"kind", kind, "consecutive_failures", consecutive, "error", err)
 }

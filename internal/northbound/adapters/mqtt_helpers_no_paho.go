@@ -4,7 +4,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -33,11 +33,11 @@ func connectMQTT(broker, clientID, username, password string, keepAliveSec, time
 	}
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		if err != nil {
-			log.Printf("MQTT connection lost: %v", err)
+			slog.Info(fmt.Sprintf("MQTT connection lost: %v", err))
 		}
 	}
 	opts.OnConnect = func(_ mqtt.Client) {
-		log.Printf("MQTT connected: %s", broker)
+		slog.Info(fmt.Sprintf("MQTT connected: %s", broker))
 	}
 
 	client := mqtt.NewClient(opts)

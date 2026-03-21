@@ -2,7 +2,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -162,6 +162,6 @@ func (a *IThingsAdapter) Initialize(configStr string) error {
 
 	a.subscribeDownTopics(client)
 
-	log.Printf("iThings adapter initialized: %s (broker=%s)", a.name, settings.broker)
+	slog.Info(fmt.Sprintf("iThings adapter initialized: %s (broker=%s)", a.name, settings.broker))
 	return nil
 }

@@ -5,7 +5,7 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -39,12 +39,12 @@ func (a *MQTTAdapter) connectMQTT(settings mqttInitSettings, username, password 
 
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		if err != nil {
-			log.Printf("MQTT [%s] connection lost: %v", a.name, err)
+			slog.Info(fmt.Sprintf("MQTT [%s] connection lost: %v", a.name, err))
 		}
 		a.markDisconnected()
 	}
 	opts.OnConnect = func(_ mqtt.Client) {
-		log.Printf("MQTT [%s] connected: %s", a.name, settings.broker)
+		slog.Info(fmt.Sprintf("MQTT [%s] connected: %s", a.name, settings.broker))
 		a.mu.Lock()
 		a.connected = true
 		a.mu.Unlock()
@@ -72,7 +72,7 @@ func (a *MQTTAdapter) markDisconnected() {
 }
 
 func (a *MQTTAdapter) reconnectOnce() error {
-	log.Printf("MQTT [%s] attempting to reconnect...", a.name)
+	slog.Info(fmt.Sprintf("MQTT [%s] attempting to reconnect...", a.name))
 	a.mu.RLock()
 	settings := mqttInitSettings{
 		broker:       a.broker,
@@ -100,7 +100,7 @@ func (a *MQTTAdapter) reconnectOnce() error {
 		oldClient.Disconnect(250)
 	}
 
-	log.Printf("MQTT [%s] reconnected successfully", a.name)
+	slog.Info(fmt.Sprintf("MQTT [%s] reconnected successfully", a.name))
 	return nil
 }
 

@@ -4,7 +4,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -121,6 +121,6 @@ func (a *MQTTAdapter) Initialize(configStr string) error {
 
 	a.applyConfig(cfg, client, settings)
 
-	log.Printf("MQTT adapter initialized: %s (broker=%s, topic=%s)", a.name, settings.broker, settings.topic)
+	slog.Info(fmt.Sprintf("MQTT adapter initialized: %s (broker=%s, topic=%s)", a.name, settings.broker, settings.topic))
 	return nil
 }

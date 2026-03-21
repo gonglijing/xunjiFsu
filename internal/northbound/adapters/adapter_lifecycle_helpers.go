@@ -1,7 +1,8 @@
 package adapters
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"sync"
 )
 
@@ -45,7 +46,7 @@ func (s adapterLifecycleState) start(executeLoop func(), signalReconnect func())
 		needReconnect = !*s.connected
 		s.wg.Add(1)
 		go executeLoop()
-		log.Printf("%s adapter started: %s", s.logLabel, s.adapterName)
+		slog.Info(fmt.Sprintf("%s adapter started: %s", s.logLabel, s.adapterName))
 	}
 	s.mu.Unlock()
 	logLoopStateTransition(s.adapterType, s.adapterName, transition)
@@ -81,7 +82,7 @@ func (s adapterLifecycleState) stop() {
 		s.mu.Unlock()
 	}
 	logLoopStateTransition(s.adapterType, s.adapterName, transitionStopped)
-	log.Printf("%s adapter stopped: %s", s.logLabel, s.adapterName)
+	slog.Info(fmt.Sprintf("%s adapter stopped: %s", s.logLabel, s.adapterName))
 }
 
 func (s adapterLifecycleState) close(flushData, flushAlarm func(), clearClient func() disconnectableClient) error {

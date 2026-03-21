@@ -4,7 +4,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -107,6 +107,6 @@ func (a *XunjiAdapter) Initialize(configStr string) error {
 
 	a.applyConfig(cfg, client, settings)
 
-	log.Printf("Xunji adapter initialized: %s (broker=%s, topic=%s)", a.name, settings.broker, settings.topic)
+	slog.Info(fmt.Sprintf("Xunji adapter initialized: %s (broker=%s, topic=%s)", a.name, settings.broker, settings.topic))
 	return nil
 }

@@ -1,7 +1,7 @@
 package collector
 
 import (
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -458,7 +458,7 @@ func (c *Collector) handleAlarm(device *models.Device, threshold *models.Thresho
 	}
 
 	if _, err := database.CreateAlarmLog(logEntry); err != nil {
-		log.Printf("Failed to create alarm log: %v", err)
+		slog.Error("Failed to create alarm log", "error", err)
 	}
 
 	if c.northboundMgr == nil {

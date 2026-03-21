@@ -3,7 +3,7 @@ package collector
 import (
 	"container/heap"
 	"fmt"
-	"log"
+	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -186,7 +186,7 @@ func (c *Collector) Start() error {
 
 	// 开机时加载所有 enable 的设备
 	if err := c.loadEnabledDevices(); err != nil {
-		log.Printf("Failed to load enabled devices: %v", err)
+		slog.Error("Failed to load enabled devices", "error", err)
 	}
 
 	// 同步设备状态
@@ -199,7 +199,7 @@ func (c *Collector) Start() error {
 	c.wg.Add(1)
 	go c.executeLoop()
 
-	log.Println("Collector started")
+	slog.Info("Collector started")
 	return nil
 }
 
@@ -227,7 +227,7 @@ func (c *Collector) loadEnabledDevices() error {
 		c.notifyTaskChangedLocked()
 	}
 
-	log.Printf("Loaded %d enabled devices for collection", loadedCount)
+	slog.Info("Loaded enabled devices for collection", "count", loadedCount)
 	return nil
 }
 
@@ -351,7 +351,7 @@ func (c *Collector) collectOnce(task *collectTask) {
 func (c *Collector) SyncDeviceStatus() {
 	devices, err := database.ListDevices()
 	if err != nil {
-		log.Printf("Failed to sync device status: %v", err)
+		slog.Error("Failed to sync device status", "error", err)
 		return
 	}
 
@@ -375,7 +375,7 @@ func (c *Collector) SyncDeviceStatus() {
 
 	if removed := c.pruneMissingTasksLocked(seenDeviceIDs); removed > 0 {
 		changed = true
-		log.Printf("Pruned %d orphaned device tasks", removed)
+		slog.Info("Pruned orphaned device tasks", "count", removed)
 	}
 
 	if changed {
@@ -395,7 +395,7 @@ func (c *Collector) Stop() error {
 	c.mu.Unlock()
 
 	c.wg.Wait()
-	log.Println("Collector stopped")
+	slog.Info("Collector stopped")
 	return nil
 }
 
@@ -532,11 +532,11 @@ func (c *Collector) logDeviceSyncAction(device *models.Device, action deviceSync
 
 	switch action {
 	case deviceSyncActionAdded:
-		log.Printf("Device %s (ID:%d) enabled, added to collection", device.Name, device.ID)
+		slog.Info("Device enabled, added to collection", "name", device.Name, "id", device.ID)
 	case deviceSyncActionUpdated:
-		log.Printf("Device %s (ID:%d) config updated", device.Name, device.ID)
+		slog.Info("Device config updated", "name", device.Name, "id", device.ID)
 	case deviceSyncActionRemoved:
-		log.Printf("Device %s (ID:%d) disabled, removed from collection", device.Name, device.ID)
+		slog.Info("Device disabled, removed from collection", "name", device.Name, "id", device.ID)
 	}
 }
 

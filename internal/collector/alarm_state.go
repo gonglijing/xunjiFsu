@@ -1,7 +1,7 @@
 package collector
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -122,7 +122,7 @@ func resolveAlarmRepeatInterval() time.Duration {
 	resolved := defaultAlarmRepeatInterval
 	seconds, err := database.GetAlarmRepeatIntervalSeconds()
 	if err != nil {
-		log.Printf("Failed to load alarm repeat interval: %v", err)
+		slog.Warn("Failed to load alarm repeat interval", "error", err)
 	} else if seconds > 0 {
 		resolved = time.Duration(seconds) * time.Second
 	}

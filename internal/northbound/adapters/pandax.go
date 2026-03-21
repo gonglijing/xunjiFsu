@@ -2,7 +2,7 @@ package adapters
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -150,37 +150,37 @@ func (a *PandaXAdapter) SetSystemStatsProvider(provider SystemStatsProvider) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.systemStatsProvider = provider
-	log.Printf("[PandaX-%s] SetSystemStatsProvider: 系统属性提供者已设置", a.name)
+	slog.Info(fmt.Sprintf("[PandaX-%s] SetSystemStatsProvider: 系统属性提供者已设置", a.name))
 }
 
 func (a *PandaXAdapter) Initialize(configStr string) error {
-	log.Printf("[PandaX-%s] Initialize: 开始初始化", a.name)
+	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: 开始初始化", a.name))
 
 	cfg, err := parsePandaXConfig(configStr)
 	if err != nil {
-		log.Printf("[PandaX-%s] Initialize: 配置解析失败: %v", a.name, err)
+		slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: 配置解析失败: %v", a.name, err))
 		return err
 	}
-	log.Printf("[PandaX-%s] Initialize: 配置解析成功, serverUrl=%s, username=%s, gatewayMode=%v",
-		a.name, cfg.ServerURL, cfg.Username, cfg.GatewayMode)
+	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: 配置解析成功, serverUrl=%s, username=%s, gatewayMode=%v",
+		a.name, cfg.ServerURL, cfg.Username, cfg.GatewayMode))
 
 	_ = a.Close()
 
 	settings := buildPandaXInitSettings(a.name, cfg)
-	log.Printf("[PandaX-%s] Initialize: broker=%s", a.name, settings.broker)
-	log.Printf("[PandaX-%s] Initialize: clientId=%s", a.name, settings.clientID)
+	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: broker=%s", a.name, settings.broker))
+	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: clientId=%s", a.name, settings.clientID))
 
 	client, err := a.connectPandaXMQTT(settings.broker, settings.clientID, cfg.Username, cfg.Password, cfg.KeepAlive, cfg.Timeout)
 	if err != nil {
-		log.Printf("[PandaX-%s] Initialize: MQTT 连接失败: %v", a.name, err)
+		slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: MQTT 连接失败: %v", a.name, err))
 		return fmt.Errorf("failed to connect MQTT: %w", err)
 	}
-	log.Printf("[PandaX-%s] Initialize: MQTT 连接成功", a.name)
+	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: MQTT 连接成功", a.name))
 
 	a.applyConfig(cfg, client, settings)
 
 	a.subscribeRPCTopics(client)
 
-	log.Printf("PandaX adapter initialized: %s (broker=%s)", a.name, settings.broker)
+	slog.Info(fmt.Sprintf("PandaX adapter initialized: %s (broker=%s)", a.name, settings.broker))
 	return nil
 }

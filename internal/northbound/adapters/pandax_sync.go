@@ -3,7 +3,7 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -51,7 +51,7 @@ func (a *PandaXAdapter) SyncDevices() error {
 		return fmt.Errorf("发布设备同步消息失败: %w", err)
 	}
 
-	log.Printf("[PandaX-%s] SyncDevices: 已发布同步消息, topic=%s, devices=%d", a.name, topic, count)
+	slog.Info(fmt.Sprintf("[PandaX-%s] SyncDevices: 已发布同步消息, topic=%s, devices=%d", a.name, topic, count))
 	return nil
 }
 
@@ -132,7 +132,7 @@ func (a *PandaXAdapter) backfillResolvedProductKey(dev *models.Device, productKe
 	}
 
 	if err := database.UpdateDeviceProductKey(dev.ID, resolvedProductKey); err != nil {
-		log.Printf("[PandaX-%s] SyncDevices: 回写设备 product_key 失败: device_id=%d product_key=%s err=%v", a.name, dev.ID, resolvedProductKey, err)
+		slog.Info(fmt.Sprintf("[PandaX-%s] SyncDevices: 回写设备 product_key 失败: device_id=%d product_key=%s err=%v", a.name, dev.ID, resolvedProductKey, err))
 		return
 	}
 	dev.ProductKey = resolvedProductKey
@@ -241,7 +241,7 @@ func resolveSyncProductKeyByDeviceID(devices []*models.Device) map[int64]string 
 
 	drivers, err := database.ListDrivers()
 	if err != nil {
-		log.Printf("resolveSyncProductKeyByDeviceID: 加载驱动列表失败: %v", err)
+		slog.Info(fmt.Sprintf("resolveSyncProductKeyByDeviceID: 加载驱动列表失败: %v", err))
 		return result
 	}
 

@@ -1,7 +1,8 @@
 package adapters
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -56,7 +57,7 @@ func executeMQTTFlushReconnectLoop(cfg mqttFlushReconnectLoopConfig) {
 			}
 			if err := cfg.reconnectOnce(); err != nil {
 				delay := cfg.reconnectDelay()
-				log.Printf("%s [%s] reconnect failed: %v, retry in %v", cfg.logLabel, cfg.adapterName, err, delay)
+				slog.Info(fmt.Sprintf("%s [%s] reconnect failed: %v, retry in %v", cfg.logLabel, cfg.adapterName, err, delay))
 				reconnect.Schedule(delay)
 				continue
 			}

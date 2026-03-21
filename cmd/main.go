@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 
 	"github.com/gonglijing/xunjiFsu/internal/app"
 	"github.com/gonglijing/xunjiFsu/internal/config"
@@ -12,7 +12,7 @@ import (
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Fatal("Failed to load config", err)
 	}
 
 	setupLogger(cfg)
@@ -40,6 +40,6 @@ func setupLogger(cfg *config.Config) {
 	logger.SetLevel(level)
 	logger.SetJSONOutput(cfg.LogJSON)
 	if _, err := logger.InitFileOutput("logs/xunji.log", 3*1024*1024); err != nil {
-		log.Printf("Failed to init file logger: %v", err)
+		slog.Warn("Failed to init file logger", "error", err)
 	}
 }

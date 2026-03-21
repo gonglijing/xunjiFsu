@@ -2,7 +2,7 @@ package collector
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -29,7 +29,7 @@ func (c *Collector) collectDataFromDriver(task *collectTask) (*models.CollectDat
 
 	collect := driverResultToCollectDataWithTask(task, result)
 	if err := c.syncDeviceProductKey(device, collect); err != nil {
-		log.Printf("Failed to sync device product_key from driver output: %v", err)
+		slog.Warn("Failed to sync device product_key from driver output", "error", err)
 	}
 	return collect, nil
 }
@@ -42,7 +42,7 @@ func (c *Collector) persistCollectData(task *collectTask, collect *models.Collec
 	storeHistory := shouldStoreHistory(task, collect.Timestamp)
 	// 实时缓存始终写入，历史按设备 storage_interval 控制。
 	if err := database.EnqueueCollectDataWrite(collect, storeHistory); err != nil {
-		log.Printf("Failed to insert data points: %v", err)
+		slog.Error("Failed to insert data points", "error", err)
 	}
 	c.markTaskCollected(task, collect.Timestamp, storeHistory)
 }
@@ -53,7 +53,7 @@ func (c *Collector) handleThresholdForDevice(device *models.Device, data *models
 		return
 	}
 	if err := c.checkThresholds(device, data); err != nil {
-		log.Printf("check thresholds error: %v", err)
+		slog.Error("check thresholds error", "error", err)
 	}
 }
 
@@ -142,7 +142,7 @@ func (c *Collector) resolveFixedDriverProductKey(driverID *int64, candidate stri
 	}
 
 	if candidate != "" && candidate != cached {
-		log.Printf("Collector: driver %d productKey mismatch (cached=%s incoming=%s), use cached", id, cached, candidate)
+		slog.Warn("Collector: driver productKey mismatch, use cached", "driver_id", id, "cached", cached, "incoming", candidate)
 	}
 	return cached
 }

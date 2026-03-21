@@ -3,7 +3,7 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -20,7 +20,7 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 	defer a.commandMu.Unlock()
 
 	if !a.isInitialized() {
-		log.Printf("[PandaX-%s] PullCommands: 适配器未初始化", a.name)
+		slog.Info(fmt.Sprintf("[PandaX-%s] PullCommands: 适配器未初始化", a.name))
 		return nil, fmt.Errorf("adapter not initialized")
 	}
 
@@ -37,12 +37,12 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 	clear(a.commandQueue[:limit])
 	a.commandQueue = a.commandQueue[limit:]
 
-	log.Printf("[PandaX-%s] PullCommands: 取出 %d 条命令", a.name, len(items))
+	slog.Info(fmt.Sprintf("[PandaX-%s] PullCommands: 取出 %d 条命令", a.name, len(items)))
 	return items, nil
 }
 
 func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
-	log.Printf("[PandaX-%s] handleRPCRequest: 收到 RPC topic=%s", a.name, message.Topic())
+	slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: 收到 RPC topic=%s", a.name, message.Topic()))
 
 	var req struct {
 		RequestID string      `json:"requestId"`
@@ -50,7 +50,7 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 		Params    interface{} `json:"params"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
-		log.Printf("[PandaX-%s] handleRPCRequest: JSON 解析失败: %v", a.name, err)
+		slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: JSON 解析失败: %v", a.name, err))
 		return
 	}
 
@@ -58,11 +58,11 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 		req.RequestID = parsePandaXRPCRequestID(message.Topic())
 	}
 
-	log.Printf("[PandaX-%s] handleRPCRequest: requestId=%s, method=%s", a.name, req.RequestID, req.Method)
+	slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: requestId=%s, method=%s", a.name, req.RequestID, req.Method))
 
 	commands := a.buildRPCCommands(req.RequestID, req.Method, req.Params)
 	if len(commands) == 0 {
-		log.Printf("[PandaX-%s] handleRPCRequest: 无有效命令", a.name)
+		slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: 无有效命令", a.name))
 		return
 	}
 
@@ -71,7 +71,7 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 	queueLen := len(a.commandQueue)
 	a.commandMu.Unlock()
 
-	log.Printf("[PandaX-%s] handleRPCRequest: 入队 %d 条命令, queueLen=%d", a.name, len(commands), queueLen)
+	slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: 入队 %d 条命令, queueLen=%d", a.name, len(commands), queueLen))
 }
 
 func (a *PandaXAdapter) buildRPCCommands(requestID, method string, params interface{}) []*models.NorthboundCommand {
