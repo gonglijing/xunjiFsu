@@ -1,7 +1,8 @@
 package service
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	collectorpkg "github.com/gonglijing/xunjiFsu/internal/collector"
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -70,8 +71,8 @@ func buildDeviceRuntimeStatusList(devices []*models.Device, runtimeStatusMap map
 		statuses = append(statuses, status)
 	}
 
-	sort.Slice(statuses, func(i, j int) bool {
-		return statuses[i].DeviceID < statuses[j].DeviceID
+	slices.SortFunc(statuses, func(a, b collectorpkg.DeviceRuntimeStatus) int {
+		return cmp.Compare(a.DeviceID, b.DeviceID)
 	})
 	return statuses
 }

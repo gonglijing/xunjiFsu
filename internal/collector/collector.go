@@ -770,7 +770,7 @@ func resolveCollectInterval(milliseconds int) time.Duration {
 
 func resolveStorageInterval(seconds int) time.Duration {
 	if seconds <= 0 {
-		seconds = database.DefaultStorageIntervalSeconds
+		seconds = models.DefaultStorageIntervalSeconds
 	}
 	return time.Duration(seconds) * time.Second
 }

@@ -1,8 +1,9 @@
 package httpapi
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/service"
@@ -119,7 +120,7 @@ func collectWriteCandidateFields(params map[string]interface{}) ([]string, error
 	for _, field := range fields {
 		names = append(names, field)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, nil
 }
 
@@ -222,7 +223,7 @@ func pickSingleWriteValue(values map[string]interface{}) (field string, value st
 	if len(candidates) == 0 {
 		return "", "", nil
 	}
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].key < candidates[j].key })
+	slices.SortFunc(candidates, func(a, b candidate) int { return cmp.Compare(a.key, b.key) })
 	if len(candidates) > 1 {
 		fields := make([]string, 0, len(candidates))
 		for _, item := range candidates {

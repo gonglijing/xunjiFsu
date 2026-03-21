@@ -2,7 +2,7 @@ package adapters
 
 import (
 	"encoding/json"
-	"sort"
+	"slices"
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -119,7 +119,7 @@ func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, reque
 	if len(keys) == 0 {
 		return
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	a.commandMu.Lock()
 	defer a.commandMu.Unlock()

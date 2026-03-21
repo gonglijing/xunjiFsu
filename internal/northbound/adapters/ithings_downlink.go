@@ -2,7 +2,7 @@ package adapters
 
 import (
 	"encoding/json"
-	"sort"
+	"slices"
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -76,7 +76,7 @@ func buildIThingsCommands(requestID, topicType, method, actionID string, params 
 		if len(keys) == 0 {
 			return
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, key := range keys {
 			out = append(out, &models.NorthboundCommand{
 				RequestID:  requestID,

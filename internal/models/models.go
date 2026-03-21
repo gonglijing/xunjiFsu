@@ -408,6 +408,9 @@ type SystemStats struct {
 	Timestamp int64   `json:"timestamp"` // 采集时间戳
 }
 
+// DefaultStorageIntervalSeconds 设备默认存储周期(秒)
+const DefaultStorageIntervalSeconds = 300
+
 // SystemStatsDeviceID FSU 系统属性的固定设备 ID
 const SystemStatsDeviceID int64 = -1
 

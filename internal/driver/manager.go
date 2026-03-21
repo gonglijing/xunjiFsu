@@ -3,17 +3,17 @@
 package driver
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"log/slog"
 
 	extism "github.com/extism/go-sdk"
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -477,7 +477,7 @@ func cachedPluginExports(plugin *extism.Plugin) ([]string, map[string]struct{}) 
 		names = append(names, name)
 		set[name] = struct{}{}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, set
 }
 
@@ -507,7 +507,7 @@ func (m *DriverManager) ListRuntimes() []*DriverRuntime {
 			runtimes = append(runtimes, rt)
 		}
 	}
-	sort.Slice(runtimes, func(i, j int) bool { return runtimes[i].ID < runtimes[j].ID })
+	slices.SortFunc(runtimes, func(a, b *DriverRuntime) int { return cmp.Compare(a.ID, b.ID) })
 
 	return runtimes
 }

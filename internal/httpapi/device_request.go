@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -45,7 +44,7 @@ func normalizeDeviceInput(device *models.Device) error {
 		return sql.ErrNoRows
 	}
 	if device.StorageInterval <= 0 {
-		device.StorageInterval = database.DefaultStorageIntervalSeconds
+		device.StorageInterval = models.DefaultStorageIntervalSeconds
 	}
 	if device.Enabled != 1 {
 		device.Enabled = 0

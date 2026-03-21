@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	northboundschema "github.com/gonglijing/xunjiFsu/internal/northbound/schema"
@@ -40,7 +40,7 @@ func loadNorthboundSchema(typeName string) (*northboundSchemaView, error) {
 	fields, ok := northboundschema.FieldsByType(nbType)
 	if !ok {
 		supported := append([]string(nil), northboundschema.SupportedNorthboundSchemaTypes...)
-		sort.Strings(supported)
+		slices.Sort(supported)
 		return nil, fmt.Errorf("unsupported northbound type schema: %s (supported: %s)", nbType, strings.Join(supported, ","))
 	}
 	return &northboundSchemaView{

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -108,7 +108,7 @@ func buildPandaXRPCCommands(requestID, method string, params interface{}, defaul
 		if len(keys) == 0 {
 			return
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 
 		for _, key := range keys {
 			item := &models.NorthboundCommand{

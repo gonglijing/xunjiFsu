@@ -1,12 +1,13 @@
 package adapters
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -176,7 +177,7 @@ func buildSyncValues(fields map[string]string) map[string]interface{} {
 			fieldKeys = append(fieldKeys, key)
 		}
 	}
-	sort.Strings(fieldKeys)
+	slices.Sort(fieldKeys)
 
 	values := make(map[string]interface{}, len(fieldKeys))
 	for _, key := range fieldKeys {
@@ -194,20 +195,11 @@ func syncTimestampOrNow(ts time.Time, nowMS int64) int64 {
 }
 
 func sortSyncSubDevices(subDevices []pandaXSyncSubDevice) {
-	sort.Slice(subDevices, func(i, j int) bool {
-		leftProductKey := strings.TrimSpace(subDevices[i].ProductKey)
-		rightProductKey := strings.TrimSpace(subDevices[j].ProductKey)
-		if leftProductKey != rightProductKey {
-			return leftProductKey < rightProductKey
+	slices.SortFunc(subDevices, func(a, b pandaXSyncSubDevice) int {
+		if c := cmp.Compare(strings.TrimSpace(a.ProductKey), strings.TrimSpace(b.ProductKey)); c != 0 {
+			return c
 		}
-
-		leftDeviceName := strings.TrimSpace(subDevices[i].DeviceName)
-		rightDeviceName := strings.TrimSpace(subDevices[j].DeviceName)
-		if leftDeviceName != rightDeviceName {
-			return leftDeviceName < rightDeviceName
-		}
-
-		return false
+		return cmp.Compare(strings.TrimSpace(a.DeviceName), strings.TrimSpace(b.DeviceName))
 	})
 }
 
@@ -339,7 +331,7 @@ func validateSyncSubDevices(subDevices []pandaXSyncSubDevice) error {
 		}
 	}
 	if len(emptyProducts) > 0 {
-		sort.Strings(emptyProducts)
+		slices.Sort(emptyProducts)
 		return fmt.Errorf("同步预检查失败: 产品[%s]无可用遥测字段，请先采集数据后再同步", strings.Join(emptyProducts, ","))
 	}
 

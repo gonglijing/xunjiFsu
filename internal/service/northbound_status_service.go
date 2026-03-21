@@ -1,7 +1,7 @@
 package service
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
@@ -71,7 +71,7 @@ func ListNorthboundStatusNames(configByName map[string]*models.NorthboundConfig,
 		}
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
