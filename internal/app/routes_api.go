@@ -3,7 +3,7 @@ package app
 import (
 	"net/http"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 )
 
 func registerAPIRoutes(r *http.ServeMux, apiDeps *apiRouteDeps, authManager *auth.JWTManager) {

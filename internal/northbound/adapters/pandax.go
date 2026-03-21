@@ -150,37 +150,39 @@ func (a *PandaXAdapter) SetSystemStatsProvider(provider SystemStatsProvider) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.systemStatsProvider = provider
-	slog.Info(fmt.Sprintf("[PandaX-%s] SetSystemStatsProvider: 系统属性提供者已设置", a.name))
+	slog.Info("PandaX system stats provider set", "adapter", a.name)
 }
 
 func (a *PandaXAdapter) Initialize(configStr string) error {
-	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: 开始初始化", a.name))
+	slog.Info("PandaX initialize start", "adapter", a.name)
 
 	cfg, err := parsePandaXConfig(configStr)
 	if err != nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: 配置解析失败: %v", a.name, err))
+		slog.Info("PandaX initialize config parse failed", "adapter", a.name, "error", err)
 		return err
 	}
-	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: 配置解析成功, serverUrl=%s, username=%s, gatewayMode=%v",
-		a.name, cfg.ServerURL, cfg.Username, cfg.GatewayMode))
+	slog.Info("PandaX initialize config parsed",
+		"adapter", a.name,
+		"server_url", cfg.ServerURL,
+		"username", cfg.Username,
+		"gateway_mode", cfg.GatewayMode)
 
 	_ = a.Close()
 
 	settings := buildPandaXInitSettings(a.name, cfg)
-	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: broker=%s", a.name, settings.broker))
-	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: clientId=%s", a.name, settings.clientID))
+	slog.Info("PandaX initialize MQTT settings", "adapter", a.name, "broker", settings.broker, "client_id", settings.clientID)
 
 	client, err := a.connectPandaXMQTT(settings.broker, settings.clientID, cfg.Username, cfg.Password, cfg.KeepAlive, cfg.Timeout)
 	if err != nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: MQTT 连接失败: %v", a.name, err))
+		slog.Info("PandaX initialize MQTT connect failed", "adapter", a.name, "error", err)
 		return fmt.Errorf("failed to connect MQTT: %w", err)
 	}
-	slog.Info(fmt.Sprintf("[PandaX-%s] Initialize: MQTT 连接成功", a.name))
+	slog.Info("PandaX initialize MQTT connected", "adapter", a.name)
 
 	a.applyConfig(cfg, client, settings)
 
 	a.subscribeRPCTopics(client)
 
-	slog.Info(fmt.Sprintf("PandaX adapter initialized: %s (broker=%s)", a.name, settings.broker))
+	slog.Info("PandaX adapter initialized", "adapter", a.name, "broker", settings.broker)
 	return nil
 }

@@ -49,6 +49,6 @@ func (a *MQTTAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 		Error:     "mqtt adapter is disabled (build tag no_paho_mqtt)",
 	}
 }
-func (a *MQTTAdapter) GetStats() map[string]interface{} { return a.RuntimeStatsSnapshot().ToMap() }
+func (a *MQTTAdapter) GetStats() map[string]any { return a.RuntimeStatsSnapshot().ToMap() }
 func (a *MQTTAdapter) GetLastSendTime() time.Time       { return time.Time{} }
 func (a *MQTTAdapter) PendingCommandCount() int         { return 0 }

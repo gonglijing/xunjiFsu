@@ -10,14 +10,14 @@ import (
 // NorthboundConfigBuilder 用于从数据库字段生成适配器配置JSON
 type NorthboundConfigBuilder struct {
 	northboundType string
-	config         map[string]interface{}
+	config         map[string]any
 }
 
 // NewConfigBuilder 创建配置构建器
 func NewConfigBuilder(northboundType string) *NorthboundConfigBuilder {
 	return &NorthboundConfigBuilder{
 		northboundType: nbtype.Normalize(northboundType),
-		config:         make(map[string]interface{}),
+		config:         make(map[string]any),
 	}
 }
 
@@ -126,7 +126,7 @@ func (b *NorthboundConfigBuilder) SetUploadIntervalMs(interval int) *NorthboundC
 // SetExtConfig 设置扩展配置
 func (b *NorthboundConfigBuilder) SetExtConfig(extConfig string) *NorthboundConfigBuilder {
 	if extConfig != "" {
-		var ext map[string]interface{}
+		var ext map[string]any
 		if err := json.Unmarshal([]byte(extConfig), &ext); err == nil {
 			for k, v := range ext {
 				b.config[k] = v

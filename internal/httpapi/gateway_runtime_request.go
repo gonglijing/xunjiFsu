@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 

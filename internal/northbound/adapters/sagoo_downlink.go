@@ -17,8 +17,8 @@ func (a *SagooAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
 
 	var req struct {
 		Id       string                 `json:"id"`
-		Params   map[string]interface{} `json:"params"`
-		Identity map[string]interface{} `json:"identity"`
+		Params   map[string]any `json:"params"`
+		Identity map[string]any `json:"identity"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
 		return
@@ -27,7 +27,7 @@ func (a *SagooAdapter) handlePropertySet(_ mqtt.Client, message mqtt.Message) {
 	identityPK, identityDK := parseIdentityMap(req.Identity)
 	a.enqueueCommandFromPropertySet(pk, dk, req.Id, req.Params, identityPK, identityDK)
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"code":    200,
 		"data":    req.Params,
 		"id":      req.Id,
@@ -51,8 +51,8 @@ func (a *SagooAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 
 	var req struct {
 		Id       string                 `json:"id"`
-		Params   map[string]interface{} `json:"params"`
-		Identity map[string]interface{} `json:"identity"`
+		Params   map[string]any `json:"params"`
+		Identity map[string]any `json:"identity"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
 		return
@@ -63,7 +63,7 @@ func (a *SagooAdapter) handleServiceCall(_ mqtt.Client, message mqtt.Message) {
 		a.enqueueCommandFromPropertySet(pk, dk, req.Id, req.Params, identityPK, identityDK)
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"code":    200,
 		"data":    req.Params,
 		"id":      req.Id,
@@ -87,16 +87,16 @@ func (a *SagooAdapter) handleConfigPush(_ mqtt.Client, message mqtt.Message) {
 		return
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"code": 200,
-		"data": map[string]interface{}{},
+		"data": map[string]any{},
 		"id":   req.Id,
 	}
 	respBody, _ := json.Marshal(resp)
 	_ = a.publish(sagooSysTopic(pk, dk, "thing/config/push/reply"), respBody)
 }
 
-func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]interface{}, rootIdentityPK, rootIdentityDK string) {
+func (a *SagooAdapter) enqueueCommandFromPropertySet(defaultPK, defaultDK, requestID string, params map[string]any, rootIdentityPK, rootIdentityDK string) {
 	properties, identityPK, identityDK := resolveSagooCommandProperties(params)
 	if len(properties) == 0 {
 		return

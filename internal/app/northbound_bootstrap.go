@@ -2,12 +2,12 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/collector"
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"log/slog"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"

@@ -20,7 +20,7 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 	defer a.commandMu.Unlock()
 
 	if !a.isInitialized() {
-		slog.Info(fmt.Sprintf("[PandaX-%s] PullCommands: 适配器未初始化", a.name))
+		slog.Info("PandaX pull commands before initialization", "adapter", a.name)
 		return nil, fmt.Errorf("adapter not initialized")
 	}
 
@@ -37,20 +37,20 @@ func (a *PandaXAdapter) PullCommands(limit int) ([]*models.NorthboundCommand, er
 	clear(a.commandQueue[:limit])
 	a.commandQueue = a.commandQueue[limit:]
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] PullCommands: 取出 %d 条命令", a.name, len(items)))
+	slog.Info("PandaX commands pulled", "adapter", a.name, "count", len(items))
 	return items, nil
 }
 
 func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
-	slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: 收到 RPC topic=%s", a.name, message.Topic()))
+	slog.Info("PandaX RPC request received", "adapter", a.name, "topic", message.Topic())
 
 	var req struct {
 		RequestID string      `json:"requestId"`
 		Method    string      `json:"method"`
-		Params    interface{} `json:"params"`
+		Params    any `json:"params"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: JSON 解析失败: %v", a.name, err))
+		slog.Info("PandaX RPC request JSON parse failed", "adapter", a.name, "error", err)
 		return
 	}
 
@@ -58,11 +58,11 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 		req.RequestID = parsePandaXRPCRequestID(message.Topic())
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: requestId=%s, method=%s", a.name, req.RequestID, req.Method))
+	slog.Info("PandaX RPC request parsed", "adapter", a.name, "request_id", req.RequestID, "method", req.Method)
 
 	commands := a.buildRPCCommands(req.RequestID, req.Method, req.Params)
 	if len(commands) == 0 {
-		slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: 无有效命令", a.name))
+		slog.Info("PandaX RPC request produced no commands", "adapter", a.name, "request_id", req.RequestID)
 		return
 	}
 
@@ -71,10 +71,10 @@ func (a *PandaXAdapter) handleRPCRequest(_ mqtt.Client, message mqtt.Message) {
 	queueLen := len(a.commandQueue)
 	a.commandMu.Unlock()
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] handleRPCRequest: 入队 %d 条命令, queueLen=%d", a.name, len(commands), queueLen))
+	slog.Info("PandaX RPC commands enqueued", "adapter", a.name, "count", len(commands), "queue_len", queueLen)
 }
 
-func (a *PandaXAdapter) buildRPCCommands(requestID, method string, params interface{}) []*models.NorthboundCommand {
+func (a *PandaXAdapter) buildRPCCommands(requestID, method string, params any) []*models.NorthboundCommand {
 	defaultPK, defaultDK := a.defaultIdentity()
 	commands := buildPandaXRPCCommands(requestID, method, params, defaultPK, defaultDK)
 	if len(commands) == 0 {
@@ -91,9 +91,9 @@ func (a *PandaXAdapter) buildRPCCommands(requestID, method string, params interf
 	return commands
 }
 
-func buildPandaXRPCCommands(requestID, method string, params interface{}, defaultPK, defaultDK string) []*models.NorthboundCommand {
+func buildPandaXRPCCommands(requestID, method string, params any, defaultPK, defaultDK string) []*models.NorthboundCommand {
 	out := make([]*models.NorthboundCommand, 0)
-	appendProperties := func(pk, dk string, props map[string]interface{}) {
+	appendProperties := func(pk, dk string, props map[string]any) {
 		if len(props) == 0 {
 			return
 		}
@@ -125,7 +125,7 @@ func buildPandaXRPCCommands(requestID, method string, params interface{}, defaul
 		}
 	}
 
-	obj, ok := params.(map[string]interface{})
+	obj, ok := params.(map[string]any)
 	if ok {
 		pk := pickFirstNonEmpty(pickConfigString(obj, "productKey", "product_key"), defaultPK)
 		dk := pickFirstNonEmpty(pickConfigString(obj, "deviceKey", "device_key"), defaultDK)
@@ -151,7 +151,7 @@ func buildPandaXRPCCommands(requestID, method string, params interface{}, defaul
 		}
 
 		for _, key := range []string{"sub_devices", "subDevices"} {
-			list, ok := obj[key].([]interface{})
+			list, ok := obj[key].([]any)
 			if !ok || len(list) == 0 {
 				continue
 			}
@@ -174,12 +174,12 @@ func buildPandaXRPCCommands(requestID, method string, params interface{}, defaul
 
 		if fieldName := strings.TrimSpace(pickConfigString(obj, "fieldName", "field_name")); fieldName != "" {
 			if rawValue, exists := obj["value"]; exists {
-				appendProperties(pk, dk, map[string]interface{}{fieldName: rawValue})
+				appendProperties(pk, dk, map[string]any{fieldName: rawValue})
 			}
 		}
 
 		if len(out) == 0 {
-			generic := make(map[string]interface{})
+			generic := make(map[string]any)
 			for key, value := range obj {
 				if isPandaXReservedRPCKey(key) {
 					continue

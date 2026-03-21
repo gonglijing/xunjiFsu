@@ -44,7 +44,7 @@ func parseSagooTopicIdentity(topic string) (string, string, bool) {
 	return parts[1], parts[2], true
 }
 
-func resolveSagooCommandProperties(params map[string]interface{}) (map[string]interface{}, string, string) {
+func resolveSagooCommandProperties(params map[string]any) (map[string]any, string, string) {
 	identityPK, identityDK := "", ""
 	if identity, ok := resolveMapValue(params["identity"]); ok {
 		identityPK, identityDK = parseIdentityMap(identity)
@@ -74,14 +74,14 @@ func resolveSagooCommandProperties(params map[string]interface{}) (map[string]in
 		}
 	}
 
-	directProperties := make(map[string]interface{}, len(params))
+	directProperties := make(map[string]any, len(params))
 	for key, raw := range params {
 		trimmedKey := strings.TrimSpace(key)
 		if trimmedKey == "" || isReservedCommandKeyNormalized(strings.ToLower(trimmedKey)) {
 			continue
 		}
 		switch raw.(type) {
-		case map[string]interface{}, []interface{}:
+		case map[string]any, []any:
 			continue
 		}
 		directProperties[trimmedKey] = raw
@@ -93,7 +93,7 @@ func resolveSagooCommandProperties(params map[string]interface{}) (map[string]in
 	return nil, identityPK, identityDK
 }
 
-func parseIdentityMap(identity map[string]interface{}) (string, string) {
+func parseIdentityMap(identity map[string]any) (string, string) {
 	if identity == nil {
 		return "", ""
 	}

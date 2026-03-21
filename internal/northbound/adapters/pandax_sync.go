@@ -25,7 +25,7 @@ type pandaXSyncSubDevice struct {
 	ProductKey string                 `json:"productKey"`
 	DeviceName string                 `json:"deviceName"`
 	Timestamp  int64                  `json:"ts"`
-	Values     map[string]interface{} `json:"values"`
+	Values     map[string]any `json:"values"`
 }
 
 // SyncDevices 触发子设备及遥测模型同步（仅手动触发，不在启动时自动执行）
@@ -52,7 +52,7 @@ func (a *PandaXAdapter) SyncDevices() error {
 		return fmt.Errorf("发布设备同步消息失败: %w", err)
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] SyncDevices: 已发布同步消息, topic=%s, devices=%d", a.name, topic, count))
+	slog.Info("PandaX device sync published", "adapter", a.name, "topic", topic, "devices", count)
 	return nil
 }
 
@@ -133,7 +133,11 @@ func (a *PandaXAdapter) backfillResolvedProductKey(dev *models.Device, productKe
 	}
 
 	if err := database.UpdateDeviceProductKey(dev.ID, resolvedProductKey); err != nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] SyncDevices: 回写设备 product_key 失败: device_id=%d product_key=%s err=%v", a.name, dev.ID, resolvedProductKey, err))
+		slog.Info("PandaX device sync product key backfill failed",
+			"adapter", a.name,
+			"device_id", dev.ID,
+			"product_key", resolvedProductKey,
+			"error", err)
 		return
 	}
 	dev.ProductKey = resolvedProductKey
@@ -169,7 +173,7 @@ func buildSyncCollectData(
 	return collectData
 }
 
-func buildSyncValues(fields map[string]string) map[string]interface{} {
+func buildSyncValues(fields map[string]string) map[string]any {
 	fieldKeys := make([]string, 0, len(fields))
 	for key := range fields {
 		key = strings.TrimSpace(key)
@@ -179,7 +183,7 @@ func buildSyncValues(fields map[string]string) map[string]interface{} {
 	}
 	slices.Sort(fieldKeys)
 
-	values := make(map[string]interface{}, len(fieldKeys))
+	values := make(map[string]any, len(fieldKeys))
 	for _, key := range fieldKeys {
 		values[key] = convertFieldValue(fields[key])
 	}
@@ -233,7 +237,7 @@ func resolveSyncProductKeyByDeviceID(devices []*models.Device) map[int64]string 
 
 	drivers, err := database.ListDrivers()
 	if err != nil {
-		slog.Info(fmt.Sprintf("resolveSyncProductKeyByDeviceID: 加载驱动列表失败: %v", err))
+		slog.Info("PandaX resolve sync product key failed to load drivers", "error", err)
 		return result
 	}
 

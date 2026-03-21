@@ -1,12 +1,13 @@
 package app
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/gonglijing/xunjiFsu/internal/platform/logger"
 )
 
 func loadOrGenerateSecretKey() []byte {
@@ -57,8 +58,7 @@ func loadSecretKeyFromFile(path string) ([]byte, bool) {
 func generateSessionSecretKey() []byte {
 	newKey := make([]byte, 32)
 	if _, err := rand.Read(newKey); err != nil {
-		slog.Log(context.Background(), slog.Level(12), "Failed to generate secret key", "error", err)
-		os.Exit(1)
+		logger.Fatal("Failed to generate secret key", err)
 	}
 	return newKey
 }

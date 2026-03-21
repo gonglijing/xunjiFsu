@@ -76,24 +76,24 @@ func TestIThingsBuildRealtimePublish(t *testing.T) {
 		t.Fatalf("topic=%q", topic)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
-	subDevices, ok := decoded["subDevices"].([]interface{})
+	subDevices, ok := decoded["subDevices"].([]any)
 	if !ok || len(subDevices) != 1 {
 		t.Fatalf("subDevices=%v", decoded["subDevices"])
 	}
-	subDevice, _ := subDevices[0].(map[string]interface{})
+	subDevice, _ := subDevices[0].(map[string]any)
 	if subDevice["deviceName"] != "dk-1" {
 		t.Fatalf("deviceName=%v, want=dk-1", subDevice["deviceName"])
 	}
-	properties, ok := subDevice["properties"].([]interface{})
+	properties, ok := subDevice["properties"].([]any)
 	if !ok || len(properties) != 1 {
 		t.Fatalf("properties=%v", subDevice["properties"])
 	}
-	item, _ := properties[0].(map[string]interface{})
-	params, ok := item["params"].(map[string]interface{})
+	item, _ := properties[0].(map[string]any)
+	params, ok := item["params"].(map[string]any)
 	if !ok {
 		t.Fatalf("params=%v", item["params"])
 	}
@@ -131,11 +131,11 @@ func TestIThingsBuildAlarmPublish(t *testing.T) {
 		t.Fatalf("topic=%q", topic)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
-	params, ok := decoded["params"].(map[string]interface{})
+	params, ok := decoded["params"].(map[string]any)
 	if !ok {
 		t.Fatalf("params=%v", decoded["params"])
 	}

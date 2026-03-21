@@ -2,7 +2,7 @@ package app
 
 import (
 	"github.com/gonglijing/xunjiFsu/internal/collector"
-	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )

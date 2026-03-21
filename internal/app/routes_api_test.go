@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 )
 
 func TestRegisterAPIRoutes_Patterns(t *testing.T) {

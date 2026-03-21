@@ -238,7 +238,7 @@ func (a *SagooAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	}
 }
 
-func (a *SagooAdapter) GetStats() map[string]interface{} {
+func (a *SagooAdapter) GetStats() map[string]any {
 	return a.RuntimeStatsSnapshot().ToMap()
 }
 

@@ -9,7 +9,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
-func stringifyParamValue(value interface{}) string {
+func stringifyParamValue(value any) string {
 	switch v := value.(type) {
 	case string:
 		return v
@@ -52,7 +52,7 @@ func normalizeExecuteFunction(function string) (requestFunc string, pluginFunc s
 	return f, f, f
 }
 
-func buildExecuteDriverConfig(params map[string]interface{}, device *models.Device, configFunc string) (map[string]string, error) {
+func buildExecuteDriverConfig(params map[string]any, device *models.Device, configFunc string) (map[string]string, error) {
 	config := make(map[string]string, len(params)+2)
 	for key, value := range params {
 		config[key] = stringifyParamValue(value)

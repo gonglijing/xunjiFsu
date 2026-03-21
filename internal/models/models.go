@@ -201,7 +201,7 @@ type CollectData struct {
 
 type CollectPoint struct {
 	FieldName string      `json:"field_name"`
-	Value     interface{} `json:"value"`
+	Value     any `json:"value"`
 	RW        string      `json:"rw,omitempty"`
 }
 
@@ -268,7 +268,7 @@ func isASCIIModelSpace(c byte) bool {
 	}
 }
 
-func CollectPointValueString(value interface{}) string {
+func CollectPointValueString(value any) string {
 	switch v := value.(type) {
 	case nil:
 		return ""
@@ -382,7 +382,7 @@ type NorthboundCommandResult struct {
 
 // Event 事件数据
 type Event struct {
-	Value map[string]interface{} `json:"value"`
+	Value map[string]any `json:"value"`
 	Time  int64                  `json:"time"`
 }
 

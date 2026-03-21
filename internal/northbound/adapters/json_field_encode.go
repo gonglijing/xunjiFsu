@@ -20,30 +20,30 @@ type jsonSingleRawField struct {
 	Value string
 }
 
-func resolveMapByEitherKey(values map[string]interface{}, primaryKey, secondaryKey string) (map[string]interface{}, bool) {
+func resolveMapByEitherKey(values map[string]any, primaryKey, secondaryKey string) (map[string]any, bool) {
 	if out, ok := resolveMapValue(values[primaryKey]); ok {
 		return out, true
 	}
 	return resolveMapValue(values[secondaryKey])
 }
 
-func resolveInterfaceSliceByEitherKey(values map[string]interface{}, primaryKey, secondaryKey string) ([]interface{}, bool) {
-	if list, ok := values[primaryKey].([]interface{}); ok {
+func resolveInterfaceSliceByEitherKey(values map[string]any, primaryKey, secondaryKey string) ([]any, bool) {
+	if list, ok := values[primaryKey].([]any); ok {
 		return list, true
 	}
-	list, ok := values[secondaryKey].([]interface{})
+	list, ok := values[secondaryKey].([]any)
 	return list, ok
 }
 
-func resolveMapValue(value interface{}) (map[string]interface{}, bool) {
-	out, ok := value.(map[string]interface{})
+func resolveMapValue(value any) (map[string]any, bool) {
+	out, ok := value.(map[string]any)
 	if !ok || out == nil {
 		return nil, false
 	}
 	return out, true
 }
 
-func stringifyAny(value interface{}) string {
+func stringifyAny(value any) string {
 	switch v := value.(type) {
 	case string:
 		return v
@@ -78,7 +78,7 @@ func stringifyAny(value interface{}) string {
 	}
 }
 
-func convertFieldValue(value string) interface{} {
+func convertFieldValue(value string) any {
 	v := strings.TrimSpace(value)
 	if v == "" {
 		return ""

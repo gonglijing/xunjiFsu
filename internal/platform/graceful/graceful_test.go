@@ -41,7 +41,6 @@ func TestGracefulShutdown_AddAndRunFuncs(t *testing.T) {
 		return nil
 	})
 
-	// 直接调用 Shutdown，验证所有函数被执行一次
 	g.Shutdown()
 	g.Shutdown() // 再次调用也不应重复执行（由 once 保证）
 

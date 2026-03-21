@@ -3,7 +3,7 @@ package adapters
 import "testing"
 
 func TestPickConfigString(t *testing.T) {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"empty": "   ",
 		"name":  "demo",
 		"num":   123,
@@ -18,7 +18,7 @@ func TestPickConfigString(t *testing.T) {
 }
 
 func TestPickConfigInt(t *testing.T) {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"int":    12,
 		"float":  15.8,
 		"string": "42",
@@ -39,7 +39,7 @@ func TestPickConfigInt(t *testing.T) {
 }
 
 func TestPickConfigBool(t *testing.T) {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"trueStr":  "true",
 		"falseStr": "no",
 		"num":      1,

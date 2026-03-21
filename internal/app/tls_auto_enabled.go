@@ -4,11 +4,12 @@ package app
 
 import (
 	"crypto/tls"
+	"log/slog"
 	"net/http"
 
-	"github.com/gonglijing/xunjiFsu/internal/config"
-	"log/slog"
 	"golang.org/x/crypto/acme/autocert"
+
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func listenAndServeWithAutoCert(server *http.Server, cfg *config.Config) error {

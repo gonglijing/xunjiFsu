@@ -1,16 +1,16 @@
 package httpapi
 
 import (
-	authpkg "github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
 type UserAPI struct {
 	service     *service.UserService
-	authManager *authpkg.JWTManager
+	authManager *auth.JWTManager
 }
 
-func NewUserAPI(userService *service.UserService, authManager *authpkg.JWTManager) *UserAPI {
+func NewUserAPI(userService *service.UserService, authManager *auth.JWTManager) *UserAPI {
 	return &UserAPI{service: userService, authManager: authManager}
 }
 

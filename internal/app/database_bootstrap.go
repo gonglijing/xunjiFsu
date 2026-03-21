@@ -2,10 +2,10 @@ package app
 
 import (
 	"fmt"
-
-	"github.com/gonglijing/xunjiFsu/internal/config"
-	"github.com/gonglijing/xunjiFsu/internal/database"
 	"log/slog"
+
+	"github.com/gonglijing/xunjiFsu/internal/database"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func initDatabases(cfg *config.Config) error {

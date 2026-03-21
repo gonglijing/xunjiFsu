@@ -14,7 +14,7 @@ type driverVersionPayload struct {
 	Success    bool                   `json:"success"`
 	Version    string                 `json:"version"`
 	ProductKey string                 `json:"productKey"`
-	Data       map[string]interface{} `json:"data"`
+	Data       map[string]any `json:"data"`
 	Error      string                 `json:"error"`
 }
 

@@ -5,7 +5,7 @@ import "testing"
 func TestFormatDriverValue(t *testing.T) {
 	cases := []struct {
 		name  string
-		input interface{}
+		input any
 		want  string
 	}{
 		{name: "nil", input: nil, want: ""},

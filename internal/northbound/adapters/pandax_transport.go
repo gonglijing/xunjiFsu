@@ -18,7 +18,7 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 	a.mu.RUnlock()
 
 	if client == nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] publish: MQTT client 为 nil", a.name))
+		slog.Info("PandaX publish skipped nil MQTT client", "adapter", a.name)
 		a.markDisconnected()
 		return fmt.Errorf("mqtt client is nil")
 	}
@@ -28,16 +28,16 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 		return fmt.Errorf("mqtt client not connected")
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] publish: topic=%s, size=%d", a.name, topic, len(payload)))
+	slog.Info("PandaX publish start", "adapter", a.name, "topic", topic, "size", len(payload))
 
 	token := client.Publish(topic, qos, retain, payload)
 	if !token.WaitTimeout(timeout) {
-		slog.Info(fmt.Sprintf("[PandaX-%s] publish: 发布超时", a.name))
+		slog.Info("PandaX publish timeout", "adapter", a.name, "topic", topic)
 		a.markDisconnected()
 		return fmt.Errorf("mqtt publish timeout")
 	}
 	if err := token.Error(); err != nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] publish: 发布失败: %v", a.name, err))
+		slog.Info("PandaX publish failed", "adapter", a.name, "topic", topic, "error", err)
 		a.markDisconnected()
 		return err
 	}
@@ -47,7 +47,7 @@ func (a *PandaXAdapter) publish(topic string, payload []byte) error {
 	a.connected = true
 	a.mu.Unlock()
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] publish: 发送成功", a.name))
+	slog.Info("PandaX publish succeeded", "adapter", a.name, "topic", topic)
 	return nil
 }
 
@@ -74,14 +74,14 @@ func (a *PandaXAdapter) connectPandaXMQTT(broker, clientID, username, password s
 
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		if err != nil {
-			slog.Info(fmt.Sprintf("[PandaX-%s] MQTT connection lost: %v", a.name, err))
+			slog.Info("PandaX MQTT connection lost", "adapter", a.name, "error", err)
 		} else {
-			slog.Info(fmt.Sprintf("[PandaX-%s] MQTT connection lost", a.name))
+			slog.Info("PandaX MQTT connection lost", "adapter", a.name)
 		}
 		a.markDisconnected()
 	}
 	opts.OnConnect = func(_ mqtt.Client) {
-		slog.Info(fmt.Sprintf("[PandaX-%s] MQTT connected: %s", a.name, broker))
+		slog.Info("PandaX MQTT connected", "adapter", a.name, "broker", broker)
 		a.mu.Lock()
 		a.connected = true
 		a.mu.Unlock()
@@ -183,18 +183,18 @@ func (a *PandaXAdapter) subscribeRPCTopics(client mqtt.Client) {
 		}
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] subscribeRPCTopics: 开始订阅 topics=%v", a.name, topics))
+	slog.Info("PandaX subscribe RPC topics start", "adapter", a.name, "topics", topics)
 
 	for topic := range topics {
 		token := client.Subscribe(topic, qos, a.handleRPCRequest)
 		if !token.WaitTimeout(timeout) {
-			slog.Info(fmt.Sprintf("[PandaX-%s] subscribeRPCTopics: 订阅超时 topic=%s", a.name, topic))
+			slog.Info("PandaX subscribe RPC topic timeout", "adapter", a.name, "topic", topic)
 			continue
 		}
 		if err := token.Error(); err != nil {
-			slog.Info(fmt.Sprintf("[PandaX-%s] subscribeRPCTopics: 订阅失败 topic=%s: %v", a.name, topic, err))
+			slog.Info("PandaX subscribe RPC topic failed", "adapter", a.name, "topic", topic, "error", err)
 		} else {
-			slog.Info(fmt.Sprintf("[PandaX-%s] subscribeRPCTopics: 订阅成功 topic=%s", a.name, topic))
+			slog.Info("PandaX subscribe RPC topic succeeded", "adapter", a.name, "topic", topic)
 		}
 	}
 }

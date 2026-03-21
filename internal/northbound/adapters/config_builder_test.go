@@ -69,17 +69,17 @@ func TestBuildConfigFromModel_IThingsIncludesIdentityFields(t *testing.T) {
 	assertConfigValue(t, decoded, "uploadIntervalMs", float64(6000))
 }
 
-func decodeConfigJSON(t *testing.T, raw string) map[string]interface{} {
+func decodeConfigJSON(t *testing.T, raw string) map[string]any {
 	t.Helper()
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 	return decoded
 }
 
-func assertConfigValue(t *testing.T, decoded map[string]interface{}, key string, want interface{}) {
+func assertConfigValue(t *testing.T, decoded map[string]any, key string, want any) {
 	t.Helper()
 
 	if got := decoded[key]; got != want {

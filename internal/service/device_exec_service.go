@@ -76,13 +76,13 @@ func (s *DeviceExecService) ExecuteDriverFunction(driverID int64, pluginFunc str
 	return s.driverManager.ExecuteDriver(driverID, pluginFunc, ctx)
 }
 
-func ParseDriverWritables(configSchema string) ([]interface{}, error) {
+func ParseDriverWritables(configSchema string) ([]any, error) {
 	if configSchema == "" {
 		return nil, nil
 	}
 
 	var cfg struct {
-		Writable []interface{} `json:"writable"`
+		Writable []any `json:"writable"`
 	}
 	if err := json.Unmarshal([]byte(configSchema), &cfg); err != nil {
 		return nil, err

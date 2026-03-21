@@ -30,8 +30,8 @@ func TestParseDriverWritables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseDriverWritables error: %v", err)
 	}
-	want := []interface{}{
-		map[string]interface{}{"field": "setpoint"},
+	want := []any{
+		map[string]any{"field": "setpoint"},
 		"switch",
 	}
 	if !reflect.DeepEqual(writables, want) {

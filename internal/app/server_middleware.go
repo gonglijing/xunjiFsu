@@ -1,13 +1,12 @@
 package app
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 	"github.com/gonglijing/xunjiFsu/internal/httpapi"
 )
 
@@ -35,7 +34,12 @@ func requestLoggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(rw, r)
-		slog.Info(fmt.Sprintf("%s %s %d %d %v", r.Method, r.URL.RequestURI(), rw.statusCode, rw.bytes, time.Since(start)))
+		slog.Info("HTTP request completed",
+			"method", r.Method,
+			"path", r.URL.RequestURI(),
+			"status", rw.statusCode,
+			"bytes", rw.bytes,
+			"duration", time.Since(start))
 	})
 }
 

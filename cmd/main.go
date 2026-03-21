@@ -5,8 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/gonglijing/xunjiFsu/internal/app"
-	"github.com/gonglijing/xunjiFsu/internal/config"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/logger"
 )
 
 func main() {

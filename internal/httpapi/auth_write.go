@@ -3,7 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 )
 
 // AuthHandler 认证与页面处理器

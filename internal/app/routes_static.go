@@ -1,13 +1,13 @@
 package app
 
 import (
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
 	"github.com/gonglijing/xunjiFsu/internal/httpapi"
-	"log/slog"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 )
 
 func buildRouter(h *httpapi.AuthHandler, apiDeps *apiRouteDeps, authManager *auth.JWTManager) *http.ServeMux {

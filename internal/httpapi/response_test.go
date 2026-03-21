@@ -30,7 +30,7 @@ func TestParseFormValue_NumberAndBool(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  interface{}
+		want  any
 	}{
 		{name: "int", input: "42", want: int64(42)},
 		{name: "float", input: "3.14", want: 3.14},

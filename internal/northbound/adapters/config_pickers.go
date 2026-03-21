@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func pickConfigString(data map[string]interface{}, keys ...string) string {
+func pickConfigString(data map[string]any, keys ...string) string {
 	for _, key := range keys {
 		value, ok := data[key]
 		if !ok || value == nil {
@@ -27,7 +27,7 @@ func pickConfigString(data map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-func pickConfigInt(data map[string]interface{}, fallback int, keys ...string) int {
+func pickConfigInt(data map[string]any, fallback int, keys ...string) int {
 	for _, key := range keys {
 		value, ok := data[key]
 		if !ok || value == nil {
@@ -62,7 +62,7 @@ func pickConfigInt(data map[string]interface{}, fallback int, keys ...string) in
 	return fallback
 }
 
-func pickConfigBool(data map[string]interface{}, fallback bool, keys ...string) bool {
+func pickConfigBool(data map[string]any, fallback bool, keys ...string) bool {
 	for _, key := range keys {
 		value, ok := data[key]
 		if !ok || value == nil {

@@ -609,7 +609,7 @@ func canReuseResultData(data map[string]string) bool {
 	return true
 }
 
-func formatDriverValue(value interface{}) string {
+func formatDriverValue(value any) string {
 	switch v := value.(type) {
 	case nil:
 		return ""

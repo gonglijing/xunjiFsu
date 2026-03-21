@@ -17,7 +17,7 @@ func TestJSONFieldValueMap_MarshalJSON(t *testing.T) {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
@@ -58,7 +58,7 @@ func TestJSONSingleConvertedField_MarshalJSON(t *testing.T) {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
@@ -76,7 +76,7 @@ func TestJSONSingleRawField_MarshalJSON(t *testing.T) {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
@@ -86,9 +86,9 @@ func TestJSONSingleRawField_MarshalJSON(t *testing.T) {
 }
 
 func TestResolveMapByEitherKey_PrefersPrimaryKey(t *testing.T) {
-	values := map[string]interface{}{
-		"primary": map[string]interface{}{"name": "primary"},
-		"backup":  map[string]interface{}{"name": "backup"},
+	values := map[string]any{
+		"primary": map[string]any{"name": "primary"},
+		"backup":  map[string]any{"name": "backup"},
 	}
 
 	got, ok := resolveMapByEitherKey(values, "primary", "backup")
@@ -101,8 +101,8 @@ func TestResolveMapByEitherKey_PrefersPrimaryKey(t *testing.T) {
 }
 
 func TestResolveInterfaceSliceByEitherKey_UsesFallbackKey(t *testing.T) {
-	values := map[string]interface{}{
-		"backup": []interface{}{"first", "second"},
+	values := map[string]any{
+		"backup": []any{"first", "second"},
 	}
 
 	got, ok := resolveInterfaceSliceByEitherKey(values, "primary", "backup")
@@ -121,10 +121,10 @@ func TestPickFirstNonEmpty_ReturnsFirstTrimmedValue(t *testing.T) {
 }
 
 func TestResolveMapValue(t *testing.T) {
-	if got, ok := resolveMapValue(map[string]interface{}{"name": "demo"}); !ok || got["name"] != "demo" {
+	if got, ok := resolveMapValue(map[string]any{"name": "demo"}); !ok || got["name"] != "demo" {
 		t.Fatalf("resolveMapValue()=%v, %v, want map with name=demo", got, ok)
 	}
-	if _, ok := resolveMapValue([]interface{}{"demo"}); ok {
+	if _, ok := resolveMapValue([]any{"demo"}); ok {
 		t.Fatal("resolveMapValue() ok=true for slice input, want false")
 	}
 }

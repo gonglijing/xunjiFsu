@@ -31,7 +31,7 @@ var stringSetPool = sync.Pool{
 
 var pointValueMapPool = sync.Pool{
 	New: func() any {
-		return make(map[string]interface{})
+		return make(map[string]any)
 	},
 }
 
@@ -77,11 +77,11 @@ func releaseStringSet(m map[string]struct{}) {
 	stringSetPool.Put(m)
 }
 
-func acquirePointValueMap() map[string]interface{} {
-	return pointValueMapPool.Get().(map[string]interface{})
+func acquirePointValueMap() map[string]any {
+	return pointValueMapPool.Get().(map[string]any)
 }
 
-func releasePointValueMap(m map[string]interface{}) {
+func releasePointValueMap(m map[string]any) {
 	if m == nil {
 		return
 	}
@@ -97,8 +97,8 @@ type numericFieldLookup struct {
 	normalized map[string]string
 	parsed     map[string]float64
 	invalid    map[string]struct{}
-	pointRaw   map[string]interface{}
-	pointNorm  map[string]interface{}
+	pointRaw   map[string]any
+	pointNorm  map[string]any
 }
 
 func newNumericFieldLookup(fields map[string]string, points []models.CollectPoint) *numericFieldLookup {
@@ -285,7 +285,7 @@ func (l *numericFieldLookup) getPointRawValue(field, normalized string) (cacheKe
 	return normalized, models.CollectPointValueString(raw), true
 }
 
-func parseNumericPointValue(value interface{}) (float64, bool, bool) {
+func parseNumericPointValue(value any) (float64, bool, bool) {
 	switch v := value.(type) {
 	case float64:
 		return v, true, false

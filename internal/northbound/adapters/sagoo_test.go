@@ -10,7 +10,7 @@ import (
 )
 
 func TestResolveSagooCommandProperties_DirectParams(t *testing.T) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"temperature": 25.3,
 		"enabled":     true,
 	}
@@ -31,8 +31,8 @@ func TestResolveSagooCommandProperties_DirectParams(t *testing.T) {
 }
 
 func TestResolveSagooCommandProperties_DirectParamsWithRootIdentity(t *testing.T) {
-	params := map[string]interface{}{
-		"identity": map[string]interface{}{
+	params := map[string]any{
+		"identity": map[string]any{
 			"productKey": "sub-pk",
 			"deviceKey":  "sub-dk",
 		},
@@ -56,7 +56,7 @@ func TestEnqueueCommandFromPropertySet_UseRootIdentity(t *testing.T) {
 		"gw-pk",
 		"gw-dk",
 		"req-1",
-		map[string]interface{}{"setPoint": 42},
+		map[string]any{"setPoint": 42},
 		"sub-pk",
 		"sub-dk",
 	)
@@ -81,14 +81,14 @@ func TestEnqueueCommandFromPropertySet_SubDevicesCompatible(t *testing.T) {
 		"gw-pk",
 		"gw-dk",
 		"req-2",
-		map[string]interface{}{
-			"subDevices": []interface{}{
-				map[string]interface{}{
-					"identity": map[string]interface{}{
+		map[string]any{
+			"subDevices": []any{
+				map[string]any{
+					"identity": map[string]any{
 						"productKey": "sub-pk-2",
 						"deviceKey":  "sub-dk-2",
 					},
-					"properties": map[string]interface{}{
+					"properties": map[string]any{
 						"mode": "auto",
 					},
 				},
@@ -111,7 +111,7 @@ func TestEnqueueCommandFromPropertySet_SubDevicesCompatible(t *testing.T) {
 }
 
 func TestParseIdentityMap(t *testing.T) {
-	pk, dk := parseIdentityMap(map[string]interface{}{
+	pk, dk := parseIdentityMap(map[string]any{
 		"productKey": " pk ",
 		"deviceKey":  " dk ",
 	})
@@ -267,27 +267,27 @@ func TestSagooBuildMessage(t *testing.T) {
 		},
 	})
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
-	params, ok := decoded["params"].(map[string]interface{})
+	params, ok := decoded["params"].(map[string]any)
 	if !ok {
 		t.Fatalf("params=%v", decoded["params"])
 	}
-	subDevices, ok := params["subDevices"].([]interface{})
+	subDevices, ok := params["subDevices"].([]any)
 	if !ok || len(subDevices) != 1 {
 		t.Fatalf("subDevices=%v", params["subDevices"])
 	}
-	subDevice, _ := subDevices[0].(map[string]interface{})
-	identity, ok := subDevice["identity"].(map[string]interface{})
+	subDevice, _ := subDevices[0].(map[string]any)
+	identity, ok := subDevice["identity"].(map[string]any)
 	if !ok {
 		t.Fatalf("identity=%v", subDevice["identity"])
 	}
 	if identity["productKey"] != "subpk" || identity["deviceKey"] != "subdk" {
 		t.Fatalf("identity=%v", identity)
 	}
-	properties, ok := subDevice["properties"].(map[string]interface{})
+	properties, ok := subDevice["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("properties=%v", subDevice["properties"])
 	}
@@ -369,13 +369,13 @@ func TestSagooSysTopic(t *testing.T) {
 }
 
 func TestResolveSagooCommandProperties_SubDeviceSnakeCase(t *testing.T) {
-	params := map[string]interface{}{
-		"sub_device": map[string]interface{}{
-			"identity": map[string]interface{}{
+	params := map[string]any{
+		"sub_device": map[string]any{
+			"identity": map[string]any{
 				"productKey": "sub-pk-snake",
 				"deviceKey":  "sub-dk-snake",
 			},
-			"properties": map[string]interface{}{
+			"properties": map[string]any{
 				"switch": 1,
 			},
 		},

@@ -12,7 +12,7 @@ func TestNormalizeWriteParams_ExplicitFieldAndValue(t *testing.T) {
 		"field_name": "temperature",
 		"value":      "26.5",
 	}
-	params := map[string]interface{}{
+	params := map[string]any{
 		"temperature": 26.5,
 	}
 
@@ -30,7 +30,7 @@ func TestNormalizeWriteParams_ExplicitFieldAndValue(t *testing.T) {
 
 func TestNormalizeWriteParams_FromSingleParam(t *testing.T) {
 	config := map[string]string{}
-	params := map[string]interface{}{
+	params := map[string]any{
 		"setpoint": 30,
 	}
 
@@ -48,13 +48,13 @@ func TestNormalizeWriteParams_FromSingleParam(t *testing.T) {
 
 func TestNormalizeWriteParams_FromSubDeviceProperties(t *testing.T) {
 	config := map[string]string{}
-	params := map[string]interface{}{
-		"subDevice": map[string]interface{}{
-			"identity": map[string]interface{}{
+	params := map[string]any{
+		"subDevice": map[string]any{
+			"identity": map[string]any{
 				"productKey": "pk-1",
 				"deviceKey":  "dk-1",
 			},
-			"properties": map[string]interface{}{
+			"properties": map[string]any{
 				"humidity": 55.2,
 			},
 		},
@@ -74,7 +74,7 @@ func TestNormalizeWriteParams_FromSubDeviceProperties(t *testing.T) {
 
 func TestNormalizeWriteParams_Ambiguous(t *testing.T) {
 	config := map[string]string{}
-	params := map[string]interface{}{
+	params := map[string]any{
 		"temperature": 25,
 		"humidity":    60,
 	}
@@ -93,7 +93,7 @@ func TestNormalizeWriteParams_RejectsMultipleFieldsEvenWithExplicitFieldName(t *
 		"field_name": "temperature",
 		"value":      "25",
 	}
-	params := map[string]interface{}{
+	params := map[string]any{
 		"temperature": 25,
 		"humidity":    60,
 	}
@@ -109,13 +109,13 @@ func TestNormalizeWriteParams_RejectsMultipleFieldsEvenWithExplicitFieldName(t *
 
 func TestNormalizeWriteParams_RejectsMultipleSubDevices(t *testing.T) {
 	config := map[string]string{}
-	params := map[string]interface{}{
-		"subDevices": []interface{}{
-			map[string]interface{}{
-				"properties": map[string]interface{}{"temperature": 25},
+	params := map[string]any{
+		"subDevices": []any{
+			map[string]any{
+				"properties": map[string]any{"temperature": 25},
 			},
-			map[string]interface{}{
-				"properties": map[string]interface{}{"humidity": 60},
+			map[string]any{
+				"properties": map[string]any{"humidity": 60},
 			},
 		},
 	}
@@ -133,8 +133,8 @@ func TestNormalizeWriteParams_RejectsCompositeValue(t *testing.T) {
 	config := map[string]string{
 		"field_name": "temperature",
 	}
-	params := map[string]interface{}{
-		"value": []interface{}{25},
+	params := map[string]any{
+		"value": []any{25},
 	}
 
 	err := normalizeWriteParams(config, params)
@@ -147,10 +147,10 @@ func TestNormalizeWriteParams_RejectsCompositeValue(t *testing.T) {
 }
 
 func TestResolveWriteProperties_FromSubDeviceList(t *testing.T) {
-	params := map[string]interface{}{
-		"subDevices": []interface{}{
-			map[string]interface{}{
-				"properties": map[string]interface{}{
+	params := map[string]any{
+		"subDevices": []any{
+			map[string]any{
+				"properties": map[string]any{
 					"temperature": 25,
 				},
 			},
@@ -187,7 +187,7 @@ func TestEnrichExecuteIdentity_UsesDeviceIdentity(t *testing.T) {
 }
 
 func TestBuildExecuteDriverConfig_Write(t *testing.T) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"setpoint": 42,
 	}
 	device := &models.Device{
@@ -222,7 +222,7 @@ func TestBuildExecuteDriverConfig_Write(t *testing.T) {
 }
 
 func TestBuildExecuteDriverConfig_WriteWithoutIdentityDoesNotFallbackGateway(t *testing.T) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"setpoint": 42,
 	}
 	device := &models.Device{
@@ -274,10 +274,10 @@ func TestBuildExecuteDriverContext(t *testing.T) {
 }
 
 func TestResolveMapValue(t *testing.T) {
-	if got, ok := resolveMapValue(map[string]interface{}{"k": "v"}); !ok || got["k"] != "v" {
+	if got, ok := resolveMapValue(map[string]any{"k": "v"}); !ok || got["k"] != "v" {
 		t.Fatalf("resolveMapValue() = %#v, %v; want map with k=v", got, ok)
 	}
-	if _, ok := resolveMapValue([]interface{}{"v"}); ok {
+	if _, ok := resolveMapValue([]any{"v"}); ok {
 		t.Fatal("resolveMapValue() ok=true for slice input, want false")
 	}
 }

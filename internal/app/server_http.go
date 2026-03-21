@@ -2,10 +2,10 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
-	"github.com/gonglijing/xunjiFsu/internal/config"
-	"log/slog"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 type httpServerMode string

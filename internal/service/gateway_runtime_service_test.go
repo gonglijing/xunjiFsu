@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func TestParseOptionalDuration(t *testing.T) {

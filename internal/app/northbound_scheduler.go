@@ -1,10 +1,10 @@
 package app
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"log/slog"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )

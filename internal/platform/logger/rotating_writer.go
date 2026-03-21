@@ -128,7 +128,6 @@ func (w *rotatingWriter) rotateLocked() error {
 		w.file = nil
 	}
 
-	// rotate backups
 	for i := w.maxBackups - 1; i >= 1; i-- {
 		oldPath := fmt.Sprintf("%s.%d", w.path, i)
 		newPath := fmt.Sprintf("%s.%d", w.path, i+1)
@@ -153,7 +152,7 @@ func (w *rotatingWriter) Close() error {
 	return nil
 }
 
-// InitFileOutput 将日志输出到文件并启用滚动
+// InitFileOutput 将日志输出到文件并启用滚动。
 func InitFileOutput(path string, maxSizeBytes int64) (io.Writer, error) {
 	if path == "" {
 		path = filepath.Join("logs", "sagoo.log")

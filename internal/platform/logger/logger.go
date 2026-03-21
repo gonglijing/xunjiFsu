@@ -1,6 +1,4 @@
-// Package logger 提供基于 log/slog 的结构化日志，保持已有调用方 API 不变。
-//
-// §8.2: 日志统一使用 log/slog，不再新增其他日志框架。
+// Package logger 提供基于 log/slog 的结构化日志，作为 platform 层日志入口。
 package logger
 
 import (
@@ -33,10 +31,10 @@ var LevelNames = map[LogLevel]string{
 }
 
 var (
-	levelVar    slog.LevelVar
-	useJSON     bool
-	output      io.Writer = os.Stdout
-	exitFunc              = os.Exit
+	levelVar slog.LevelVar
+	useJSON  bool
+	output   io.Writer = os.Stdout
+	exitFunc           = os.Exit
 )
 
 func init() {
@@ -108,22 +106,22 @@ func SetOutput(writer io.Writer) {
 }
 
 // Debug 输出调试日志。keysAndValues 为交替的 key-value 对。
-func Debug(msg string, keysAndValues ...interface{}) {
+func Debug(msg string, keysAndValues ...any) {
 	slog.Debug(msg, keysAndValues...)
 }
 
 // Info 输出信息日志。
-func Info(msg string, keysAndValues ...interface{}) {
+func Info(msg string, keysAndValues ...any) {
 	slog.Info(msg, keysAndValues...)
 }
 
 // Warn 输出警告日志。
-func Warn(msg string, keysAndValues ...interface{}) {
+func Warn(msg string, keysAndValues ...any) {
 	slog.Warn(msg, keysAndValues...)
 }
 
 // Error 输出错误日志。err 参数会作为 "error" 属性输出。
-func Error(msg string, err error, keysAndValues ...interface{}) {
+func Error(msg string, err error, keysAndValues ...any) {
 	if err != nil {
 		args := make([]any, 0, 2+len(keysAndValues))
 		args = append(args, "error", err)
@@ -145,6 +143,10 @@ func Fatal(msg string, err error) {
 }
 
 // Printf 兼容 log.Printf 风格，输出为 INFO 级别。
-func Printf(format string, v ...interface{}) {
-	slog.Info(fmt.Sprintf(format, v...))
+func Printf(format string, v ...any) {
+	msg := format
+	if len(v) != 0 {
+		msg = fmt.Sprintf(format, v...)
+	}
+	slog.Log(context.Background(), INFO, msg)
 }

@@ -2,19 +2,20 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"path/filepath"
 	"time"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
 	"github.com/gonglijing/xunjiFsu/internal/collector"
-	"github.com/gonglijing/xunjiFsu/internal/config"
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
-	"github.com/gonglijing/xunjiFsu/internal/graceful"
 	"github.com/gonglijing/xunjiFsu/internal/httpapi"
-	"log/slog"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/graceful"
 )
 
 const retentionCleanupInterval = 24 * time.Hour
@@ -106,7 +107,7 @@ func startSystemStatsCollector(northboundMgr *northbound.NorthboundManager) *col
 func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error {
 	drivers, err := database.ListDrivers()
 	if err != nil {
-		return errDriverQuery(err)
+		return fmt.Errorf("failed to get drivers: %w", err)
 	}
 
 	loaded := 0

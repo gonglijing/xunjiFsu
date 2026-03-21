@@ -143,16 +143,16 @@ func TestXunjiBuildBatchRealtimePayload(t *testing.T) {
 		},
 	})
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-	item1, ok := decoded["dk-1"].(map[string]interface{})
+	item1, ok := decoded["dk-1"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing sub token dk-1")
 	}
-	values1, ok := item1["values"].(map[string]interface{})
+	values1, ok := item1["values"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing values for dk-1")
 	}

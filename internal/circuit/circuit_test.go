@@ -415,13 +415,6 @@ func (e *testError) Error() string {
 	return e.msg
 }
 
-func TestNullLogger(t *testing.T) {
-	logger := &nullLogger{}
-
-	// 应该不 panic
-	logger.Printf("test %s", "format")
-}
-
 func TestConfig_String(t *testing.T) {
 	config := &Config{
 		FailureThreshold:  5,

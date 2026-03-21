@@ -39,12 +39,12 @@ func (a *MQTTAdapter) connectMQTT(settings mqttInitSettings, username, password 
 
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		if err != nil {
-			slog.Info(fmt.Sprintf("MQTT [%s] connection lost: %v", a.name, err))
+			slog.Info("MQTT connection lost", "adapter", a.name, "error", err)
 		}
 		a.markDisconnected()
 	}
 	opts.OnConnect = func(_ mqtt.Client) {
-		slog.Info(fmt.Sprintf("MQTT [%s] connected: %s", a.name, settings.broker))
+		slog.Info("MQTT connected", "adapter", a.name, "broker", settings.broker)
 		a.mu.Lock()
 		a.connected = true
 		a.mu.Unlock()
@@ -72,7 +72,7 @@ func (a *MQTTAdapter) markDisconnected() {
 }
 
 func (a *MQTTAdapter) reconnectOnce() error {
-	slog.Info(fmt.Sprintf("MQTT [%s] attempting to reconnect...", a.name))
+	slog.Info("MQTT reconnect attempt", "adapter", a.name)
 	a.mu.RLock()
 	settings := mqttInitSettings{
 		broker:       a.broker,
@@ -100,12 +100,12 @@ func (a *MQTTAdapter) reconnectOnce() error {
 		oldClient.Disconnect(250)
 	}
 
-	slog.Info(fmt.Sprintf("MQTT [%s] reconnected successfully", a.name))
+	slog.Info("MQTT reconnect succeeded", "adapter", a.name)
 	return nil
 }
 
 // publish 发布消息
-func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
+func (a *MQTTAdapter) publish(topic string, payload any) error {
 	a.mu.RLock()
 	if !a.initialized || !a.enabled {
 		a.mu.RUnlock()
@@ -123,7 +123,7 @@ func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
 
 	var body []byte
 	if data, ok := payload.(*models.CollectData); ok {
-		msg := map[string]interface{}{
+		msg := map[string]any{
 			"device_name": data.DeviceName,
 			"device_id":   data.DeviceID,
 			"timestamp":   data.Timestamp.Unix(),
@@ -131,7 +131,7 @@ func (a *MQTTAdapter) publish(topic string, payload interface{}) error {
 		}
 		body, _ = json.Marshal(msg)
 	} else if alarm, ok := payload.(*models.AlarmPayload); ok {
-		msg := map[string]interface{}{
+		msg := map[string]any{
 			"device_id":    alarm.DeviceID,
 			"device_name":  alarm.DeviceName,
 			"field_name":   alarm.FieldName,

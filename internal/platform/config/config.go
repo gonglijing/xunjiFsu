@@ -1,3 +1,4 @@
+// Package config 提供应用配置加载（YAML 文件 + 环境变量覆盖）。
 package config
 
 import (
@@ -120,13 +121,11 @@ var defaultEnvConfig = DefaultConfig()
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
-	// 1. 先从 YAML 文件加载配置
 	if err := applyFileConfig(cfg); err != nil {
 		// 配置文件不存在或解析失败，使用默认配置（不报错）
-		// fmt.Fprintf(os.Stderr, "Warning: Failed to load config file: %v\n", err)
+		_ = err
 	}
 
-	// 2. 环境变量覆盖配置
 	applyEnvConfig(cfg)
 
 	return cfg, nil

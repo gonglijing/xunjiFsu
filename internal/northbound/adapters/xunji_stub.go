@@ -44,6 +44,6 @@ func (a *XunjiAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 		Error:     "xunji adapter is disabled (build tag no_paho_mqtt)",
 	}
 }
-func (a *XunjiAdapter) GetStats() map[string]interface{} { return a.RuntimeStatsSnapshot().ToMap() }
+func (a *XunjiAdapter) GetStats() map[string]any { return a.RuntimeStatsSnapshot().ToMap() }
 func (a *XunjiAdapter) GetLastSendTime() time.Time       { return time.Time{} }
 func (a *XunjiAdapter) PendingCommandCount() int         { return 0 }

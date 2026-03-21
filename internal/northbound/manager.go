@@ -423,13 +423,13 @@ func (m *NorthboundManager) GetBreakerState(name string) circuit.CircuitState {
 }
 
 // GetStats 获取所有适配器的状态统计
-func (m *NorthboundManager) GetStats() map[string]map[string]interface{} {
+func (m *NorthboundManager) GetStats() map[string]map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make(map[string]map[string]interface{})
+	result := make(map[string]map[string]any)
 	for name, adapter := range m.adapters {
-		var stats map[string]interface{}
+		var stats map[string]any
 		if runtimeStats, ok := adapter.(adapters.NorthboundAdapterWithRuntimeStats); ok {
 			stats = runtimeStats.RuntimeStatsSnapshot().ToMap()
 		} else {

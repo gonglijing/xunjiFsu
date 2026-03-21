@@ -47,8 +47,7 @@ func (a *PandaXAdapter) Start() {
 		needReconnect = !a.connected
 		a.wg.Add(1)
 		go a.executeLoop()
-		slog.Info(fmt.Sprintf("[PandaX-%s] Start: 适配器已启动, reportInterval=%v, alarmInterval=%v",
-			a.name, a.reportEvery, a.alarmEvery))
+		slog.Info("PandaX adapter started", "adapter", a.name, "report_interval", a.reportEvery, "alarm_interval", a.alarmEvery)
 	}
 	a.mu.Unlock()
 	logLoopStateTransition("pandax", a.name, transition)
@@ -70,7 +69,7 @@ func (a *PandaXAdapter) Stop() {
 		if stopChan != nil {
 			close(stopChan)
 		}
-		slog.Info(fmt.Sprintf("[PandaX-%s] Stop: 适配器已停止", a.name))
+		slog.Info("PandaX adapter stopped", "adapter", a.name)
 	}
 	a.mu.Unlock()
 	logLoopStateTransition("pandax", a.name, transitionStopping)
@@ -125,7 +124,7 @@ func (a *PandaXAdapter) IsConnected() bool {
 }
 
 func (a *PandaXAdapter) Close() error {
-	slog.Info(fmt.Sprintf("[PandaX-%s] Close: 开始关闭", a.name))
+	slog.Info("PandaX close start", "adapter", a.name)
 
 	a.Stop()
 
@@ -143,7 +142,7 @@ func (a *PandaXAdapter) Close() error {
 	_ = a.flushAlarmBatch()
 
 	if client != nil && client.IsConnected() {
-		slog.Info(fmt.Sprintf("[PandaX-%s] Close: 断开 MQTT 连接", a.name))
+		slog.Info("PandaX close disconnect MQTT", "adapter", a.name)
 		client.Disconnect(250)
 	}
 
@@ -158,7 +157,7 @@ func (a *PandaXAdapter) Close() error {
 	a.commandQueue = nil
 	a.mu.Unlock()
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] Close: 已关闭", a.name))
+	slog.Info("PandaX close completed", "adapter", a.name)
 	return nil
 }
 
@@ -255,7 +254,7 @@ func (a *PandaXAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	}
 }
 
-func (a *PandaXAdapter) GetStats() map[string]interface{} {
+func (a *PandaXAdapter) GetStats() map[string]any {
 	return a.RuntimeStatsSnapshot().ToMap()
 }
 
@@ -295,7 +294,7 @@ func (a *PandaXAdapter) executeLoop() {
 		alarmInterval = defaultAlarmInterval
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: 启动, report=%v, alarm=%v", a.name, reportInterval, alarmInterval))
+	slog.Info("PandaX run loop started", "adapter", a.name, "report_interval", reportInterval, "alarm_interval", alarmInterval)
 
 	reportTicker := time.NewTicker(reportInterval)
 	alarmTicker := time.NewTicker(alarmInterval)
@@ -314,7 +313,7 @@ func (a *PandaXAdapter) executeLoop() {
 	for {
 		select {
 		case <-stopChan:
-			slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: 停止并清空报警", a.name))
+			slog.Info("PandaX run loop stopping and draining alarms", "adapter", a.name)
 			stopReconnect()
 			drainAlarmQueueOnStop(alarmDrainConfig{
 				flushAlarm: func() error {
@@ -326,24 +325,24 @@ func (a *PandaXAdapter) executeLoop() {
 					return len(a.alarmQueue) == 0
 				},
 				onFlushError: func(err error) {
-					slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: flushAlarmBatch 失败: %v", a.name, err))
+					slog.Info("PandaX run loop alarm flush failed", "adapter", a.name, "error", err)
 				},
 				onDrained: func() {
-					slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: 已退出", a.name))
+					slog.Info("PandaX run loop exited", "adapter", a.name)
 				},
 			})
 			return
 		case <-reportTicker.C:
 			if err := a.fetchAndPublishLatestData(); err != nil {
-				slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: fetchAndPublishLatestData 失败: %v", a.name, err))
+				slog.Info("PandaX run loop fetch and publish failed", "adapter", a.name, "error", err)
 			}
 		case <-alarmTicker.C:
 			if err := a.flushAlarmBatch(); err != nil {
-				slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: flushAlarmBatch 失败: %v", a.name, err))
+				slog.Info("PandaX run loop alarm flush failed", "adapter", a.name, "error", err)
 			}
 		case <-flushNow:
 			if err := a.flushAlarmBatch(); err != nil {
-				slog.Info(fmt.Sprintf("[PandaX-%s] runLoop: flushAlarmBatch 失败: %v", a.name, err))
+				slog.Info("PandaX run loop alarm flush failed", "adapter", a.name, "error", err)
 			}
 		case <-reconnectNow:
 			if a.shouldReconnect() {
@@ -358,11 +357,15 @@ func (a *PandaXAdapter) executeLoop() {
 			if err := a.reconnectOnce(); err != nil {
 				reconnectFailures++
 				delay := pandaXReconnectDelay(a.currentReconnectInterval(), reconnectFailures)
-				slog.Info(fmt.Sprintf("[PandaX-%s] reconnect failed (attempt=%d): %v, retry in %v", a.name, reconnectFailures, err, delay))
+				slog.Info("PandaX reconnect failed",
+					"adapter", a.name,
+					"attempt", reconnectFailures,
+					"error", err,
+					"retry_in", delay)
 				reconnect.Schedule(delay)
 				continue
 			}
-			slog.Info(fmt.Sprintf("[PandaX-%s] reconnect success", a.name))
+			slog.Info("PandaX reconnect succeeded", "adapter", a.name)
 			stopReconnect()
 		}
 	}
@@ -374,7 +377,7 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 		return fmt.Errorf("获取设备最新数据失败: %w", err)
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] fetchAndPublishLatestData: 获取到 %d 条数据", a.name, len(devices)))
+	slog.Info("PandaX latest data loaded", "adapter", a.name, "count", len(devices))
 
 	successCount := 0
 	systemStatsCount := 0
@@ -397,12 +400,18 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 		a.dataMu.Unlock()
 
 		if isSystemStats {
-			slog.Info(fmt.Sprintf("[PandaX-%s] fetchAndPublishLatestData: 网关系统属性 deviceId=%d, deviceName=%s, fields=%d",
-				a.name, dev.DeviceID, dev.DeviceName, len(dev.Fields)))
+			slog.Info("PandaX system stats enqueued",
+				"adapter", a.name,
+				"device_id", dev.DeviceID,
+				"device_name", dev.DeviceName,
+				"fields", len(dev.Fields))
 			systemStatsCount++
 		} else {
-			slog.Info(fmt.Sprintf("[PandaX-%s] fetchAndPublishLatestData: 设备 deviceId=%d, deviceName=%s, fields=%d",
-				a.name, dev.DeviceID, dev.DeviceName, len(dev.Fields)))
+			slog.Info("PandaX device data enqueued",
+				"adapter", a.name,
+				"device_id", dev.DeviceID,
+				"device_name", dev.DeviceName,
+				"fields", len(dev.Fields))
 			successCount++
 		}
 	}
@@ -413,17 +422,21 @@ func (a *PandaXAdapter) fetchAndPublishLatestData() error {
 			a.enqueueRealtimeLocked(sysData)
 			queueLen := len(a.realtimeQueue)
 			a.dataMu.Unlock()
-			slog.Info(fmt.Sprintf("[PandaX-%s] fetchAndPublishLatestData: 当前系统属性, fields=%d, queueLen=%d",
-				a.name, len(sysData.Fields), queueLen))
+			slog.Info("PandaX current system stats enqueued",
+				"adapter", a.name,
+				"fields", len(sysData.Fields),
+				"queue_len", queueLen)
 		}
 	}
 
 	if err := a.flushRealtime(); err != nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] fetchAndPublishLatestData: flushRealtime 失败: %v", a.name, err))
+		slog.Info("PandaX latest data flush failed", "adapter", a.name, "error", err)
 	}
 
-	slog.Info(fmt.Sprintf("[PandaX-%s] fetchAndPublishLatestData: 完成, 设备数=%d, 系统属性=%d",
-		a.name, successCount, systemStatsCount))
+	slog.Info("PandaX latest data publish completed",
+		"adapter", a.name,
+		"devices", successCount,
+		"system_stats", systemStatsCount)
 	return nil
 }
 
@@ -433,7 +446,7 @@ func (a *PandaXAdapter) fetchCurrentSystemStats() *models.CollectData {
 	a.mu.RUnlock()
 
 	if provider == nil {
-		slog.Info(fmt.Sprintf("[PandaX-%s] fetchCurrentSystemStats: 系统属性提供者未设置", a.name))
+		slog.Info("PandaX current system stats provider missing", "adapter", a.name)
 		return nil
 	}
 

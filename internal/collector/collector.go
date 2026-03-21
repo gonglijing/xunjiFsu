@@ -94,12 +94,12 @@ func (h taskHeap) Swap(i, j int) {
 	h[i].index = i
 	h[j].index = j
 }
-func (h *taskHeap) Push(x interface{}) {
+func (h *taskHeap) Push(x any) {
 	task := x.(*collectTask)
 	task.index = len(*h)
 	*h = append(*h, task)
 }
-func (h *taskHeap) Pop() interface{} {
+func (h *taskHeap) Pop() any {
 	old := *h
 	n := len(old)
 	task := old[n-1]

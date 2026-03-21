@@ -1,10 +1,11 @@
 package app
 
 import (
-	"github.com/gonglijing/xunjiFsu/internal/config"
 	"log/slog"
+
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func applyNorthboundRuntimeConfig(cfg *config.Config, nm *northbound.NorthboundManager) {

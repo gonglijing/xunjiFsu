@@ -33,7 +33,7 @@ type NorthboundAdapter interface {
 	// IsConnected 检查连接状态
 	IsConnected() bool
 	// GetStats 获取统计信息
-	GetStats() map[string]interface{}
+	GetStats() map[string]any
 	// GetLastSendTime 获取最后发送时间
 	GetLastSendTime() time.Time
 	// PendingCommandCount 获取待处理命令数量
@@ -75,8 +75,8 @@ func (s RuntimeStatsSnapshot) HasPending() bool {
 	return s.PendingData > 0 || s.PendingAlarm > 0 || s.PendingCmd > 0
 }
 
-func (s RuntimeStatsSnapshot) ToMap() map[string]interface{} {
-	out := make(map[string]interface{}, 18)
+func (s RuntimeStatsSnapshot) ToMap() map[string]any {
+	out := make(map[string]any, 18)
 	out["name"] = s.Name
 	out["type"] = s.Type
 	out["enabled"] = s.Enabled

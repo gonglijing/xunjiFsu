@@ -7,11 +7,11 @@ import (
 )
 
 type adapterRawConfig struct {
-	values map[string]interface{}
+	values map[string]any
 }
 
 func parseAdapterRawConfig(configStr string) (adapterRawConfig, error) {
-	values := make(map[string]interface{})
+	values := make(map[string]any)
 	if err := json.Unmarshal([]byte(configStr), &values); err != nil {
 		return adapterRawConfig{}, fmt.Errorf("failed to parse config: %w", err)
 	}

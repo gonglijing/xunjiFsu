@@ -114,7 +114,7 @@ func (a *XunjiAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	}
 }
 
-func (a *XunjiAdapter) GetStats() map[string]interface{} {
+func (a *XunjiAdapter) GetStats() map[string]any {
 	return a.RuntimeStatsSnapshot().ToMap()
 }
 

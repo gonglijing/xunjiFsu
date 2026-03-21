@@ -60,7 +60,6 @@ func TestJWTManager_ParseToken_Invalid(t *testing.T) {
 		t.Fatalf("GenerateToken error: %v", err)
 	}
 
-	// 篡改签名，应该被拒绝
 	tampered := token[:len(token)-1] + "x"
 	if _, err := m.ParseToken(tampered); err == nil {
 		t.Fatalf("expected ParseToken to fail for tampered signature")
@@ -119,7 +118,6 @@ func TestJWTManager_SetCookieAndGetSession(t *testing.T) {
 		t.Fatalf("GenerateToken error: %v", err)
 	}
 
-	// 先通过 setCookie 写入响应，再把 cookie 搬到请求里
 	rr := httptest.NewRecorder()
 	m.setCookie(rr, token)
 	resp := rr.Result()
@@ -172,7 +170,6 @@ func TestJWTManager_RequireAuth_UnauthorizedAPI(t *testing.T) {
 	}
 }
 
-// 简单检查 token 过期字段设置是否大致正确（不过度依赖时间）
 func TestJWTManager_TokenTTL(t *testing.T) {
 	m := NewJWTManager([]byte("ttl-secret-key-123456"))
 	user := &models.User{ID: 1, Username: "u", Role: "r"}

@@ -9,7 +9,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
-func normalizeWriteParams(config map[string]string, params map[string]interface{}) error {
+func normalizeWriteParams(config map[string]string, params map[string]any) error {
 	if config == nil {
 		return fmt.Errorf("write params are empty")
 	}
@@ -51,7 +51,7 @@ func normalizeWriteParams(config map[string]string, params map[string]interface{
 	return nil
 }
 
-func validateSingleWriteRequest(config map[string]string, params map[string]interface{}) error {
+func validateSingleWriteRequest(config map[string]string, params map[string]any) error {
 	if len(params) == 0 {
 		return nil
 	}
@@ -68,14 +68,14 @@ func validateSingleWriteRequest(config map[string]string, params map[string]inte
 	}
 	if raw, ok := firstPresentValue(params, "value", "val"); ok {
 		switch raw.(type) {
-		case map[string]interface{}, []interface{}:
+		case map[string]any, []any:
 			return fmt.Errorf("write params value must be a scalar")
 		}
 	}
 	return nil
 }
 
-func collectWriteCandidateFields(params map[string]interface{}) ([]string, error) {
+func collectWriteCandidateFields(params map[string]any) ([]string, error) {
 	if len(params) == 0 {
 		return nil, nil
 	}
@@ -98,7 +98,7 @@ func collectWriteCandidateFields(params map[string]interface{}) ([]string, error
 		if !exists {
 			continue
 		}
-		list, ok := raw.([]interface{})
+		list, ok := raw.([]any)
 		if !ok {
 			return nil, fmt.Errorf("write params %s must be an array", key)
 		}
@@ -124,7 +124,7 @@ func collectWriteCandidateFields(params map[string]interface{}) ([]string, error
 	return names, nil
 }
 
-func addWriteCandidateFields(dst map[string]string, values map[string]interface{}) {
+func addWriteCandidateFields(dst map[string]string, values map[string]any) {
 	if len(values) == 0 {
 		return
 	}
@@ -134,7 +134,7 @@ func addWriteCandidateFields(dst map[string]string, values map[string]interface{
 			continue
 		}
 		switch raw.(type) {
-		case map[string]interface{}, []interface{}:
+		case map[string]any, []any:
 			continue
 		}
 		normalized := strings.ToLower(trimmedKey)
@@ -144,7 +144,7 @@ func addWriteCandidateFields(dst map[string]string, values map[string]interface{
 	}
 }
 
-func firstPresentValue(values map[string]interface{}, keys ...string) (interface{}, bool) {
+func firstPresentValue(values map[string]any, keys ...string) (any, bool) {
 	if len(values) == 0 {
 		return nil, false
 	}
@@ -156,7 +156,7 @@ func firstPresentValue(values map[string]interface{}, keys ...string) (interface
 	return nil, false
 }
 
-func resolveSingleWriteCandidate(params map[string]interface{}) (field string, value string, err error) {
+func resolveSingleWriteCandidate(params map[string]any) (field string, value string, err error) {
 	if len(params) == 0 {
 		return "", "", nil
 	}
@@ -166,7 +166,7 @@ func resolveSingleWriteCandidate(params map[string]interface{}) (field string, v
 	return pickSingleWriteValue(params)
 }
 
-func resolveWriteProperties(params map[string]interface{}) (map[string]interface{}, bool) {
+func resolveWriteProperties(params map[string]any) (map[string]any, bool) {
 	if properties, ok := resolveMapValue(params["properties"]); ok {
 		return properties, true
 	}
@@ -180,7 +180,7 @@ func resolveWriteProperties(params map[string]interface{}) (map[string]interface
 		}
 	}
 	for _, key := range []string{"sub_devices", "subDevices"} {
-		list, ok := params[key].([]interface{})
+		list, ok := params[key].([]any)
 		if !ok || len(list) != 1 {
 			continue
 		}
@@ -195,15 +195,15 @@ func resolveWriteProperties(params map[string]interface{}) (map[string]interface
 	return nil, false
 }
 
-func resolveMapValue(value interface{}) (map[string]interface{}, bool) {
+func resolveMapValue(value any) (map[string]any, bool) {
 	if value == nil {
 		return nil, false
 	}
-	out, ok := value.(map[string]interface{})
+	out, ok := value.(map[string]any)
 	return out, ok
 }
 
-func pickSingleWriteValue(values map[string]interface{}) (field string, value string, err error) {
+func pickSingleWriteValue(values map[string]any) (field string, value string, err error) {
 	type candidate struct {
 		key   string
 		value string
@@ -215,7 +215,7 @@ func pickSingleWriteValue(values map[string]interface{}) (field string, value st
 			continue
 		}
 		switch raw.(type) {
-		case map[string]interface{}, []interface{}:
+		case map[string]any, []any:
 			continue
 		}
 		candidates = append(candidates, candidate{key: trimmedKey, value: stringifyParamValue(raw)})
@@ -254,6 +254,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func parseDriverWritables(configSchema string) ([]interface{}, error) {
+func parseDriverWritables(configSchema string) ([]any, error) {
 	return service.ParseDriverWritables(configSchema)
 }

@@ -19,8 +19,8 @@ func (a *IThingsAdapter) handleDownlink(_ mqtt.Client, message mqtt.Message) {
 		Method   string      `json:"method"`
 		MsgToken string      `json:"msgToken"`
 		ActionID string      `json:"actionID"`
-		Params   interface{} `json:"params"`
-		Data     interface{} `json:"data"`
+		Params   any `json:"params"`
+		Data     any `json:"data"`
 	}
 	if err := json.Unmarshal(message.Payload(), &req); err != nil {
 		return
@@ -54,14 +54,14 @@ func (a *IThingsAdapter) handleDownlink(_ mqtt.Client, message mqtt.Message) {
 	a.requestMu.Unlock()
 }
 
-func buildIThingsCommands(requestID, topicType, method, actionID string, params interface{}, productID, deviceName string) ([]*models.NorthboundCommand, string, string) {
+func buildIThingsCommands(requestID, topicType, method, actionID string, params any, productID, deviceName string) ([]*models.NorthboundCommand, string, string) {
 	topicType = strings.ToLower(strings.TrimSpace(topicType))
 	method = strings.TrimSpace(method)
 	actionID = strings.TrimSpace(actionID)
 
 	out := make([]*models.NorthboundCommand, 0)
 
-	appendPropertyCommands := func(values map[string]interface{}) {
+	appendPropertyCommands := func(values map[string]any) {
 		if len(values) == 0 {
 			return
 		}

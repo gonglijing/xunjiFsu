@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/collector"
-	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func TestApplyCollectorRuntimeTuning(t *testing.T) {

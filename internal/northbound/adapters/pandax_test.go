@@ -263,12 +263,12 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 		t.Fatalf("count=%d, want=2", count)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-	subDevices, ok := decoded["subDevices"].([]interface{})
+	subDevices, ok := decoded["subDevices"].([]any)
 	if !ok {
 		t.Fatalf("subDevices missing")
 	}
@@ -276,14 +276,14 @@ func TestPandaXBuildSyncDevicesPayload(t *testing.T) {
 		t.Fatalf("len(subDevices)=%d, want=2", len(subDevices))
 	}
 
-	first, _ := subDevices[0].(map[string]interface{})
+	first, _ := subDevices[0].(map[string]any)
 	if _, exists := first["token"]; exists {
 		t.Fatalf("token should be omitted in sync payload")
 	}
 	if first["productKey"] != "prodA" {
 		t.Fatalf("first productKey=%v, want=prodA", first["productKey"])
 	}
-	values, ok := first["values"].(map[string]interface{})
+	values, ok := first["values"].(map[string]any)
 	if !ok {
 		t.Fatalf("first values missing")
 	}
@@ -419,16 +419,16 @@ func TestPandaXBuildBatchRealtimePublish(t *testing.T) {
 		t.Fatalf("topic=%q", topic)
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-	item, ok := decoded["dk-1"].(map[string]interface{})
+	item, ok := decoded["dk-1"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing sub token dk-1")
 	}
-	values, ok := item["values"].(map[string]interface{})
+	values, ok := item["values"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing values for dk-1")
 	}
@@ -441,8 +441,8 @@ func TestPandaXBuildBatchRealtimePublish(t *testing.T) {
 }
 
 func TestBuildPandaXRPCCommands_UsesDefaultIdentity(t *testing.T) {
-	commands := buildPandaXRPCCommands("req-1", "set", map[string]interface{}{
-		"properties": map[string]interface{}{
+	commands := buildPandaXRPCCommands("req-1", "set", map[string]any{
+		"properties": map[string]any{
 			"temperature": 23.5,
 		},
 	}, "default-pk", "default-dk")

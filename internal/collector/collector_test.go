@@ -677,7 +677,7 @@ func TestRemoveTaskLocked_KeepsSharedDriverProductKeyCache(t *testing.T) {
 func TestCollectPointValueString(t *testing.T) {
 	cases := []struct {
 		name  string
-		input interface{}
+		input any
 		want  string
 	}{
 		{name: "string", input: "abc", want: "abc"},

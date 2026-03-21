@@ -172,7 +172,7 @@ func (a *MQTTAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	}
 }
 
-func (a *MQTTAdapter) GetStats() map[string]interface{} {
+func (a *MQTTAdapter) GetStats() map[string]any {
 	return a.RuntimeStatsSnapshot().ToMap()
 }
 

@@ -1,3 +1,4 @@
+// Package graceful 提供优雅关闭管理器，协调 HTTP 服务器与后台任务的有序停止。
 package graceful
 
 import (
@@ -66,7 +67,6 @@ func (g *GracefulShutdown) Shutdown() {
 		ctx, cancel := context.WithTimeout(context.Background(), g.timeout)
 		defer cancel()
 
-		// 关闭HTTP服务器
 		if g.httpServer != nil {
 			slog.Info("Shutting down HTTP server")
 			if err := g.httpServer.Shutdown(ctx); err != nil {
@@ -74,7 +74,6 @@ func (g *GracefulShutdown) Shutdown() {
 			}
 		}
 
-		// 执行注册的关闭函数
 		for i, f := range g.shutdownFuncs {
 			slog.Info("Executing shutdown function", "step", i+1, "total", len(g.shutdownFuncs))
 			if err := f(ctx); err != nil {

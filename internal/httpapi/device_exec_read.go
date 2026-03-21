@@ -12,7 +12,7 @@ func (api *DeviceExecAPI) GetDeviceWritables(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if device.DriverID == nil {
-		WriteSuccess(w, []interface{}{})
+		WriteSuccess(w, []any{})
 		return
 	}
 

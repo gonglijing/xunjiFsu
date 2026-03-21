@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func listenAndServeWithAutoCert(server *http.Server, cfg *config.Config) error {

@@ -7,7 +7,7 @@ import (
 
 type configDefaults struct {
 	copyBrokerToServerURL bool
-	values                map[string]interface{}
+	values                map[string]any
 }
 
 type modelBuildOptions struct {
@@ -19,7 +19,7 @@ type modelBuildOptions struct {
 
 var northboundConfigDefaults = map[string]configDefaults{
 	nbtype.TypeMQTT: {
-		values: map[string]interface{}{
+		values: map[string]any{
 			"broker":         "",
 			"topic":          "",
 			"qos":            0,
@@ -29,7 +29,7 @@ var northboundConfigDefaults = map[string]configDefaults{
 	},
 	nbtype.TypeXunji: {
 		copyBrokerToServerURL: true,
-		values: map[string]interface{}{
+		values: map[string]any{
 			"topic":            "v1/gateway/{gatewayname}",
 			"qos":              0,
 			"keepAlive":        60,
@@ -38,7 +38,7 @@ var northboundConfigDefaults = map[string]configDefaults{
 		},
 	},
 	nbtype.TypeSagoo: {
-		values: map[string]interface{}{
+		values: map[string]any{
 			"serverUrl":        "",
 			"productKey":       "",
 			"deviceKey":        "",
@@ -50,7 +50,7 @@ var northboundConfigDefaults = map[string]configDefaults{
 	},
 	nbtype.TypePandaX: {
 		copyBrokerToServerURL: true,
-		values: map[string]interface{}{
+		values: map[string]any{
 			"username":         "",
 			"qos":              0,
 			"keepAlive":        60,
@@ -60,7 +60,7 @@ var northboundConfigDefaults = map[string]configDefaults{
 	},
 	nbtype.TypeIThings: {
 		copyBrokerToServerURL: true,
-		values: map[string]interface{}{
+		values: map[string]any{
 			"username":         "",
 			"productKey":       "",
 			"deviceKey":        "",
@@ -93,7 +93,7 @@ func (b *NorthboundConfigBuilder) ensureServerURLFromBroker() {
 	b.config["serverUrl"] = ""
 }
 
-func (b *NorthboundConfigBuilder) ensureConfigValue(key string, value interface{}) {
+func (b *NorthboundConfigBuilder) ensureConfigValue(key string, value any) {
 	if _, ok := b.config[key]; ok {
 		return
 	}

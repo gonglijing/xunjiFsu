@@ -28,7 +28,7 @@ type Field struct {
 	Type        FieldType   `json:"type"`
 	Required    bool        `json:"required"`
 	Optional    bool        `json:"optional"`
-	Default     interface{} `json:"default"`
+	Default     any `json:"default"`
 	Description string      `json:"description"`
 }
 

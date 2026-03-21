@@ -1,3 +1,4 @@
+// Package auth 提供 JWT 认证、会话管理与密码变更。
 package auth
 
 import (
@@ -67,7 +68,6 @@ func (m *JWTManager) Login(w http.ResponseWriter, r *http.Request, username, pas
 		return "", ErrInvalidCredentials
 	}
 
-	// 验证密码
 	if !pwdutil.Compare(password, user.Password) {
 		return "", ErrInvalidCredentials
 	}
@@ -218,7 +218,6 @@ func signHS256Bytes(input string, secret []byte) []byte {
 }
 
 func resolveRequestToken(r *http.Request, cookieName string) string {
-	// Authorization: Bearer <token>
 	authz := r.Header.Get("Authorization")
 	if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
 		return strings.TrimSpace(authz[7:])
@@ -240,12 +239,10 @@ func ChangePassword(userID int64, oldPassword, newPassword string) error {
 		return ErrUserNotFound
 	}
 
-	// 验证旧密码
 	if !pwdutil.Compare(oldPassword, user.Password) {
 		return ErrPasswordMismatch
 	}
 
-	// 更新密码
 	user.Password = pwdutil.Hash(newPassword)
 	return database.UpdateUser(user)
 }

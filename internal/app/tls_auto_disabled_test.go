@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gonglijing/xunjiFsu/internal/config"
+	"github.com/gonglijing/xunjiFsu/internal/platform/config"
 )
 
 func TestListenAndServeWithAutoCert_DisabledBuild(t *testing.T) {

@@ -38,9 +38,9 @@ func (f *fakeAdapter) IsEnabled() bool                    { return f.enabled }
 func (f *fakeAdapter) IsConnected() bool                  { return f.connected }
 func (f *fakeAdapter) GetLastSendTime() time.Time         { return f.lastSend }
 func (f *fakeAdapter) PendingCommandCount() int           { return len(f.commands) }
-func (f *fakeAdapter) GetStats() map[string]interface{} {
+func (f *fakeAdapter) GetStats() map[string]any {
 	atomic.AddInt32(&f.statsCalls, 1)
-	return map[string]interface{}{
+	return map[string]any{
 		"name":          f.name,
 		"type":          "fake",
 		"enabled":       f.enabled,

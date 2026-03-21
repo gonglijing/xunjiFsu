@@ -94,7 +94,7 @@ func TestSetJSONOutput(t *testing.T) {
 	SetJSONOutput(true)
 	Info("json test")
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &parsed); err != nil {
 		t.Fatalf("JSON output expected, got: %s", buf.String())
 	}
@@ -117,7 +117,6 @@ func TestSetOutput(t *testing.T) {
 func TestSetOutput_Nil_ResetToStdout(t *testing.T) {
 	saveAndRestore(t)
 	SetOutput(nil)
-	// 不 panic 即通过
 }
 
 func TestGlobalFunctions(t *testing.T) {

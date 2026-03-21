@@ -1,15 +1,10 @@
 package circuit
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 )
-
-var log = &nullLogger{}
-
-type nullLogger struct{}
-
-func (l *nullLogger) Printf(format string, v ...interface{}) {}
 
 // CircuitState 熔断器状态
 type CircuitState int
@@ -136,7 +131,7 @@ func (cb *CircuitBreaker) recordResult(success bool) {
 			if len(cb.successes) >= cb.config.SuccessThreshold {
 				cb.state = Closed
 				cb.failures = cb.failures[:0]
-				log.Printf("Circuit breaker state: %s -> %s", HalfOpen, Closed)
+				slog.Info("Circuit breaker state transition", "from", HalfOpen, "to", Closed)
 			}
 		}
 	} else {
@@ -147,11 +142,11 @@ func (cb *CircuitBreaker) recordResult(success bool) {
 
 		if cb.state == HalfOpen {
 			cb.state = Open
-			log.Printf("Circuit breaker state: %s -> %s (half-open failure)", HalfOpen, Open)
+			slog.Info("Circuit breaker state transition", "from", HalfOpen, "to", Open, "reason", "half-open failure")
 		} else if cb.state == Closed {
 			if len(cb.failures) >= cb.config.FailureThreshold {
 				cb.state = Open
-				log.Printf("Circuit breaker state: %s -> %s (failure threshold reached)", Closed, Open)
+				slog.Info("Circuit breaker state transition", "from", Closed, "to", Open, "reason", "failure threshold reached")
 			}
 		}
 	}
@@ -211,11 +206,11 @@ func (cb *CircuitBreaker) Reset() {
 }
 
 // Stats 获取统计信息
-func (cb *CircuitBreaker) Stats() map[string]interface{} {
+func (cb *CircuitBreaker) Stats() map[string]any {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"state":          cb.state.String(),
 		"request_count":  cb.requestCount,
 		"failure_count":  cb.failureCount,

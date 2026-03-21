@@ -3,7 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	authpkg "github.com/gonglijing/xunjiFsu/internal/auth"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
@@ -77,7 +77,7 @@ func (api *UserAPI) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := authpkg.ChangePassword(session.UserID, req.OldPassword, req.NewPassword); err != nil {
+	if err := auth.ChangePassword(session.UserID, req.OldPassword, req.NewPassword); err != nil {
 		WriteBadRequestCode(w, errChangePassword.Code, err.Error())
 		return
 	}

@@ -12,7 +12,7 @@ func NewDeviceExecAPI(deviceExecService *service.DeviceExecService) *DeviceExecA
 
 type executeDriverPayload struct {
 	Function string                 `json:"function"`
-	Params   map[string]interface{} `json:"params"`
+	Params   map[string]any `json:"params"`
 }
 
 var (

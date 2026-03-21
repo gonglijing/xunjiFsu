@@ -229,7 +229,7 @@ func (a *IThingsAdapter) RuntimeStatsSnapshot() RuntimeStatsSnapshot {
 	}
 }
 
-func (a *IThingsAdapter) GetStats() map[string]interface{} {
+func (a *IThingsAdapter) GetStats() map[string]any {
 	return a.RuntimeStatsSnapshot().ToMap()
 }
 

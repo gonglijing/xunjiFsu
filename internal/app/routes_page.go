@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gonglijing/xunjiFsu/internal/auth"
 	"github.com/gonglijing/xunjiFsu/internal/httpapi"
+	"github.com/gonglijing/xunjiFsu/internal/platform/auth"
 )
 
 var spaBlockedPrefixes = []string{
