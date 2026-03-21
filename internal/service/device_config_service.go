@@ -15,7 +15,7 @@ func NewDeviceService(collector *collectorpkg.Collector) *DeviceService {
 }
 
 func (s *DeviceService) LoadDevice(id int64) (*models.Device, error) {
-	return database.GetDeviceByID(id)
+	return database.LoadDevice(id)
 }
 
 func (s *DeviceService) CreateDevice(device *models.Device) (*models.Device, error) {
@@ -46,7 +46,7 @@ func (s *DeviceService) DeleteDevice(id int64) error {
 }
 
 func (s *DeviceService) ToggleDeviceEnabled(id int64) (int, error) {
-	device, err := database.GetDeviceByID(id)
+	device, err := database.LoadDevice(id)
 	if err != nil {
 		return 0, err
 	}

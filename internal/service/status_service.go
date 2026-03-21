@@ -52,12 +52,12 @@ func NewStatusService(collector CollectorController, driverCount func() int) *St
 }
 
 func (s *StatusService) LoadStatus(now time.Time) (StatusData, error) {
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		return StatusData{}, err
 	}
-	configs, _ := database.GetAllNorthboundConfigs()
-	alarms, _ := database.GetRecentAlarmLogs(1000)
+	configs, _ := database.ListNorthboundConfigs()
+	alarms, _ := database.ListRecentAlarmLogs(1000)
 
 	driverCount := 0
 	if s.driverCount != nil {
@@ -68,7 +68,7 @@ func (s *StatusService) LoadStatus(now time.Time) (StatusData, error) {
 		collectorRunning = s.collector.IsRunning()
 	}
 
-	return BuildStatusData(devices, configs, alarms, driverCount, collectorRunning, now), nil
+	return buildStatusData(devices, configs, alarms, driverCount, collectorRunning, now), nil
 }
 
 func (s *StatusService) StartCollector() error {
@@ -84,7 +84,7 @@ func (s *StatusService) StopCollector() {
 	}
 }
 
-func BuildDeviceStats(devices []*models.Device) DeviceStats {
+func buildDeviceStats(devices []*models.Device) DeviceStats {
 	stats := DeviceStats{Total: len(devices)}
 	for _, device := range devices {
 		if device != nil && device.Enabled == 1 {
@@ -94,7 +94,7 @@ func BuildDeviceStats(devices []*models.Device) DeviceStats {
 	return stats
 }
 
-func BuildNorthboundStats(configs []*models.NorthboundConfig) NorthboundStats {
+func buildNorthboundStats(configs []*models.NorthboundConfig) NorthboundStats {
 	stats := NorthboundStats{Total: len(configs)}
 	for _, config := range configs {
 		if config != nil && config.Enabled == 1 {
@@ -104,7 +104,7 @@ func BuildNorthboundStats(configs []*models.NorthboundConfig) NorthboundStats {
 	return stats
 }
 
-func BuildAlarmStats(alarms []*models.AlarmLog, now time.Time) AlarmStats {
+func buildAlarmStats(alarms []*models.AlarmLog, now time.Time) AlarmStats {
 	stats := AlarmStats{Total: len(alarms)}
 	today := now.Truncate(24 * time.Hour)
 	for _, alarm := range alarms {
@@ -121,7 +121,7 @@ func BuildAlarmStats(alarms []*models.AlarmLog, now time.Time) AlarmStats {
 	return stats
 }
 
-func BuildStatusData(
+func buildStatusData(
 	devices []*models.Device,
 	configs []*models.NorthboundConfig,
 	alarms []*models.AlarmLog,
@@ -131,16 +131,12 @@ func BuildStatusData(
 ) StatusData {
 	return StatusData{
 		CollectorRunning: collectorRunning,
-		Devices:          BuildDeviceStats(devices),
-		Northbound:       BuildNorthboundStats(configs),
-		Alarms:           BuildAlarmStats(alarms, now),
+		Devices:          buildDeviceStats(devices),
+		Northbound:       buildNorthboundStats(configs),
+		Alarms:           buildAlarmStats(alarms, now),
 		Drivers: DriverStats{
 			Total: driverCount,
 		},
 		Timestamp: now,
 	}
-}
-
-func BuildCollectorStatusResponse(status string) map[string]string {
-	return map[string]string{"status": status}
 }

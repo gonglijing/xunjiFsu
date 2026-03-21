@@ -63,7 +63,7 @@ func resolveDebugResourcePath(resourceID *int64, expectedType string) (string, e
 	if resourceID == nil || *resourceID <= 0 {
 		return "", fmt.Errorf("resource_id is required")
 	}
-	resource, err := database.GetResourceByID(*resourceID)
+	resource, err := database.LoadResource(*resourceID)
 	if err != nil {
 		return "", err
 	}

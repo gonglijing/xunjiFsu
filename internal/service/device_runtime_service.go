@@ -17,7 +17,7 @@ func NewDeviceRuntimeService(collector *collectorpkg.Collector) *DeviceRuntimeSe
 }
 
 func (s *DeviceRuntimeService) ListDeviceRuntimeStatuses() ([]collectorpkg.DeviceRuntimeStatus, error) {
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		return nil, err
 	}
@@ -27,11 +27,11 @@ func (s *DeviceRuntimeService) ListDeviceRuntimeStatuses() ([]collectorpkg.Devic
 		runtimeStatusMap = s.collector.ListDeviceRuntimeStatus()
 	}
 
-	return BuildDeviceRuntimeStatusList(devices, runtimeStatusMap), nil
+	return buildDeviceRuntimeStatusList(devices, runtimeStatusMap), nil
 }
 
 func (s *DeviceRuntimeService) LoadDeviceRuntimeStatus(id int64) (collectorpkg.DeviceRuntimeStatus, error) {
-	if _, err := database.GetDeviceByID(id); err != nil {
+	if _, err := database.LoadDevice(id); err != nil {
 		return collectorpkg.DeviceRuntimeStatus{}, err
 	}
 
@@ -50,7 +50,7 @@ func (s *DeviceRuntimeService) LoadDeviceRuntimeStatus(id int64) (collectorpkg.D
 	return status, nil
 }
 
-func BuildDeviceRuntimeStatusList(devices []*models.Device, runtimeStatusMap map[int64]collectorpkg.DeviceRuntimeStatus) []collectorpkg.DeviceRuntimeStatus {
+func buildDeviceRuntimeStatusList(devices []*models.Device, runtimeStatusMap map[int64]collectorpkg.DeviceRuntimeStatus) []collectorpkg.DeviceRuntimeStatus {
 	statuses := make([]collectorpkg.DeviceRuntimeStatus, 0, len(devices))
 	for _, device := range devices {
 		if device == nil {

@@ -12,11 +12,11 @@ func NewAlarmService() *AlarmService {
 }
 
 func (s *AlarmService) ListRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
-	return database.GetRecentAlarmLogs(limit)
+	return database.ListRecentAlarmLogs(limit)
 }
 
 func (s *AlarmService) LoadAlarm(id int64) (*models.AlarmLog, error) {
-	return database.GetAlarmLogByID(id)
+	return database.LoadAlarmLog(id)
 }
 
 func (s *AlarmService) AcknowledgeAlarm(id int64, acknowledgedBy string) error {

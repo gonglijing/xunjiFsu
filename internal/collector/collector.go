@@ -205,7 +205,7 @@ func (c *Collector) Start() error {
 
 // loadEnabledDevices 加载所有 enable 的设备到采集任务
 func (c *Collector) loadEnabledDevices() error {
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		return fmt.Errorf("failed to get devices: %v", err)
 	}
@@ -349,7 +349,7 @@ func (c *Collector) collectOnce(task *collectTask) {
 // 3. disable -> enable: 加入管理，启动采集
 // 4. 新的 enable 设备加入管理
 func (c *Collector) SyncDeviceStatus() {
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		log.Printf("Failed to sync device status: %v", err)
 		return

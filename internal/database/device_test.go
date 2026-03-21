@@ -133,7 +133,7 @@ func TestInitDeviceTable_CleansLegacyColumns(t *testing.T) {
 		t.Fatalf("expected legacy columns removed, got device_config=%v upload_interval=%v protocol=%v", hasDeviceConfig, hasUploadInterval, hasProtocol)
 	}
 
-	device, err := GetDeviceByID(1)
+	device, err := LoadDevice(1)
 	if err != nil {
 		t.Fatalf("GetDeviceByID: %v", err)
 	}

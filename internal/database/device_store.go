@@ -166,20 +166,6 @@ func ListDevices() ([]*models.Device, error) {
 	return listDevices(selectDeviceFields+" ORDER BY id", nil)
 }
 
-// GetDeviceByID 根据ID获取设备
-func GetDeviceByID(id int64) (*models.Device, error) {
-	return LoadDevice(id)
-}
-
-// GetDeviceByIdentity 按 product_key/device_key 获取设备
-func GetDeviceByIdentity(productKey, deviceKey string) (*models.Device, error) {
-	return LoadDeviceByIdentity(productKey, deviceKey)
-}
-
-// GetAllDevices 获取所有设备
-func GetAllDevices() ([]*models.Device, error) {
-	return ListDevices()
-}
 
 type deviceScanner interface {
 	Scan(dest ...any) error

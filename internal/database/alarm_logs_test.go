@@ -78,11 +78,11 @@ func countAlarmLogs(t *testing.T) int {
 	return count
 }
 
-func TestGetRecentAlarmLogs_AllowsNullAcknowledgedBy(t *testing.T) {
+func TestListRecentAlarmLogs_AllowsNullAcknowledgedBy(t *testing.T) {
 	setupAlarmLogsTestDB(t)
 	insertAlarmLogRow(t, nil, nil)
 
-	logs, err := GetRecentAlarmLogs(10)
+	logs, err := ListRecentAlarmLogs(10)
 	if err != nil {
 		t.Fatalf("GetRecentAlarmLogs: %v", err)
 	}

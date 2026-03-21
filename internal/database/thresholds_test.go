@@ -146,7 +146,7 @@ func TestThresholdCRUD_WithShieldedColumn(t *testing.T) {
 		t.Fatalf("expected id > 0")
 	}
 
-	threshold, err := GetThresholdByID(id)
+	threshold, err := LoadThreshold(id)
 	if err != nil {
 		t.Fatalf("GetThresholdByID: %v", err)
 	}
@@ -159,9 +159,9 @@ func TestThresholdCRUD_WithShieldedColumn(t *testing.T) {
 		t.Fatalf("UpdateThreshold: %v", err)
 	}
 
-	updated, err := GetThresholdByID(id)
+	updated, err := LoadThreshold(id)
 	if err != nil {
-		t.Fatalf("GetThresholdByID(updated): %v", err)
+		t.Fatalf("LoadThreshold(updated): %v", err)
 	}
 	if updated.Shielded != 0 {
 		t.Fatalf("expected shielded=0 after update, got %d", updated.Shielded)

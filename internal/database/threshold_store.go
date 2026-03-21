@@ -161,8 +161,8 @@ func CreateThreshold(threshold *models.Threshold) (int64, error) {
 	return result.LastInsertId()
 }
 
-// GetThresholdByID 根据ID获取阈值
-func GetThresholdByID(id int64) (*models.Threshold, error) {
+// LoadThreshold 根据ID获取阈值
+func LoadThreshold(id int64) (*models.Threshold, error) {
 	if err := ensureThresholdColumns(); err != nil {
 		return nil, err
 	}
@@ -170,8 +170,8 @@ func GetThresholdByID(id int64) (*models.Threshold, error) {
 	return loadThreshold(selectThresholdFields+" WHERE id = ?", id)
 }
 
-// GetThresholdsByDeviceID 根据设备ID获取阈值
-func GetThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
+// ListThresholdsByDevice 根据设备ID获取阈值
+func ListThresholdsByDevice(deviceID int64) ([]*models.Threshold, error) {
 	if err := ensureThresholdColumns(); err != nil {
 		return nil, err
 	}
@@ -179,8 +179,8 @@ func GetThresholdsByDeviceID(deviceID int64) ([]*models.Threshold, error) {
 	return listThresholds(selectThresholdFields+" WHERE device_id = ?", []any{deviceID})
 }
 
-// GetAllThresholds 获取所有阈值
-func GetAllThresholds() ([]*models.Threshold, error) {
+// ListThresholds 获取所有阈值
+func ListThresholds() ([]*models.Threshold, error) {
 	if err := ensureThresholdColumns(); err != nil {
 		return nil, err
 	}

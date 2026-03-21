@@ -34,7 +34,7 @@ func (s *DeviceExecService) EnsureDriverLoaded(driverID int64, driverModel *mode
 }
 
 func (s *DeviceExecService) LoadDeviceDriverForExecution(id int64) (*models.Device, *models.Driver, error) {
-	device, err := database.GetDeviceByID(id)
+	device, err := database.LoadDevice(id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -42,7 +42,7 @@ func (s *DeviceExecService) LoadDeviceDriverForExecution(id int64) (*models.Devi
 		return nil, nil, errors.New("device has no driver")
 	}
 
-	driverModel, err := database.GetDriverByID(*device.DriverID)
+	driverModel, err := database.LoadDriver(*device.DriverID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,7 +54,7 @@ func (s *DeviceExecService) LoadDeviceDriverForExecution(id int64) (*models.Devi
 }
 
 func (s *DeviceExecService) LoadDeviceDriverForLookup(id int64) (*models.Device, *models.Driver, error) {
-	device, err := database.GetDeviceByID(id)
+	device, err := database.LoadDevice(id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -62,7 +62,7 @@ func (s *DeviceExecService) LoadDeviceDriverForLookup(id int64) (*models.Device,
 		return device, nil, nil
 	}
 
-	driverModel, err := database.GetDriverByID(*device.DriverID)
+	driverModel, err := database.LoadDriver(*device.DriverID)
 	if err != nil {
 		return nil, nil, err
 	}

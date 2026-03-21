@@ -591,7 +591,7 @@ func TestEnsureResourcePathLoadsFromResourcePath(t *testing.T) {
 		t.Fatalf("create resources table failed: %v", err)
 	}
 
-	resourceID, err := database.AddResource(&models.Resource{
+	resourceID, err := database.CreateResource(&models.Resource{
 		Name:    "net-r1",
 		Type:    "net",
 		Path:    "192.168.10.20:502",
@@ -639,7 +639,7 @@ func TestEnsureResourcePathPrefersCachedValue(t *testing.T) {
 		t.Fatalf("create resources table failed: %v", err)
 	}
 
-	resourceID, err := database.AddResource(&models.Resource{
+	resourceID, err := database.CreateResource(&models.Resource{
 		Name:    "net-r2",
 		Type:    "net",
 		Path:    "192.168.10.20:502",

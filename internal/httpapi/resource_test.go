@@ -41,7 +41,7 @@ func TestUpdateResourceRefreshesDriverExecutorCache(t *testing.T) {
 		t.Fatalf("create resources table failed: %v", err)
 	}
 
-	resourceID, err := database.AddResource(&models.Resource{
+	resourceID, err := database.CreateResource(&models.Resource{
 		Name:    "r1",
 		Type:    "net",
 		Path:    "127.0.0.1:502",

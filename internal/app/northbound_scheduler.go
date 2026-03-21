@@ -11,7 +11,7 @@ import (
 
 // startNorthboundSchedulers 根据数据库配置设置北向上传周期与启停
 func startNorthboundSchedulers(nm *northbound.NorthboundManager) {
-	configs, err := database.GetAllNorthboundConfigs()
+	configs, err := database.ListNorthboundConfigs()
 	if err != nil {
 		logger.Warn("Failed to load northbound configs", "error", err)
 		return

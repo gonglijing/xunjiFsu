@@ -235,7 +235,7 @@ func (m *JWTManager) setCookie(w http.ResponseWriter, token string) {
 
 // ChangePassword 修改密码
 func ChangePassword(userID int64, oldPassword, newPassword string) error {
-	user, err := database.GetUserByID(userID)
+	user, err := database.LoadUser(userID)
 	if err != nil {
 		return ErrUserNotFound
 	}

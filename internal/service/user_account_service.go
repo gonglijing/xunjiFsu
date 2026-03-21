@@ -12,11 +12,11 @@ func NewUserService() *UserService {
 }
 
 func (s *UserService) ListUsers() ([]*models.User, error) {
-	return database.GetAllUsers()
+	return database.ListUsers()
 }
 
 func (s *UserService) LoadUser(id int64) (*models.User, error) {
-	return database.GetUserByID(id)
+	return database.LoadUser(id)
 }
 
 func (s *UserService) CreateUser(user *models.User) (*models.User, error) {

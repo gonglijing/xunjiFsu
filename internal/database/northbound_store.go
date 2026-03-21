@@ -48,8 +48,8 @@ func CreateNorthboundConfig(config *models.NorthboundConfig) (int64, error) {
 	return result.LastInsertId()
 }
 
-// GetNorthboundConfigByID 根据ID获取北向配置
-func GetNorthboundConfigByID(id int64) (*models.NorthboundConfig, error) {
+// LoadNorthboundConfig 根据ID获取北向配置
+func LoadNorthboundConfig(id int64) (*models.NorthboundConfig, error) {
 	if err := ensureNorthboundConfigColumns(); err != nil {
 		return nil, err
 	}
@@ -64,16 +64,16 @@ func GetNorthboundConfigByID(id int64) (*models.NorthboundConfig, error) {
 	return config, nil
 }
 
-// GetAllNorthboundConfigs 获取所有北向配置
-func GetAllNorthboundConfigs() ([]*models.NorthboundConfig, error) {
+// ListNorthboundConfigs 获取所有北向配置
+func ListNorthboundConfigs() ([]*models.NorthboundConfig, error) {
 	if err := ensureNorthboundConfigColumns(); err != nil {
 		return nil, err
 	}
 	return listNorthboundConfigs(selectNorthboundConfigFields+" ORDER BY id", nil)
 }
 
-// GetEnabledNorthboundConfigs 获取所有启用的北向配置
-func GetEnabledNorthboundConfigs() ([]*models.NorthboundConfig, error) {
+// ListEnabledNorthboundConfigs 获取所有启用的北向配置
+func ListEnabledNorthboundConfigs() ([]*models.NorthboundConfig, error) {
 	if err := ensureNorthboundConfigColumns(); err != nil {
 		return nil, err
 	}

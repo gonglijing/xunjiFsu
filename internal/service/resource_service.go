@@ -19,7 +19,7 @@ func (s *ResourceService) ListResources() ([]*models.Resource, error) {
 }
 
 func (s *ResourceService) LoadResource(id int64) (*models.Resource, error) {
-	return database.GetResourceByID(id)
+	return database.LoadResource(id)
 }
 
 func (s *ResourceService) CreateResource(resource *models.Resource) (*models.Resource, error) {
@@ -27,7 +27,7 @@ func (s *ResourceService) CreateResource(resource *models.Resource) (*models.Res
 		return nil, nil
 	}
 
-	id, err := database.AddResource(resource)
+	id, err := database.CreateResource(resource)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s *ResourceService) DeleteResource(id int64) error {
 }
 
 func (s *ResourceService) ToggleResource(id int64) (*models.Resource, error) {
-	resource, err := database.GetResourceByID(id)
+	resource, err := database.LoadResource(id)
 	if err != nil {
 		return nil, err
 	}

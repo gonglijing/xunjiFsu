@@ -26,13 +26,13 @@ func CreateAlarmLog(log *models.AlarmLog) (int64, error) {
 	return result.LastInsertId()
 }
 
-// GetRecentAlarmLogs 获取最近的报警日志
-func GetRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
+// ListRecentAlarmLogs 获取最近的报警日志
+func ListRecentAlarmLogs(limit int) ([]*models.AlarmLog, error) {
 	return listAlarmLogs(selectAlarmLogFields+" ORDER BY triggered_at DESC LIMIT ?", []any{limit})
 }
 
-// GetAlarmLogByID 根据ID获取报警日志
-func GetAlarmLogByID(id int64) (*models.AlarmLog, error) {
+// LoadAlarmLog 根据ID获取报警日志
+func LoadAlarmLog(id int64) (*models.AlarmLog, error) {
 	row := ParamDB.QueryRow(selectAlarmLogFields+" WHERE id = ?", id)
 	log := &models.AlarmLog{}
 	if err := scanAlarmLog(row, log); err != nil {

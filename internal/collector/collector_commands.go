@@ -106,7 +106,7 @@ func (c *Collector) executeNorthboundCommand(command *models.NorthboundCommand) 
 }
 
 func loadNorthboundCommandDevice(command *models.NorthboundCommand) (*models.Device, error) {
-	device, err := database.GetDeviceByIdentity(command.ProductKey, command.DeviceKey)
+	device, err := database.LoadDeviceByIdentity(command.ProductKey, command.DeviceKey)
 	if err != nil || device == nil {
 		return nil, fmt.Errorf("device not found by identity")
 	}

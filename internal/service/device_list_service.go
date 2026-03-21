@@ -16,13 +16,13 @@ type DeviceListItem struct {
 }
 
 func (s *DeviceService) ListDevices() ([]*DeviceListItem, error) {
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		return nil, err
 	}
 
 	resources, _ := database.ListResources()
-	drivers, _ := database.GetAllDrivers()
+	drivers, _ := database.ListDrivers()
 	resourceMap := buildResourceMap(resources)
 	driverNameMap := buildDriverNameMap(drivers)
 	runtimeStatusMap := s.deviceRuntimeStatusMap()

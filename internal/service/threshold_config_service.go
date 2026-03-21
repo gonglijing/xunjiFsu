@@ -13,11 +13,11 @@ func NewThresholdService() *ThresholdService {
 }
 
 func (s *ThresholdService) ListThresholds() ([]*models.Threshold, error) {
-	return database.GetAllThresholds()
+	return database.ListThresholds()
 }
 
 func (s *ThresholdService) LoadThreshold(id int64) (*models.Threshold, error) {
-	return database.GetThresholdByID(id)
+	return database.LoadThreshold(id)
 }
 
 func (s *ThresholdService) CreateThreshold(threshold *models.Threshold) (*models.Threshold, error) {
@@ -37,7 +37,7 @@ func (s *ThresholdService) UpdateThreshold(threshold *models.Threshold) (*models
 	if threshold == nil {
 		return nil, nil
 	}
-	oldThreshold, _ := database.GetThresholdByID(threshold.ID)
+	oldThreshold, _ := database.LoadThreshold(threshold.ID)
 	if err := database.UpdateThreshold(threshold); err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (s *ThresholdService) UpdateThreshold(threshold *models.Threshold) (*models
 }
 
 func (s *ThresholdService) DeleteThreshold(id int64) error {
-	threshold, _ := database.GetThresholdByID(id)
+	threshold, _ := database.LoadThreshold(id)
 	if err := database.DeleteThreshold(id); err != nil {
 		return err
 	}

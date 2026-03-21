@@ -22,13 +22,13 @@ func CreateDriver(driver *models.Driver) (int64, error) {
 	return result.LastInsertId()
 }
 
-// GetDriverByID 根据ID获取驱动
-func GetDriverByID(id int64) (*models.Driver, error) {
+// LoadDriver 根据ID获取驱动
+func LoadDriver(id int64) (*models.Driver, error) {
 	return loadDriver(selectDriverFields+" WHERE id = ?", id)
 }
 
-// GetAllDrivers 获取所有驱动
-func GetAllDrivers() ([]*models.Driver, error) {
+// ListDrivers 获取所有驱动
+func ListDrivers() ([]*models.Driver, error) {
 	return listDrivers(selectDriverFields+" ORDER BY id", nil)
 }
 

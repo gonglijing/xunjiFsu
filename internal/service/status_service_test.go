@@ -9,7 +9,7 @@ import (
 
 func TestBuildDeviceStats(t *testing.T) {
 	devices := []*models.Device{{Enabled: 1}, {Enabled: 0}, nil, {Enabled: 1}}
-	stats := BuildDeviceStats(devices)
+	stats := buildDeviceStats(devices)
 
 	if stats.Total != 4 {
 		t.Fatalf("Total = %d, want %d", stats.Total, 4)
@@ -21,7 +21,7 @@ func TestBuildDeviceStats(t *testing.T) {
 
 func TestBuildNorthboundStats(t *testing.T) {
 	configs := []*models.NorthboundConfig{{Enabled: 1}, {Enabled: 0}, nil}
-	stats := BuildNorthboundStats(configs)
+	stats := buildNorthboundStats(configs)
 
 	if stats.Total != 3 {
 		t.Fatalf("Total = %d, want %d", stats.Total, 3)
@@ -40,7 +40,7 @@ func TestBuildAlarmStats(t *testing.T) {
 		nil,
 	}
 
-	stats := BuildAlarmStats(alarms, now)
+	stats := buildAlarmStats(alarms, now)
 	if stats.Total != 3 {
 		t.Fatalf("Total = %d, want %d", stats.Total, 3)
 	}
@@ -54,7 +54,7 @@ func TestBuildAlarmStats(t *testing.T) {
 
 func TestBuildStatusData(t *testing.T) {
 	now := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
-	status := BuildStatusData(
+	status := buildStatusData(
 		[]*models.Device{{Enabled: 1}, {Enabled: 0}},
 		[]*models.NorthboundConfig{{Enabled: 1}},
 		[]*models.AlarmLog{{Acknowledged: 0, TriggeredAt: now}},
@@ -83,9 +83,3 @@ func TestBuildStatusData(t *testing.T) {
 	}
 }
 
-func TestBuildCollectorStatusResponse(t *testing.T) {
-	response := BuildCollectorStatusResponse("started")
-	if response["status"] != "started" {
-		t.Fatalf("response[status] = %q, want %q", response["status"], "started")
-	}
-}

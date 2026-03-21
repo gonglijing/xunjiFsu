@@ -26,7 +26,7 @@ func TestBuildDeviceRuntimeStatusList(t *testing.T) {
 		},
 	}
 
-	statuses := BuildDeviceRuntimeStatusList(devices, runtimeStatusMap)
+	statuses := buildDeviceRuntimeStatusList(devices, runtimeStatusMap)
 	if len(statuses) != 3 {
 		t.Fatalf("expected 3 statuses, got %d", len(statuses))
 	}

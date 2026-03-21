@@ -112,7 +112,7 @@ func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Devic
 	if e.GetSerialPort(resourceID) != nil {
 		return nil
 	}
-	res, err := database.GetResourceByID(resourceID)
+	res, err := database.LoadResource(resourceID)
 	if err != nil {
 		return fmt.Errorf("get resource %d failed: %w", resourceID, err)
 	}

@@ -15,7 +15,7 @@ import (
 
 func loadEnabledNorthboundConfigs(northboundMgr *northbound.NorthboundManager) {
 	logger.Info("Loading enabled northbound configs...")
-	configs, err := database.GetAllNorthboundConfigs()
+	configs, err := database.ListNorthboundConfigs()
 	if err != nil {
 		logger.Warn("Failed to load northbound configs", "error", err)
 		return

@@ -55,7 +55,7 @@ func resolveResourceTypeFromDatabase(resourceID int64) string {
 		return ""
 	}
 
-	resource, err := database.GetResourceByID(resourceID)
+	resource, err := database.LoadResource(resourceID)
 	if err != nil || resource == nil {
 		return ""
 	}
@@ -252,7 +252,7 @@ func (e *DriverExecutor) ensureResourcePath(resourceID int64, resourceType strin
 	if e.GetResourcePath(resourceID) != "" {
 		return
 	}
-	if res, err := database.GetResourceByID(resourceID); err == nil && res != nil {
+	if res, err := database.LoadResource(resourceID); err == nil && res != nil {
 		path := strings.TrimSpace(res.Path)
 		if path != "" {
 			e.SetResourcePath(resourceID, path)
@@ -353,7 +353,7 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 		}
 	}
 
-	drv, err := database.GetDriverByID(driverID)
+	drv, err := database.LoadDriver(driverID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			recovered, recoverErr := e.recoverMissingDriverBinding(device)

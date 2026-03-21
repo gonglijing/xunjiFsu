@@ -20,11 +20,11 @@ func NewNorthboundService(manager *northbound.NorthboundManager, hooks Northboun
 }
 
 func (s *NorthboundService) ListConfigs() ([]*models.NorthboundConfig, error) {
-	return database.GetAllNorthboundConfigs()
+	return database.ListNorthboundConfigs()
 }
 
 func (s *NorthboundService) LoadConfig(id int64) (*models.NorthboundConfig, error) {
-	return database.GetNorthboundConfigByID(id)
+	return database.LoadNorthboundConfig(id)
 }
 
 func (s *NorthboundService) CreateConfig(config *models.NorthboundConfig) (*models.NorthboundConfig, error) {

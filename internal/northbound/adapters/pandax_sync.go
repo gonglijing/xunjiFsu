@@ -33,7 +33,7 @@ func (a *PandaXAdapter) SyncDevices() error {
 		return fmt.Errorf("adapter not initialized")
 	}
 
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		return fmt.Errorf("获取设备列表失败: %w", err)
 	}
@@ -239,7 +239,7 @@ func resolveSyncProductKeyByDeviceID(devices []*models.Device) map[int64]string 
 		return result
 	}
 
-	drivers, err := database.GetAllDrivers()
+	drivers, err := database.ListDrivers()
 	if err != nil {
 		log.Printf("resolveSyncProductKeyByDeviceID: 加载驱动列表失败: %v", err)
 		return result

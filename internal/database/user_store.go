@@ -27,13 +27,13 @@ func GetUserByUsername(username string) (*models.User, error) {
 	return loadUser(selectUserFields+" WHERE username = ?", username)
 }
 
-// GetUserByID 根据ID获取用户
-func GetUserByID(id int64) (*models.User, error) {
+// LoadUser 根据ID获取用户
+func LoadUser(id int64) (*models.User, error) {
 	return loadUser(selectUserFields+" WHERE id = ?", id)
 }
 
-// GetAllUsers 获取所有用户
-func GetAllUsers() ([]*models.User, error) {
+// ListUsers 获取所有用户
+func ListUsers() ([]*models.User, error) {
 	return listUsers(selectUserFields+" ORDER BY id", nil)
 }
 

@@ -75,7 +75,7 @@ func TestLoadNorthboundSchema(t *testing.T) {
 
 func TestNorthboundStatusHelpers(t *testing.T) {
 	configs := []*models.NorthboundConfig{nil, {ID: 1, Name: " alpha "}, {ID: 3, Name: "beta"}}
-	configByName := service.NorthboundConfigsByName(configs)
+	configByName := service.BuildNorthboundConfigIndex(configs)
 	if len(configByName) != 2 {
 		t.Fatalf("len(configByName) = %d", len(configByName))
 	}

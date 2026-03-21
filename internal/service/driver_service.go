@@ -42,7 +42,7 @@ func NewDriverService(driverManager DriverRuntimeManager, runtimeReader DriverRu
 }
 
 func (s *DriverService) ListDrivers() ([]*models.Driver, error) {
-	drivers, err := database.GetAllDrivers()
+	drivers, err := database.ListDrivers()
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *DriverService) ListDrivers() ([]*models.Driver, error) {
 }
 
 func (s *DriverService) LoadDriver(id int64) (*models.Driver, error) {
-	return database.GetDriverByID(id)
+	return database.LoadDriver(id)
 }
 
 func (s *DriverService) CreateDriver(driver *models.Driver) (*models.Driver, error) {
@@ -113,7 +113,7 @@ func (s *DriverService) UpdateDriver(driver *models.Driver) (*models.Driver, err
 }
 
 func (s *DriverService) DeleteDriver(id int64) error {
-	drv, err := database.GetDriverByID(id)
+	drv, err := database.LoadDriver(id)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (s *DriverService) DeleteDriver(id int64) error {
 }
 
 func (s *DriverService) ReloadDriver(id int64) (*driverpkg.DriverRuntime, error) {
-	driverModel, err := database.GetDriverByID(id)
+	driverModel, err := database.LoadDriver(id)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (s *DriverService) RuntimeResponse(id int64) *driverpkg.DriverRuntime {
 }
 
 func (s *DriverService) LoadDriverRuntime(id int64) (*driverpkg.DriverRuntime, error) {
-	if _, err := database.GetDriverByID(id); err != nil {
+	if _, err := database.LoadDriver(id); err != nil {
 		return nil, err
 	}
 	if s.runtimeReader == nil {
@@ -356,7 +356,7 @@ func (s *DriverService) SaveUploadedDriver(filename string, size int64, source i
 }
 
 func (s *DriverService) OpenDriverDownload(id int64) (*DriverDownloadFile, error) {
-	driverModel, err := database.GetDriverByID(id)
+	driverModel, err := database.LoadDriver(id)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,7 @@ type NorthboundStatusItem struct {
 }
 
 func (s *NorthboundService) ListStatusItems() ([]NorthboundStatusItem, error) {
-	configs, err := database.GetAllNorthboundConfigs()
+	configs, err := database.ListNorthboundConfigs()
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +36,12 @@ func (s *NorthboundService) ListStatusItems() ([]NorthboundStatusItem, error) {
 		runtimeNames = s.manager.ListRuntimeNames()
 	}
 
-	configByName := NorthboundConfigsByName(configs)
+	configByName := BuildNorthboundConfigIndex(configs)
 	names := ListNorthboundStatusNames(configByName, runtimeNames)
 	return BuildNorthboundStatusItems(configByName, names, s.manager), nil
 }
 
-func NorthboundConfigsByName(configs []*models.NorthboundConfig) map[string]*models.NorthboundConfig {
+func BuildNorthboundConfigIndex(configs []*models.NorthboundConfig) map[string]*models.NorthboundConfig {
 	configByName := make(map[string]*models.NorthboundConfig, len(configs))
 	for _, cfg := range configs {
 		if cfg == nil {

@@ -3,8 +3,6 @@ package httpapi
 import (
 	"net/http"
 	"time"
-
-	"github.com/gonglijing/xunjiFsu/internal/service"
 )
 
 func (api *StatusAPI) GetStatus(w http.ResponseWriter, r *http.Request) {
@@ -21,10 +19,10 @@ func (api *StatusAPI) StartCollector(w http.ResponseWriter, r *http.Request) {
 		writeServerErrorWithLog(w, errStartCollectorFailed, err)
 		return
 	}
-	WriteSuccess(w, service.BuildCollectorStatusResponse("started"))
+	WriteSuccess(w, map[string]string{"status": "started"})
 }
 
 func (api *StatusAPI) StopCollector(w http.ResponseWriter, r *http.Request) {
 	api.service.StopCollector()
-	WriteSuccess(w, service.BuildCollectorStatusResponse("stopped"))
+	WriteSuccess(w, map[string]string{"status": "stopped"})
 }

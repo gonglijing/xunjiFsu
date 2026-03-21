@@ -33,7 +33,7 @@ func InitResourceTable() error {
 	return cleanupLegacyResourceColumns()
 }
 
-func AddResource(r *models.Resource) (int64, error) {
+func CreateResource(r *models.Resource) (int64, error) {
 	res, err := ParamDB.Exec(`INSERT INTO resources (name, type, path, enabled) VALUES (?,?,?,?)`, r.Name, r.Type, r.Path, r.Enabled)
 	if err != nil {
 		return 0, err
@@ -65,8 +65,8 @@ func EnsureDeviceResourceColumn() {
 	ParamDB.Exec(`ALTER TABLE devices ADD COLUMN resource_id INTEGER REFERENCES resources(id)`)
 }
 
-// GetResourceByID returns resource
-func GetResourceByID(id int64) (*models.Resource, error) {
+// LoadResource returns resource by ID
+func LoadResource(id int64) (*models.Resource, error) {
 	resource := &models.Resource{}
 	err := scanResource(
 		ParamDB.QueryRow(selectResourceFields+" WHERE id = ?", id),

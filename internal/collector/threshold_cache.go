@@ -97,12 +97,12 @@ func (c *thresholdCache) refreshLoop(stopChan <-chan struct{}) {
 // Refresh 刷新所有阈值缓存
 func (c *thresholdCache) Refresh() {
 	// 获取所有设备
-	devices, err := database.GetAllDevices()
+	devices, err := database.ListDevices()
 	if err != nil {
 		log.Printf("Failed to refresh threshold cache: %v", err)
 		return
 	}
-	thresholds, err := database.GetAllThresholds()
+	thresholds, err := database.ListThresholds()
 	if err != nil {
 		log.Printf("Failed to refresh threshold cache thresholds: %v", err)
 		return
@@ -160,7 +160,7 @@ func getThresholdCacheEntry(deviceID int64) ([]*models.Threshold, []thresholdEva
 	}
 
 	if !exists {
-		loaded, err := database.GetThresholdsByDeviceID(deviceID)
+		loaded, err := database.ListThresholdsByDevice(deviceID)
 		if err != nil {
 			return nil, nil, err
 		}

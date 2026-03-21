@@ -104,7 +104,7 @@ func startSystemStatsCollector(northboundMgr *northbound.NorthboundManager) *col
 }
 
 func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error {
-	drivers, err := database.GetAllDrivers()
+	drivers, err := database.ListDrivers()
 	if err != nil {
 		return errDriverQuery(err)
 	}

@@ -156,7 +156,7 @@ func TestCheckThresholds_ShieldAndRepeatInterval(t *testing.T) {
 		t.Fatalf("expected 0 alarms when threshold shielded, got %d", got)
 	}
 
-	all, err := database.GetAllThresholds()
+	all, err := database.ListThresholds()
 	if err != nil || len(all) != 1 {
 		t.Fatalf("GetAllThresholds err=%v len=%d", err, len(all))
 	}
