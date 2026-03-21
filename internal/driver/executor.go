@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -168,7 +169,7 @@ func (e *DriverExecutor) ensureSerialPort(resourceID int64, device *models.Devic
 		_ = setter.SetReadTimeout(e.serialReadTimeout())
 	}
 	e.RegisterSerialPort(resourceID, port)
-	logger.Info("Serial port opened", "resource_id", resourceID, "path", res.Path, "baud", baud, "data_bits", dataBits, "stop_bits", stopBits, "parity", parity)
+	slog.Info("Serial port opened", "resource_id", resourceID, "path", res.Path, "baud", baud, "data_bits", dataBits, "stop_bits", stopBits, "parity", parity)
 	return nil
 }
 

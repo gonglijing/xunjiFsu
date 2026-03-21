@@ -5,7 +5,7 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/config"
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 )
 
 func initDatabases(cfg *config.Config) error {
@@ -34,7 +34,7 @@ func applyDatabaseRuntimeConfig(cfg *config.Config) {
 }
 
 func initParamDatabase(cfg *config.Config) error {
-	logger.Info("Initializing param database (persistent mode)...")
+	slog.Info("Initializing param database (persistent mode)...")
 	if err := database.InitParamDBWithPath(cfg.ParamDBPath); err != nil {
 		return fmt.Errorf("failed to initialize param database: %w", err)
 	}
@@ -42,7 +42,7 @@ func initParamDatabase(cfg *config.Config) error {
 }
 
 func initDataDatabase(cfg *config.Config) error {
-	logger.Info("Initializing data database (memory mode + batch sync)...")
+	slog.Info("Initializing data database (memory mode + batch sync)...")
 	if err := database.InitDataDBWithPath(cfg.DataDBPath); err != nil {
 		return fmt.Errorf("failed to initialize data database: %w", err)
 	}
@@ -70,7 +70,7 @@ func initSchemasAndDefaultData() error {
 }
 
 func initParamDatabaseSchema() error {
-	logger.Info("Initializing param database schema...")
+	slog.Info("Initializing param database schema...")
 	if err := database.InitParamSchema(); err != nil {
 		return fmt.Errorf("failed to initialize param schema: %w", err)
 	}
@@ -78,18 +78,18 @@ func initParamDatabaseSchema() error {
 }
 
 func initGatewayDatabaseTables() error {
-	logger.Info("Initializing resource table...")
+	slog.Info("Initializing resource table...")
 	if err := database.InitResourceTable(); err != nil {
 		return fmt.Errorf("failed to initialize resource table: %w", err)
 	}
 	database.EnsureDeviceResourceColumn()
 
-	logger.Info("Initializing gateway config table...")
+	slog.Info("Initializing gateway config table...")
 	if err := database.InitGatewayConfigTable(); err != nil {
 		return fmt.Errorf("failed to initialize gateway config table: %w", err)
 	}
 
-	logger.Info("Initializing runtime config audit table...")
+	slog.Info("Initializing runtime config audit table...")
 	if err := database.InitRuntimeConfigAuditTable(); err != nil {
 		return fmt.Errorf("failed to initialize runtime config audit table: %w", err)
 	}
@@ -97,7 +97,7 @@ func initGatewayDatabaseTables() error {
 }
 
 func initDeviceDatabaseTables() error {
-	logger.Info("Initializing device table...")
+	slog.Info("Initializing device table...")
 	if err := database.InitDeviceTable(); err != nil {
 		return fmt.Errorf("failed to initialize device table: %w", err)
 	}
@@ -105,7 +105,7 @@ func initDeviceDatabaseTables() error {
 }
 
 func initDataDatabaseSchema() error {
-	logger.Info("Initializing data database schema...")
+	slog.Info("Initializing data database schema...")
 	if err := database.InitDataSchema(); err != nil {
 		return fmt.Errorf("failed to initialize data schema: %w", err)
 	}
@@ -113,7 +113,7 @@ func initDataDatabaseSchema() error {
 }
 
 func initDefaultGatewayData() error {
-	logger.Info("Initializing default data...")
+	slog.Info("Initializing default data...")
 	if err := database.InitDefaultData(); err != nil {
 		return fmt.Errorf("failed to initialize default data: %w", err)
 	}

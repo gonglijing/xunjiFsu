@@ -7,7 +7,7 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/auth"
 	"github.com/gonglijing/xunjiFsu/internal/httpapi"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 )
 
 func buildRouter(h *httpapi.AuthHandler, apiDeps *apiRouteDeps, authManager *auth.JWTManager) *http.ServeMux {
@@ -25,7 +25,7 @@ func buildRouter(h *httpapi.AuthHandler, apiDeps *apiRouteDeps, authManager *aut
 func resolveStaticDir() http.Dir {
 	workDir, err := os.Getwd()
 	if err != nil {
-		logger.Warn("Failed to get working directory, using relative static path", "error", err)
+		slog.Warn("Failed to get working directory, using relative static path", "error", err)
 		return http.Dir(filepath.Join("ui", "static"))
 	}
 	return http.Dir(filepath.Join(workDir, "ui", "static"))

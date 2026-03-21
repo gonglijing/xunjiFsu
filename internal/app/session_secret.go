@@ -1,12 +1,12 @@
 package app
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
 func loadOrGenerateSecretKey() []byte {
@@ -20,15 +20,15 @@ func loadOrGenerateSecretKey() []byte {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(keyFile), 0755); err != nil {
-		logger.Warn("Failed to create config directory", "error", err)
+		slog.Warn("Failed to create config directory", "error", err)
 	}
 
 	newKey := generateSessionSecretKey()
 
 	if err := os.WriteFile(keyFile, newKey, 0600); err != nil {
-		logger.Warn("Failed to save session secret key", "error", err)
+		slog.Warn("Failed to save session secret key", "error", err)
 	} else {
-		logger.Info("Generated new session secret key")
+		slog.Info("Generated new session secret key")
 	}
 
 	return hashSessionSecret(newKey)
@@ -57,7 +57,8 @@ func loadSecretKeyFromFile(path string) ([]byte, bool) {
 func generateSessionSecretKey() []byte {
 	newKey := make([]byte, 32)
 	if _, err := rand.Read(newKey); err != nil {
-		logger.Fatal("Failed to generate secret key", err)
+		slog.Log(context.Background(), slog.Level(12), "Failed to generate secret key", "error", err)
+		os.Exit(1)
 	}
 	return newKey
 }

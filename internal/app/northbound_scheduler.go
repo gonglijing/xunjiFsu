@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
@@ -13,7 +13,7 @@ import (
 func startNorthboundSchedulers(nm *northbound.NorthboundManager) {
 	configs, err := database.ListNorthboundConfigs()
 	if err != nil {
-		logger.Warn("Failed to load northbound configs", "error", err)
+		slog.Warn("Failed to load northbound configs", "error", err)
 		return
 	}
 

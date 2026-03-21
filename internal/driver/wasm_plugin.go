@@ -4,10 +4,9 @@ package driver
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 
 	extism "github.com/extism/go-sdk"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
 func newWasmPlugin(driverName string, wasmData []byte, hostFuncs []extism.HostFunction, config map[string]string) (*extism.Plugin, error) {
@@ -30,11 +29,11 @@ func newWasmPlugin(driverName string, wasmData []byte, hostFuncs []extism.HostFu
 	plugin.SetLogger(func(level extism.LogLevel, message string) {
 		switch level {
 		case extism.LogLevelError:
-			logger.Error("Driver log", fmt.Errorf("%s", message), "driver", driverName)
+			slog.Error("Driver log", "driver", driverName, "message", message)
 		case extism.LogLevelWarn:
-			logger.Warn("Driver log", "driver", driverName, "message", message)
+			slog.Warn("Driver log", "driver", driverName, "message", message)
 		default:
-			logger.Info("Driver log", "driver", driverName, "level", level.String(), "message", message)
+			slog.Info("Driver log", "driver", driverName, "level", level.String(), "message", message)
 		}
 	})
 

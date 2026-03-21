@@ -4,10 +4,10 @@ package driver
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	extism "github.com/extism/go-sdk"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
 func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.HostFunction {
@@ -94,7 +94,7 @@ func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.Hos
 			port := executor.GetSerialPort(resourceID)
 			if port == nil || writeSize <= 0 || readCap <= 0 {
 				if port == nil {
-					logger.Warn("Serial port not found", "resource_id", resourceID)
+					slog.Warn("Serial port not found", "resource_id", resourceID)
 				}
 				stack[0] = 0
 				return
@@ -120,11 +120,11 @@ func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.Hos
 
 			req, _ := p.Memory().Read(uint32(writePtr), uint32(writeSize))
 			if n, err := port.Write(req); err != nil {
-				logger.Warn("Serial write failed", "resource_id", resourceID, "error", err)
+				slog.Warn("Serial write failed", "resource_id", resourceID, "error", err)
 				stack[0] = 0
 				return
 			} else {
-				logger.Info("Serial write", "resource_id", resourceID, "written", n, "len", len(req), "req", hexPreview(req, 32))
+				slog.Info("Serial write", "resource_id", resourceID, "written", n, "len", len(req), "req", hexPreview(req, 32))
 			}
 
 			if rts, ok := port.(interface{ SetRTS(bool) error }); ok {
@@ -144,15 +144,15 @@ func (m *DriverManager) createSerialHostFunctions(resourceID int64) []extism.Hos
 			n, err := readWithTimeout(port, buf, readCap, tout)
 			if n == 0 {
 				if err != nil {
-					logger.Warn("Serial read failed", "resource_id", resourceID, "error", err.Error(), "req", hexPreview(req, 32))
+					slog.Warn("Serial read failed", "resource_id", resourceID, "error", err.Error(), "req", hexPreview(req, 32))
 				} else {
-					logger.Warn("Serial read timeout", "resource_id", resourceID, "req", hexPreview(req, 32))
+					slog.Warn("Serial read timeout", "resource_id", resourceID, "req", hexPreview(req, 32))
 				}
 				stack[0] = 0
 				return
 			}
 			if err != nil {
-				logger.Warn("Serial read partial", "resource_id", resourceID, "read", n, "error", err.Error())
+				slog.Warn("Serial read partial", "resource_id", resourceID, "read", n, "error", err.Error())
 			}
 			p.Memory().Write(uint32(readPtr), buf[:n])
 			stack[0] = uint64(n)

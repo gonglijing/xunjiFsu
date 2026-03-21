@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gonglijing/xunjiFsu/internal/config"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 )
 
 type httpServerMode string
@@ -29,17 +29,17 @@ func buildHTTPServer(cfg *config.Config, handler http.Handler) *http.Server {
 func serveHTTPServer(server *http.Server, cfg *config.Config) error {
 	switch resolveHTTPServerMode(cfg) {
 	case httpServerModeAutoTLS:
-		logger.Info("Starting HTTPS with automatic certificate management", "addr", cfg.ListenAddr, "domain", cfg.TLSDomain)
+		slog.Info("Starting HTTPS with automatic certificate management", "addr", cfg.ListenAddr, "domain", cfg.TLSDomain)
 		if err := listenAndServeWithAutoCert(server, cfg); err != nil {
 			return wrapHTTPServerError(err)
 		}
 	case httpServerModeManualTLS:
-		logger.Info("Starting HTTPS", "addr", cfg.ListenAddr, "cert", cfg.TLSCertFile)
+		slog.Info("Starting HTTPS", "addr", cfg.ListenAddr, "cert", cfg.TLSCertFile)
 		if err := server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil {
 			return wrapHTTPServerError(err)
 		}
 	default:
-		logger.Info("Starting HTTP", "addr", cfg.ListenAddr)
+		slog.Info("Starting HTTP", "addr", cfg.ListenAddr)
 		if err := server.ListenAndServe(); err != nil {
 			return wrapHTTPServerError(err)
 		}

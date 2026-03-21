@@ -11,7 +11,6 @@ import (
 
 	"github.com/gonglijing/xunjiFsu/internal/database"
 	"github.com/gonglijing/xunjiFsu/internal/driver"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
@@ -329,9 +328,7 @@ func (c *Collector) collectOnce(task *collectTask) {
 	}
 
 	device := task.device
-	if logger.Enabled(logger.DEBUG) {
-		logger.Debug("Collecting device", "device_id", device.ID, "device_name", device.Name)
-	}
+	slog.Debug("Collecting device", "device_id", device.ID, "device_name", device.Name)
 
 	collect, err := c.collectDataFromDriver(task)
 	if err != nil {

@@ -2,7 +2,7 @@ package app
 
 import (
 	"github.com/gonglijing/xunjiFsu/internal/config"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 	"github.com/gonglijing/xunjiFsu/internal/northbound/adapters"
 )
@@ -29,5 +29,5 @@ func applyMQTTReconnectInterval(name string, cfg *config.Config, nm *northbound.
 	}
 
 	mqttAdapter.SetReconnectInterval(cfg.NorthboundMQTTReconnectInterval)
-	logger.Info("Applied MQTT reconnect interval", "name", name, "interval", cfg.NorthboundMQTTReconnectInterval)
+	slog.Info("Applied MQTT reconnect interval", "name", name, "interval", cfg.NorthboundMQTTReconnectInterval)
 }

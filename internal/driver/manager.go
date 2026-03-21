@@ -13,8 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"log/slog"
+
 	extism "github.com/extism/go-sdk"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -232,7 +233,7 @@ func (m *DriverManager) LoadDriver(driver *models.Driver, wasmData []byte, resou
 	m.drivers[driver.ID] = wasmDriver
 
 	if len(exportedFunctions) > 0 {
-		logger.Debug("Driver exports", "driver", driver.Name, "count", len(exportedFunctions), "functions", exportedFunctions)
+		slog.Debug("Driver exports", "driver", driver.Name, "count", len(exportedFunctions), "functions", exportedFunctions)
 	}
 	return nil
 }
@@ -320,16 +321,16 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 		case errors.Is(err, ErrPluginEmptyOutput):
 			return nil, fmt.Errorf("%w: %v", ErrDriverBadOutput, err)
 		}
-		logger.Warn("Plugin call failed", "driver_id", id, "function", function, "call_function", callFunction, "error", err, "rc", rc, "input_len", len(inputJSON))
+		slog.Warn("Plugin call failed", "driver_id", id, "function", function, "call_function", callFunction, "error", err, "rc", rc, "input_len", len(inputJSON))
 		return nil, fmt.Errorf("%w: %v", ErrDriverExecutionFailed, err)
 	}
 
 	if rc != 0 {
-		logger.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "call_function", callFunction, "rc", rc)
+		slog.Warn("Plugin returned non-zero rc", "driver_id", id, "function", function, "call_function", callFunction, "rc", rc)
 	}
 
-	if isReadFunction(function, driverCtx) && logger.Enabled(logger.DEBUG) {
-		logger.Debug(
+	if isReadFunction(function, driverCtx) && slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug(
 			"Driver read output preview",
 			"driver_id", id,
 			"device_id", driverCtx.DeviceID,
@@ -348,7 +349,7 @@ func (m *DriverManager) executeDriverWithInput(ctx context.Context, id int64, fu
 		if len(output) < max {
 			max = len(output)
 		}
-		logger.Warn("Failed to parse plugin output", "driver_id", id, "function", function, "output_preview", string(output[:max]))
+		slog.Warn("Failed to parse plugin output", "driver_id", id, "function", function, "output_preview", string(output[:max]))
 		return nil, fmt.Errorf("%w: %v", ErrDriverBadOutput, err)
 	}
 	normalizeDriverResultIdentity(&result, output)

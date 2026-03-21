@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/gonglijing/xunjiFsu/internal/database"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 )
 
@@ -349,7 +350,7 @@ func (e *DriverExecutor) ensureDriverLoaded(device *models.Device, resourceID in
 			if resourceID <= 0 || loaded.resourceID == resourceID {
 				return nil
 			}
-			logger.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
+			slog.Warn("Reloading driver with new resource", "driver_id", loaded.ID, "old_resource_id", loaded.resourceID, "new_resource_id", resourceID)
 		}
 	}
 
@@ -384,7 +385,7 @@ LOAD_DRIVER:
 	}
 	if version, err := e.manager.GetDriverVersion(driverID); err == nil && version != "" {
 		if err := database.UpdateDriverVersion(driverID, version); err != nil {
-			logger.Warn("Update driver version failed", "driver_id", driverID, "error", err)
+			slog.Warn("Update driver version failed", "driver_id", driverID, "error", err)
 		}
 	}
 	return nil
@@ -425,12 +426,12 @@ func buildRecoverableDriverNames(driverType string) []string {
 
 func syncRecoveredDriverBinding(device *models.Device, driverModel *models.Driver) {
 	if err := database.UpdateDeviceDriverID(device.ID, driverModel.ID); err != nil {
-		logger.Warn("Recover device driver binding failed", "device_id", device.ID, "driver_id", driverModel.ID, "error", err)
+		slog.Warn("Recover device driver binding failed", "device_id", device.ID, "driver_id", driverModel.ID, "error", err)
 		return
 	}
 
 	device.DriverID = &driverModel.ID
-	logger.Warn("Recovered missing driver binding", "device_id", device.ID, "driver_id", driverModel.ID, "driver_name", driverModel.Name, "driver_type", device.DriverType)
+	slog.Warn("Recovered missing driver binding", "device_id", device.ID, "driver_id", driverModel.ID, "driver_name", driverModel.Name, "driver_type", device.DriverType)
 }
 
 // ReloadDeviceDriver 强制重载设备对应驱动

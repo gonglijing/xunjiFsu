@@ -12,7 +12,7 @@ import (
 	"github.com/gonglijing/xunjiFsu/internal/driver"
 	"github.com/gonglijing/xunjiFsu/internal/graceful"
 	"github.com/gonglijing/xunjiFsu/internal/httpapi"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 	"github.com/gonglijing/xunjiFsu/internal/models"
 	"github.com/gonglijing/xunjiFsu/internal/northbound"
 )
@@ -40,7 +40,7 @@ func Run(cfg *config.Config) error {
 	driverManager.SetCallTimeout(cfg.DriverCallTimeout)
 
 	if err := loadEnabledDrivers(cfg, driverManager); err != nil {
-		logger.Warn("Failed to load drivers", "error", err)
+		slog.Warn("Failed to load drivers", "error", err)
 	}
 
 	northboundMgr := northbound.NewNorthboundManager()
@@ -58,7 +58,7 @@ func Run(cfg *config.Config) error {
 	finalHandler := buildHandlerChain(cfg, router)
 
 	if err := collect.Start(); err != nil {
-		logger.Warn("Failed to start collector", "error", err)
+		slog.Warn("Failed to start collector", "error", err)
 	}
 
 	sysCollector := startSystemStatsCollector(northboundMgr)
@@ -79,17 +79,17 @@ func Run(cfg *config.Config) error {
 }
 
 func startBackgroundTasks(cfg *config.Config) {
-	logger.Info("Starting collect data writer...")
+	slog.Info("Starting collect data writer...")
 	database.StartCollectDataWriter()
 
-	logger.Info("Starting data sync task...")
+	slog.Info("Starting data sync task...")
 	database.StartDataSync()
 
-	logger.Info("Starting retention cleanup task...")
+	slog.Info("Starting retention cleanup task...")
 	database.StartRetentionCleanup(retentionCleanupInterval)
 
 	if cfg != nil && cfg.ThresholdCacheEnabled {
-		logger.Info("Starting threshold cache...")
+		slog.Info("Starting threshold cache...")
 		collector.StartThresholdCache()
 	}
 }
@@ -98,7 +98,7 @@ func startSystemStatsCollector(northboundMgr *northbound.NorthboundManager) *col
 	sysCollector := collector.GetSystemStatsCollector()
 	sysCollector.SetNorthboundManager(northboundMgr)
 	if err := sysCollector.Start(); err != nil {
-		logger.Warn("Failed to start system stats collector", "error", err)
+		slog.Warn("Failed to start system stats collector", "error", err)
 	}
 	return sysCollector
 }
@@ -116,17 +116,17 @@ func loadEnabledDrivers(cfg *config.Config, manager *driver.DriverManager) error
 		}
 		driverModel.FilePath = resolveDriverFilePath(cfg, driverModel)
 		if driverModel.FilePath == "" {
-			logger.Debug("Skipping driver with empty file_path", "id", driverModel.ID, "name", driverModel.Name)
+			slog.Debug("Skipping driver with empty file_path", "id", driverModel.ID, "name", driverModel.Name)
 			continue
 		}
 		if err := manager.LoadDriverFromModel(driverModel, 0); err != nil {
-			logger.Warn("Failed to load driver", "id", driverModel.ID, "name", driverModel.Name, "error", err)
+			slog.Warn("Failed to load driver", "id", driverModel.ID, "name", driverModel.Name, "error", err)
 			continue
 		}
 		loaded++
-		logger.Info("Loaded driver", "id", driverModel.ID, "name", driverModel.Name)
+		slog.Info("Loaded driver", "id", driverModel.ID, "name", driverModel.Name)
 	}
-	logger.Info("Drivers loaded", "count", loaded)
+	slog.Info("Drivers loaded", "count", loaded)
 	return nil
 }
 
@@ -146,12 +146,12 @@ func resolveDriverFilePath(cfg *config.Config, driverModel *models.Driver) strin
 
 func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector.Collector, northMgr *northbound.NorthboundManager, sysCollector *collector.SystemStatsCollector, cfg *config.Config) {
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Stopping collector...")
+		slog.Info("Stopping collector...")
 		return collect.Stop()
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Stopping system stats collector...")
+		slog.Info("Stopping system stats collector...")
 		if sysCollector != nil {
 			return sysCollector.Stop()
 		}
@@ -159,37 +159,37 @@ func registerShutdown(gracefulMgr *graceful.GracefulShutdown, collect *collector
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Stopping collect data writer...")
+		slog.Info("Stopping collect data writer...")
 		database.StopCollectDataWriter()
 		return nil
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Stopping data sync...")
+		slog.Info("Stopping data sync...")
 		database.StopDataSync()
 		return nil
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Stopping retention cleanup...")
+		slog.Info("Stopping retention cleanup...")
 		database.StopRetentionCleanup()
 		return nil
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Final sync to disk...")
+		slog.Info("Final sync to disk...")
 		return database.SyncDataToDisk()
 	})
 
 	gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-		logger.Info("Stopping northbound manager...")
+		slog.Info("Stopping northbound manager...")
 		northMgr.Stop()
 		return nil
 	})
 
 	if cfg.ThresholdCacheEnabled {
 		gracefulMgr.AddShutdownFunc(func(ctx context.Context) error {
-			logger.Info("Stopping threshold cache...")
+			slog.Info("Stopping threshold cache...")
 			collector.StopThresholdCache()
 			return nil
 		})

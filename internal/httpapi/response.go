@@ -2,9 +2,8 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
-
-	"github.com/gonglijing/xunjiFsu/internal/logger"
 )
 
 const (
@@ -95,7 +94,7 @@ func writeServerErrorWithLog(w http.ResponseWriter, def APIErrorDef, err error) 
 		if code == "" {
 			code = def.Message
 		}
-		logger.Error(code, err)
+		slog.Error(code, "error", err)
 	}
 	WriteServerErrorDef(w, def)
 }

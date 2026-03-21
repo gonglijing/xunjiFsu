@@ -69,21 +69,21 @@ func (s *HealthService) BuildStatus(now time.Time) HealthStatus {
 
 func (s *HealthService) Load(now time.Time) HealthStatus {
 	status := s.BuildStatus(now)
-	AddDatabaseHealthCheck(&status)
-	AddDataPointHealthCheck(&status)
-	status.Status = ResolveOverallHealthStatus(status.Checks, status.Status)
+	fillDatabaseHealthCheck(&status)
+	fillDataPointHealthCheck(&status)
+	status.Status = resolveOverallHealthStatus(status.Checks, status.Status)
 	return status
 }
 
 func (s *HealthService) CheckDatabase() error {
-	return CheckDatabase()
+	return checkDatabase()
 }
 
-func AddDatabaseHealthCheck(status *HealthStatus) {
+func fillDatabaseHealthCheck(status *HealthStatus) {
 	if status == nil {
 		return
 	}
-	if err := CheckDatabase(); err != nil {
+	if err := checkDatabase(); err != nil {
 		status.Checks["database"] = Check{Status: "fail", Message: err.Error()}
 		status.Status = "degraded"
 		return
@@ -91,11 +91,11 @@ func AddDatabaseHealthCheck(status *HealthStatus) {
 	status.Checks["database"] = Check{Status: "pass", Message: "Connected"}
 }
 
-func AddDataPointHealthCheck(status *HealthStatus) {
+func fillDataPointHealthCheck(status *HealthStatus) {
 	if status == nil {
 		return
 	}
-	dataPointCount, err := DataPointsCount()
+	dataPointCount, err := dataPointsCount()
 	if err != nil {
 		status.Checks["data_points"] = Check{Status: "fail", Message: err.Error()}
 		return
@@ -103,7 +103,7 @@ func AddDataPointHealthCheck(status *HealthStatus) {
 	status.Checks["data_points"] = Check{Status: "pass", Message: dataPointCount}
 }
 
-func ResolveOverallHealthStatus(checks map[string]Check, currentStatus string) string {
+func resolveOverallHealthStatus(checks map[string]Check, currentStatus string) string {
 	if currentStatus != "" {
 		return currentStatus
 	}
@@ -115,14 +115,14 @@ func ResolveOverallHealthStatus(checks map[string]Check, currentStatus string) s
 	return "healthy"
 }
 
-func HealthHTTPStatus(status string) int {
+func healthHTTPStatus(status string) int {
 	if status == "unhealthy" {
 		return 503
 	}
 	return 200
 }
 
-func CheckDatabase() error {
+func checkDatabase() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -135,7 +135,7 @@ func CheckDatabase() error {
 	return nil
 }
 
-func DataPointsCount() (string, error) {
+func dataPointsCount() (string, error) {
 	var count int
 	if err := database.DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
 		return "0", err

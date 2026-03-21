@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gonglijing/xunjiFsu/internal/config"
-	"github.com/gonglijing/xunjiFsu/internal/logger"
+	"log/slog"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -30,6 +30,6 @@ func listenAndServeWithAutoCert(server *http.Server, cfg *config.Config) error {
 		_ = http.ListenAndServe(":80", manager.HTTPHandler(nil))
 	}()
 
-	logger.Info("Starting HTTPS (auto-cert)", "addr", cfg.ListenAddr, "domain", cfg.TLSDomain)
+	slog.Info("Starting HTTPS (auto-cert)", "addr", cfg.ListenAddr, "domain", cfg.TLSDomain)
 	return server.ListenAndServeTLS("", "")
 }

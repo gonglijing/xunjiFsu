@@ -210,7 +210,7 @@ func NormalizeDriverInput(driversDir string, driver *models.Driver) error {
 	return nil
 }
 
-func SaveDriverUploadFile(driversDir, filename string, source io.Reader) (string, error) {
+func saveDriverUploadFile(driversDir, filename string, source io.Reader) (string, error) {
 	if err := os.MkdirAll(driversDir, 0o755); err != nil {
 		return "", err
 	}
@@ -326,7 +326,7 @@ type DriverDownloadFile struct {
 }
 
 func (s *DriverService) SaveUploadedDriver(filename string, size int64, source io.Reader) (*DriverUploadResult, error) {
-	destPath, err := SaveDriverUploadFile(s.driversDir, filename, source)
+	destPath, err := saveDriverUploadFile(s.driversDir, filename, source)
 	if err != nil {
 		return nil, err
 	}
