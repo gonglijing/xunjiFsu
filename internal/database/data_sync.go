@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -33,15 +33,15 @@ func StartDataSync() {
 	dataSyncTicker = time.NewTicker(syncInterval)
 
 	go func() {
-		log.Printf("Data sync started (interval: %v, batch_trigger: %d)", syncInterval, syncBatchTrigger)
+		slog.Info("Data sync started", "interval", syncInterval, "batch_trigger", syncBatchTrigger)
 		for {
 			select {
 			case <-dataSyncTicker.C:
 				if err := syncDataToDisk(); err != nil {
-					log.Printf("Failed to sync data to disk: %v", err)
+					slog.Error("Failed to sync data to disk", "error", err)
 				}
 			case <-dataSyncStop:
-				log.Println("Data sync stopped")
+				slog.Info("Data sync stopped")
 				return
 			}
 		}
@@ -62,13 +62,13 @@ func TriggerSyncIfNeeded() bool {
 
 	var count int
 	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
-		log.Printf("Failed to count data points for sync trigger: %v", err)
+		slog.Error("Failed to count data points for sync trigger", "error", err)
 		return false
 	}
 	pendingHistoryRowsForSync.Store(int64(count))
 	pendingHistoryRowsDirty.Store(false)
 	if count >= syncBatchTrigger {
-		log.Printf("Triggering sync due to data count: %d", count)
+		slog.Info("Triggering sync due to data count", "count", count)
 		return triggerDataSyncAsync()
 	}
 	return false
@@ -98,7 +98,7 @@ func triggerDataSyncAsync() bool {
 	go func() {
 		defer dataSyncTriggered.Store(false)
 		if err := syncDataToDiskFn(); err != nil {
-			log.Printf("Failed to sync data to disk: %v", err)
+			slog.Error("Failed to sync data to disk", "error", err)
 		}
 	}()
 	return true
@@ -128,7 +128,7 @@ func syncDataToDisk() error {
 	dataSyncMu.Lock()
 	defer dataSyncMu.Unlock()
 
-	log.Println("Syncing data to disk...")
+	slog.Info("Syncing data to disk")
 
 	var maxID int64
 	if err := DataDB.QueryRow("SELECT IFNULL(MAX(id), 0) FROM data_points").Scan(&maxID); err != nil {
@@ -145,7 +145,7 @@ func syncDataToDisk() error {
 		models.SystemStatsDeviceID,
 		models.SystemStatsDeviceName,
 	); err != nil {
-		log.Printf("Failed to normalize system device_name in memory DB: %v", err)
+		slog.Warn("Failed to normalize system device_name in memory DB", "error", err)
 	}
 
 	// 1. 打开/创建磁盘数据库
@@ -174,7 +174,7 @@ func syncDataToDisk() error {
 	}
 	resetPendingHistoryRowsForSync(0)
 
-	log.Printf("Data synced to disk: %d points", count)
+	slog.Info("Data synced to disk", "points", count)
 	return nil
 }
 

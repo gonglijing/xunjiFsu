@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1289,15 +1289,15 @@ func getDiskDataPointsByDeviceAndTime(deviceID int64, startTime, endTime time.Ti
 func enforceDataPointsLimit() {
 	var count int
 	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_points").Scan(&count); err != nil {
-		log.Printf("Failed to count data points: %v", err)
+		slog.Error("Failed to count data points", "error", err)
 		return
 	}
 	if count > maxDataPointsLimit {
 		if _, err := DataDB.Exec("DELETE FROM data_points WHERE id IN (SELECT id FROM data_points ORDER BY collected_at ASC LIMIT ?)", count-maxDataPointsLimit); err != nil {
-			log.Printf("Failed to cleanup data points: %v", err)
+			slog.Error("Failed to cleanup data points", "error", err)
 			return
 		}
-		log.Printf("Cleaned up data points, removed %d old entries", count-maxDataPointsLimit)
+		slog.Info("Cleaned up data points", "removed", count-maxDataPointsLimit)
 	}
 }
 
@@ -1361,7 +1361,7 @@ func GetDataPointsByDeviceAndTimeLimit(deviceID int64, startTime, endTime time.T
 	diskPoints, err := getDiskDataPointsByDeviceAndTime(deviceID, startTime, endTime, limit)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("Failed to read data points by time from disk: %v", err)
+			slog.Warn("Failed to read data points by time from disk", "error", err)
 		}
 		return memPoints, nil
 	}
@@ -1387,7 +1387,7 @@ func GetDataPointsByDeviceFieldAndTime(deviceID int64, fieldName string, startTi
 	diskPoints, err := getDiskDataPointsByDeviceFieldAndTime(deviceID, fieldName, startTime, endTime, limit)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("Failed to read data points by field from disk: %v", err)
+			slog.Warn("Failed to read data points by field from disk", "error", err)
 		}
 		return memPoints, nil
 	}
@@ -1417,7 +1417,7 @@ func GetDataPointsByDevice(deviceID int64, limit int) ([]*DataPoint, error) {
 	diskPoints, err := getDiskDataPointsByDevice(deviceID, limit, oldestCollectedAt(memPoints))
 	if err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("Failed to read data points from disk: %v", err)
+			slog.Warn("Failed to read data points from disk", "error", err)
 		}
 		return memPoints, nil
 	}
@@ -1440,7 +1440,7 @@ func GetLatestDataPoints(limit int) ([]*DataPoint, error) {
 	diskPoints, err := getDiskLatestDataPoints(limit, oldestCollectedAt(memPoints))
 	if err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("Failed to read latest data points from disk: %v", err)
+			slog.Warn("Failed to read latest data points from disk", "error", err)
 		}
 		return memPoints, nil
 	}
@@ -1835,7 +1835,7 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 	if err != nil {
 		fillLatestDeviceNamesFromParamDB(result)
 		if !os.IsNotExist(err) {
-			log.Printf("Failed to read latest device fields from disk: %v", err)
+			slog.Warn("Failed to read latest device fields from disk", "error", err)
 		}
 		return result, nil
 	}
@@ -1850,7 +1850,7 @@ func GetAllDevicesLatestData() ([]*LatestDeviceData, error) {
 
 	result, err = appendLatestDeviceFieldRowsFromHistory(diskDB, result, deviceIndex, fieldTimes)
 	if err != nil {
-		log.Printf("Failed to query latest device fields from disk: %v", err)
+		slog.Warn("Failed to query latest device fields from disk", "error", err)
 		fillLatestDeviceNamesFromParamDB(result)
 		return result, nil
 	}

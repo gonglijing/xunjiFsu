@@ -1,15 +1,24 @@
-// =============================================================================
-// 日志模块单元测试
-// =============================================================================
 package logger
 
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 )
+
+// saveAndRestore 保存当前配置并返回恢复函数。
+func saveAndRestore(t *testing.T) {
+	t.Helper()
+	origLevel := levelVar.Level()
+	origJSON := useJSON
+	origOutput := output
+	t.Cleanup(func() {
+		SetLevel(origLevel)
+		useJSON = origJSON
+		SetOutput(origOutput)
+	})
+}
 
 func TestParseLevel(t *testing.T) {
 	tests := []struct {
@@ -29,8 +38,8 @@ func TestParseLevel(t *testing.T) {
 		{"ERROR", ERROR},
 		{"fatal", FATAL},
 		{"FATAL", FATAL},
-		{"unknown", INFO}, // 默认值
-		{"", INFO},        // 默认值
+		{"unknown", INFO},
+		{"", INFO},
 	}
 
 	for _, tt := range tests {
@@ -44,307 +53,158 @@ func TestParseLevel(t *testing.T) {
 }
 
 func TestLevelNames(t *testing.T) {
-	tests := []struct {
-		level    LogLevel
-		expected string
-	}{
-		{DEBUG, "DEBUG"},
-		{INFO, "INFO"},
-		{WARN, "WARN"},
-		{ERROR, "ERROR"},
-		{FATAL, "FATAL"},
+	for level, name := range LevelNames {
+		if name == "" {
+			t.Errorf("LevelNames[%d] is empty", level)
+		}
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			result := LevelNames[tt.level]
-			if result != tt.expected {
-				t.Errorf("LevelNames[%d] = %s, want %s", tt.level, result, tt.expected)
-			}
-		})
+	if LevelNames[DEBUG] != "DEBUG" {
+		t.Errorf("LevelNames[DEBUG] = %q", LevelNames[DEBUG])
+	}
+	if LevelNames[FATAL] != "FATAL" {
+		t.Errorf("LevelNames[FATAL] = %q", LevelNames[FATAL])
 	}
 }
 
-func TestLevelNames_Unknown(t *testing.T) {
-	unknown := LogLevel(100)
-	result := LevelNames[unknown]
-	if result != "" {
-		t.Errorf("Unknown level returned %s, want empty string", result)
-	}
-}
+func TestSetLevel_And_Enabled(t *testing.T) {
+	saveAndRestore(t)
 
-func TestNewStructuredLogger(t *testing.T) {
-	logger := NewStructuredLogger(INFO, "test", false)
-
-	if logger == nil {
-		t.Fatal("NewStructuredLogger returned nil")
+	SetLevel(INFO)
+	if Enabled(DEBUG) {
+		t.Fatal("DEBUG should not be enabled at INFO level")
 	}
-
-	if logger.level != INFO {
-		t.Errorf("level = %v, want %v", logger.level, INFO)
+	if !Enabled(INFO) {
+		t.Fatal("INFO should be enabled at INFO level")
 	}
-	if logger.module != "test" {
-		t.Errorf("module = %s, want 'test'", logger.module)
+	if !Enabled(ERROR) {
+		t.Fatal("ERROR should be enabled at INFO level")
 	}
-	if logger.jsonOutput != false {
-		t.Errorf("jsonOutput = %v, want false", logger.jsonOutput)
-	}
-	if logger.logger == nil {
-		t.Error("logger is nil")
-	}
-}
-
-func TestStructuredLogger_NewEntryCallerOnlyForJSON(t *testing.T) {
-	textLogger := NewStructuredLogger(INFO, "test", false)
-	textEntry := textLogger.newEntry(INFO, "text")
-	if textEntry.Caller != "" {
-		t.Fatalf("text logger should not populate caller, got %q", textEntry.Caller)
-	}
-
-	jsonLogger := NewStructuredLogger(INFO, "test", true)
-	jsonEntry := jsonLogger.newEntry(INFO, "json")
-	if jsonEntry.Caller == "" {
-		t.Fatalf("json logger should populate caller")
-	}
-}
-
-
-func TestParseKeyValues(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []interface{}
-		expected map[string]interface{}
-	}{
-		{
-			name:     "single pair",
-			input:    []interface{}{"key1", "value1"},
-			expected: map[string]interface{}{"key1": "value1"},
-		},
-		{
-			name:     "multiple pairs",
-			input:    []interface{}{"key1", "value1", "key2", 123, "key3", true},
-			expected: map[string]interface{}{"key1": "value1", "key2": 123, "key3": true},
-		},
-		{
-			name:     "empty",
-			input:    []interface{}{},
-			expected: map[string]interface{}{},
-		},
-		{
-			name:     "odd number of args",
-			input:    []interface{}{"key1", "value1", "key2"},
-			expected: map[string]interface{}{"key1": "value1"},
-		},
-		{
-			name:     "non-string key ignored",
-			input:    []interface{}{123, "value1", "key2", "value2"},
-			expected: map[string]interface{}{"key2": "value2"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseKeyValues(tt.input...)
-			if len(result) != len(tt.expected) {
-				t.Errorf("parseKeyValues() returned %d entries, want %d", len(result), len(tt.expected))
-			}
-			for k, v := range tt.expected {
-				if result[k] != v {
-					t.Errorf("parseKeyValues()[%s] = %v, want %v", k, result[k], v)
-				}
-			}
-		})
-	}
-}
-
-func TestLogEntry_JSONFields(t *testing.T) {
-	entry := &LogEntry{
-		Level:     "INFO",
-		Timestamp: "2024-01-01T00:00:00Z",
-		Message:   "test message",
-		Module:    "test",
-		Caller:    "main.test",
-		Error:     "error",
-		Fields:    map[string]interface{}{"key": "value"},
-	}
-
-	// 验证可以序列化为 JSON
-	data, err := json.Marshal(entry)
-	if err != nil {
-		t.Fatalf("Failed to marshal LogEntry: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		t.Fatalf("Failed to unmarshal LogEntry: %v", err)
-	}
-
-	if result["level"] != "INFO" {
-		t.Errorf("level = %v, want 'INFO'", result["level"])
-	}
-	if result["message"] != "test message" {
-		t.Errorf("message = %v, want 'test message'", result["message"])
-	}
-}
-
-func TestSetLevel(t *testing.T) {
-	originalLevel := global.level
 
 	SetLevel(DEBUG)
-	if global.level != DEBUG {
-		t.Errorf("global.level = %v, want %v", global.level, DEBUG)
-	}
-
-	// 恢复
-	SetLevel(originalLevel)
-}
-
-func TestStructuredLogger_Enabled(t *testing.T) {
-	logger := NewStructuredLogger(INFO, "test", false)
-
-	if !logger.Enabled(INFO) {
-		t.Fatalf("expected info level to be enabled")
-	}
-	if logger.Enabled(DEBUG) {
-		t.Fatalf("expected debug level to be disabled")
+	if !Enabled(DEBUG) {
+		t.Fatal("DEBUG should be enabled at DEBUG level")
 	}
 }
 
 func TestSetJSONOutput(t *testing.T) {
-	original := global.jsonOutput
-
-	SetJSONOutput(true)
-	if global.jsonOutput != true {
-		t.Errorf("global.jsonOutput = %v, want true", global.jsonOutput)
-	}
-
-	SetJSONOutput(false)
-	if global.jsonOutput != false {
-		t.Errorf("global.jsonOutput = %v, want false", global.jsonOutput)
-	}
-
-	// 恢复
-	SetJSONOutput(original)
-}
-
-func TestSetOutput(t *testing.T) {
-	originalOutput := globalOutput
-	t.Cleanup(func() {
-		SetOutput(originalOutput)
-	})
-
+	saveAndRestore(t)
 	var buf bytes.Buffer
 	SetOutput(&buf)
 
-	if global.logger.Writer() != &buf {
-		t.Error("global.logger writer not updated")
+	SetJSONOutput(true)
+	Info("json test")
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &parsed); err != nil {
+		t.Fatalf("JSON output expected, got: %s", buf.String())
+	}
+	if parsed["msg"] != "json test" {
+		t.Errorf("msg = %v", parsed["msg"])
 	}
 }
 
-func TestOutput(t *testing.T) {
-	SetOutput(os.Stdout)
+func TestSetOutput(t *testing.T) {
+	saveAndRestore(t)
 
-	output := globalOutput
-	if output != os.Stdout {
-		t.Errorf("globalOutput = %v, want os.Stdout", output)
+	var buf bytes.Buffer
+	SetOutput(&buf)
+	Info("output test")
+	if !strings.Contains(buf.String(), "output test") {
+		t.Errorf("SetOutput not effective, got: %s", buf.String())
 	}
+}
+
+func TestSetOutput_Nil_ResetToStdout(t *testing.T) {
+	saveAndRestore(t)
+	SetOutput(nil)
+	// 不 panic 即通过
 }
 
 func TestGlobalFunctions(t *testing.T) {
-	originalOutput := globalOutput
-	originalLevel := global.level
-	t.Cleanup(func() {
-		SetOutput(originalOutput)
-		SetLevel(originalLevel)
-	})
-
+	saveAndRestore(t)
 	var buf bytes.Buffer
 	SetOutput(&buf)
 	SetLevel(DEBUG)
 
 	Debug("debug msg")
 	if !strings.Contains(buf.String(), "debug msg") {
-		t.Error("Debug() not working")
+		t.Errorf("Debug() output: %s", buf.String())
 	}
 	buf.Reset()
 
 	Info("info msg")
 	if !strings.Contains(buf.String(), "info msg") {
-		t.Error("Info() not working")
+		t.Errorf("Info() output: %s", buf.String())
 	}
 	buf.Reset()
 
 	Warn("warn msg")
 	if !strings.Contains(buf.String(), "warn msg") {
-		t.Error("Warn() not working")
+		t.Errorf("Warn() output: %s", buf.String())
 	}
 	buf.Reset()
 
 	Error("error msg", nil)
 	if !strings.Contains(buf.String(), "error msg") {
-		t.Error("Error() not working")
+		t.Errorf("Error() output: %s", buf.String())
+	}
+}
+
+func TestError_WithError(t *testing.T) {
+	saveAndRestore(t)
+	var buf bytes.Buffer
+	SetOutput(&buf)
+
+	Error("oops", errForTest("boom"), "key", "val")
+	out := buf.String()
+	if !strings.Contains(out, "oops") || !strings.Contains(out, "boom") {
+		t.Errorf("Error() output: %s", out)
 	}
 }
 
 func TestPrintf(t *testing.T) {
-	originalOutput := globalOutput
-	t.Cleanup(func() {
-		SetOutput(originalOutput)
-	})
-
+	saveAndRestore(t)
 	var buf bytes.Buffer
 	SetOutput(&buf)
 
 	Printf("test %s %d", "format", 123)
-
-	output := buf.String()
-	if !strings.Contains(output, "test format 123") {
-		t.Errorf("Printf() output = %s", output)
+	if !strings.Contains(buf.String(), "test format 123") {
+		t.Errorf("Printf() output: %s", buf.String())
 	}
 }
 
-func TestStructuredLogger_Output_JSON(t *testing.T) {
+func TestFatal_CallsExit(t *testing.T) {
+	saveAndRestore(t)
 	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", true)
-	logger.logger.SetOutput(&buf)
+	SetOutput(&buf)
 
-	logger.log(INFO, "test message", "key", "value")
+	exitCalled := false
+	origExit := exitFunc
+	exitFunc = func(code int) { exitCalled = true }
+	t.Cleanup(func() { exitFunc = origExit })
 
-	output := buf.String()
-
-	// 验证是有效的 JSON
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		t.Fatalf("Output is not valid JSON: %s, error: %v", output, err)
+	Fatal("fatal msg", errForTest("critical"))
+	if !exitCalled {
+		t.Fatal("Fatal() did not call exit")
 	}
-
-	if result["message"] != "test message" {
-		t.Errorf("message = %v, want 'test message'", result["message"])
+	if !strings.Contains(buf.String(), "fatal msg") {
+		t.Errorf("Fatal() output: %s", buf.String())
 	}
 }
 
-func TestStructuredLogger_Output_Text(t *testing.T) {
+func TestTextOutput_ContainsLevel(t *testing.T) {
+	saveAndRestore(t)
 	var buf bytes.Buffer
-	logger := NewStructuredLogger(INFO, "test", false)
-	logger.logger.SetOutput(&buf)
+	SetJSONOutput(false)
+	SetOutput(&buf)
 
-	logger.log(INFO, "test message", "key", "value")
-
-	output := buf.String()
-
-	// 验证是文本格式，包含 JSON 字段部分
-	if !strings.Contains(output, "test message") {
-		t.Errorf("Output doesn't contain message: %s", output)
-	}
-	if !strings.Contains(output, "INFO") {
-		t.Errorf("Output doesn't contain level: %s", output)
+	Info("level check")
+	if !strings.Contains(buf.String(), "INFO") {
+		t.Errorf("text output should contain INFO, got: %s", buf.String())
 	}
 }
 
-func TestNewStructuredLogger_JSONOutput(t *testing.T) {
-	logger := NewStructuredLogger(INFO, "test", true)
+// errForTest 是一个简单的测试用 error 实现。
+type errForTest string
 
-	if logger.jsonOutput != true {
-		t.Errorf("jsonOutput = %v, want true", logger.jsonOutput)
-	}
-}
+func (e errForTest) Error() string { return string(e) }

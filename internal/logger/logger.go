@@ -1,27 +1,29 @@
+// Package logger 提供基于 log/slog 的结构化日志，保持已有调用方 API 不变。
+//
+// §8.2: 日志统一使用 log/slog，不再新增其他日志框架。
 package logger
 
 import (
-	"encoding/json"
+	"context"
+	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
-	"runtime"
 	"strings"
-	"time"
 )
 
-// LogLevel 日志级别
-type LogLevel int
+// LogLevel 日志级别，直接复用 slog.Level 的底层类型以便互操作。
+type LogLevel = slog.Level
 
 const (
-	DEBUG LogLevel = iota
-	INFO
-	WARN
-	ERROR
-	FATAL
+	DEBUG LogLevel = slog.LevelDebug
+	INFO  LogLevel = slog.LevelInfo
+	WARN  LogLevel = slog.LevelWarn
+	ERROR LogLevel = slog.LevelError
+	FATAL LogLevel = slog.Level(12) // 高于 ERROR，用于致命错误
 )
 
-// LevelNames 级别名称映射
+// LevelNames 级别名称映射，供外部查表使用。
 var LevelNames = map[LogLevel]string{
 	DEBUG: "DEBUG",
 	INFO:  "INFO",
@@ -30,7 +32,41 @@ var LevelNames = map[LogLevel]string{
 	FATAL: "FATAL",
 }
 
-// ParseLevel 解析日志级别
+var (
+	levelVar    slog.LevelVar
+	useJSON     bool
+	output      io.Writer = os.Stdout
+	exitFunc              = os.Exit
+)
+
+func init() {
+	levelVar.Set(INFO)
+	rebuildHandler()
+}
+
+// rebuildHandler 根据当前配置重建全局 slog handler。
+func rebuildHandler() {
+	opts := &slog.HandlerOptions{
+		Level: &levelVar,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.LevelKey {
+				if level, ok := a.Value.Any().(slog.Level); ok && level == FATAL {
+					a.Value = slog.StringValue("FATAL")
+				}
+			}
+			return a
+		},
+	}
+	var h slog.Handler
+	if useJSON {
+		h = slog.NewJSONHandler(output, opts)
+	} else {
+		h = slog.NewTextHandler(output, opts)
+	}
+	slog.SetDefault(slog.New(h))
+}
+
+// ParseLevel 解析日志级别字符串。
 func ParseLevel(s string) LogLevel {
 	switch strings.ToLower(s) {
 	case "debug":
@@ -46,179 +82,69 @@ func ParseLevel(s string) LogLevel {
 	}
 }
 
-// StructuredLogger 结构化日志
-type StructuredLogger struct {
-	level      LogLevel
-	module     string
-	jsonOutput bool
-	logger     *log.Logger
-}
-
-// NewStructuredLogger 创建结构化日志
-func NewStructuredLogger(level LogLevel, module string, jsonOutput bool) *StructuredLogger {
-	return &StructuredLogger{
-		level:      level,
-		module:     module,
-		jsonOutput: jsonOutput,
-		logger:     log.New(os.Stdout, "", 0),
-	}
-}
-
-// log 内部日志方法
-func (l *StructuredLogger) log(level LogLevel, msg string, keysAndValues ...interface{}) {
-	if level < l.level {
-		return
-	}
-
-	entry := l.newEntry(level, msg)
-	if len(keysAndValues) > 0 {
-		entry.Fields = parseKeyValues(keysAndValues...)
-	}
-	l.output(entry)
-}
-
-// newEntry 创建日志条目
-func (l *StructuredLogger) newEntry(level LogLevel, msg string) *LogEntry {
-	caller := ""
-	if l != nil && l.jsonOutput {
-		pc, _, _, _ := runtime.Caller(2)
-		if fn := runtime.FuncForPC(pc); fn != nil {
-			caller = fn.Name()
-		}
-	}
-
-	return &LogEntry{
-		Level:     LevelNames[level],
-		Timestamp: time.Now().Format(time.RFC3339),
-		Message:   msg,
-		Module:    l.module,
-		Caller:    caller,
-	}
-}
-
-// Enabled reports whether the given level will be emitted by this logger.
-func (l *StructuredLogger) Enabled(level LogLevel) bool {
-	if l == nil {
-		return false
-	}
-	return level >= l.level
-}
-
-// output 输出日志
-func (l *StructuredLogger) output(entry *LogEntry) {
-	if l.jsonOutput {
-		data, _ := json.Marshal(entry)
-		l.logger.Println(string(data))
-	} else {
-		fields := ""
-		if len(entry.Fields) > 0 {
-			data, _ := json.Marshal(entry.Fields)
-			fields = " " + string(data)
-		}
-		errInfo := ""
-		if entry.Error != "" {
-			errInfo = " error=" + entry.Error
-		}
-		l.logger.Printf("[%s] %s %s%s%s\n", entry.Level, entry.Timestamp, entry.Message, errInfo, fields)
-	}
-}
-
-// parseKeyValues 解析键值对
-func parseKeyValues(keysAndValues ...interface{}) map[string]interface{} {
-	result := make(map[string]interface{}, len(keysAndValues)/2)
-	for i := 0; i < len(keysAndValues)-1; i += 2 {
-		key, ok := keysAndValues[i].(string)
-		if !ok {
-			continue
-		}
-		result[key] = keysAndValues[i+1]
-	}
-	return result
-}
-
-// LogEntry 日志条目
-type LogEntry struct {
-	Level     string                 `json:"level"`
-	Timestamp string                 `json:"timestamp"`
-	Message   string                 `json:"message"`
-	Module    string                 `json:"module,omitempty"`
-	Fields    map[string]interface{} `json:"fields,omitempty"`
-	Caller    string                 `json:"caller,omitempty"`
-	Error     string                 `json:"error,omitempty"`
-}
-
-// 全局logger
-var global *StructuredLogger
-var globalOutput io.Writer = os.Stdout
-var exitFunc = os.Exit
-
-func init() {
-	global = NewStructuredLogger(INFO, "gogw", false)
-}
-
-// SetLevel 设置日志级别
+// SetLevel 设置全局日志级别。
 func SetLevel(level LogLevel) {
-	global.level = level
+	levelVar.Set(level)
 }
 
-// Enabled reports whether the global logger will emit the given level.
+// Enabled 判断指定级别是否会被输出。
 func Enabled(level LogLevel) bool {
-	return global.Enabled(level)
+	return slog.Default().Enabled(context.Background(), level)
 }
 
-// SetJSONOutput 设置JSON输出
+// SetJSONOutput 切换 JSON / 文本输出格式。
 func SetJSONOutput(enabled bool) {
-	global.jsonOutput = enabled
+	useJSON = enabled
+	rebuildHandler()
 }
 
-// SetOutput 设置日志输出目标
+// SetOutput 设置日志输出目标。传 nil 重置为 os.Stdout。
 func SetOutput(writer io.Writer) {
 	if writer == nil {
 		writer = os.Stdout
 	}
-	globalOutput = writer
-	global.logger.SetOutput(writer)
-	log.SetOutput(writer)
+	output = writer
+	rebuildHandler()
 }
 
-// Debug 全局调试日志
+// Debug 输出调试日志。keysAndValues 为交替的 key-value 对。
 func Debug(msg string, keysAndValues ...interface{}) {
-	global.log(DEBUG, msg, keysAndValues...)
+	slog.Debug(msg, keysAndValues...)
 }
 
-// Info 全局信息日志
+// Info 输出信息日志。
 func Info(msg string, keysAndValues ...interface{}) {
-	global.log(INFO, msg, keysAndValues...)
+	slog.Info(msg, keysAndValues...)
 }
 
-// Warn 全局警告日志
+// Warn 输出警告日志。
 func Warn(msg string, keysAndValues ...interface{}) {
-	global.log(WARN, msg, keysAndValues...)
+	slog.Warn(msg, keysAndValues...)
 }
 
-// Error 全局错误日志
+// Error 输出错误日志。err 参数会作为 "error" 属性输出。
 func Error(msg string, err error, keysAndValues ...interface{}) {
-	entry := global.newEntry(ERROR, msg)
 	if err != nil {
-		entry.Error = err.Error()
+		args := make([]any, 0, 2+len(keysAndValues))
+		args = append(args, "error", err)
+		args = append(args, keysAndValues...)
+		slog.Error(msg, args...)
+	} else {
+		slog.Error(msg, keysAndValues...)
 	}
-	if len(keysAndValues) > 0 {
-		entry.Fields = parseKeyValues(keysAndValues...)
-	}
-	global.output(entry)
 }
 
-// Fatal 全局致命日志
+// Fatal 输出致命错误日志后退出进程。
 func Fatal(msg string, err error) {
-	entry := global.newEntry(FATAL, msg)
 	if err != nil {
-		entry.Error = err.Error()
+		slog.Log(context.Background(), FATAL, msg, "error", err)
+	} else {
+		slog.Log(context.Background(), FATAL, msg)
 	}
-	global.output(entry)
 	exitFunc(1)
 }
 
-// Printf 格式化日志
+// Printf 兼容 log.Printf 风格，输出为 INFO 级别。
 func Printf(format string, v ...interface{}) {
-	global.logger.Printf(format, v...)
+	slog.Info(fmt.Sprintf(format, v...))
 }

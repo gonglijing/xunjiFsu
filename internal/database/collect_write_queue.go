@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -111,10 +111,10 @@ func flushCollectDataBatch(batch []collectWriteRequest) {
 		return
 	}
 	if err := writeCollectDataBatch(batch); err != nil {
-		log.Printf("collect data async batch write failed: %v", err)
+		slog.Error("collect data async batch write failed", "error", err)
 		for _, item := range batch {
 			if err := InsertCollectDataWithOptions(item.data, item.storeHistory); err != nil {
-				log.Printf("collect data fallback write failed: %v", err)
+				slog.Error("collect data fallback write failed", "error", err)
 			}
 		}
 	}

@@ -2,7 +2,7 @@ package database
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gonglijing/xunjiFsu/internal/pwdutil"
 )
@@ -12,9 +12,7 @@ func InitDefaultData() error {
 	var count int
 	err := ParamDB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
-		// 表可能不存在或为空，返回错误
-		log.Printf("Warning: Failed to query users count: %v, trying to create default user", err)
-		// 尝试直接创建用户
+		slog.Warn("Failed to query users count, trying to create default user", "error", err)
 		_, err := ParamDB.Exec(
 			"INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
 			"admin", pwdutil.Hash("123456"), "admin",
@@ -22,7 +20,7 @@ func InitDefaultData() error {
 		if err != nil {
 			return fmt.Errorf("failed to create default user: %w", err)
 		}
-		log.Println("Created default admin user")
+		slog.Info("Created default admin user")
 		return nil
 	}
 
@@ -34,7 +32,7 @@ func InitDefaultData() error {
 		if err != nil {
 			return fmt.Errorf("failed to create default user: %w", err)
 		}
-		log.Println("Created default admin user")
+		slog.Info("Created default admin user")
 	}
 
 	return nil

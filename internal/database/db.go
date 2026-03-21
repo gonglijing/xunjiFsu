@@ -3,8 +3,9 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -54,7 +55,7 @@ func ApplyRuntimeLimits(maxDataPoints, maxDataCache int) {
 		maxDataCacheLimit = MaxDataCache
 	}
 
-	log.Printf("Applied data limits (max_data_points=%d, max_data_cache=%d)", maxDataPointsLimit, maxDataCacheLimit)
+	slog.Info("Applied data limits", "max_data_points", maxDataPointsLimit, "max_data_cache", maxDataCacheLimit)
 }
 
 // ApplySyncInterval 应用数据同步间隔。
@@ -65,7 +66,7 @@ func ApplySyncInterval(interval time.Duration) {
 	} else {
 		syncInterval = SyncInterval
 	}
-	log.Printf("Applied data sync interval: %v", syncInterval)
+	slog.Info("Applied data sync interval", "interval", syncInterval)
 }
 
 // InitParamDB 初始化配置数据库（持久化文件）
@@ -89,7 +90,7 @@ func InitParamDBWithPath(path string) error {
 		return fmt.Errorf("failed to open param database: %w", err)
 	}
 
-	log.Printf("Param database initialized (max_open=%d, max_idle=%d)", maxOpen, maxIdle)
+	slog.Info("Param database initialized", "max_open", maxOpen, "max_idle", maxIdle)
 	return nil
 }
 
@@ -118,9 +119,18 @@ func InitDataDBWithPath(path string) error {
 
 	// 从文件恢复数据（如果存在）
 	if _, err := os.Stat(dataDBFile); err == nil {
-		log.Println("Restoring data database from file...")
-		log.Printf("Backup file exists (%s), real-time data will be collected on startup", dataDBFile)
+		slog.Info("Restoring data database from file", "path", dataDBFile)
 	}
 
 	return nil
+}
+
+// getEnvInt 从环境变量获取整数配置
+func getEnvInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if val, err := strconv.Atoi(v); err == nil {
+			return val
+		}
+	}
+	return defaultVal
 }

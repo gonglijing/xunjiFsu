@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -50,7 +50,7 @@ func InitDataSchema() error {
 
 	// 执行索引迁移
 	if err := initDataIndexes(); err != nil {
-		log.Printf("Warning: failed to create data indexes: %v", err)
+		slog.Warn("Failed to create data indexes", "error", err)
 	}
 
 	return nil
@@ -88,7 +88,7 @@ func initDataIndexes() error {
 		}
 	}
 
-	log.Println("Data indexes initialized")
+	slog.Info("Data indexes initialized")
 	return nil
 }
 

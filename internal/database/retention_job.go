@@ -2,7 +2,7 @@ package database
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -27,18 +27,18 @@ func StartRetentionCleanup(interval time.Duration) {
 	retentionTicker = time.NewTicker(interval)
 
 	go func() {
-		log.Printf("Retention cleanup started (interval: %v)", interval)
+		slog.Info("Retention cleanup started", "interval", interval)
 		if _, err := CleanupOldDataByGatewayRetention(); err != nil {
-			log.Printf("Initial retention cleanup error: %v", err)
+			slog.Error("Initial retention cleanup error", "error", err)
 		}
 		for {
 			select {
 			case <-retentionTicker.C:
 				if _, err := CleanupOldDataByGatewayRetention(); err != nil {
-					log.Printf("Retention cleanup error: %v", err)
+					slog.Error("Retention cleanup error", "error", err)
 				}
 			case <-retentionStop:
-				log.Println("Retention cleanup stopped")
+				slog.Info("Retention cleanup stopped")
 				return
 			}
 		}

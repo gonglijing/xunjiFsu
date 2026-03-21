@@ -2,7 +2,7 @@ package database
 
 import (
 	"database/sql"
-	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -221,15 +221,15 @@ func maybeEnforceDataCacheLimit() {
 func enforceDataCacheLimit() {
 	var count int
 	if err := DataDB.QueryRow("SELECT COUNT(*) FROM data_cache").Scan(&count); err != nil {
-		log.Printf("Failed to count data cache entries: %v", err)
+		slog.Error("Failed to count data cache entries", "error", err)
 		return
 	}
 	if count > maxDataCacheLimit {
 		if _, err := DataDB.Exec("DELETE FROM data_cache WHERE id IN (SELECT id FROM data_cache ORDER BY collected_at ASC LIMIT ?)", count-maxDataCacheLimit); err != nil {
-			log.Printf("Failed to cleanup data cache: %v", err)
+			slog.Error("Failed to cleanup data cache", "error", err)
 			return
 		}
-		log.Printf("Cleaned up data cache, removed %d entries", count-maxDataCacheLimit)
+		slog.Info("Cleaned up data cache", "removed", count-maxDataCacheLimit)
 	}
 }
 
