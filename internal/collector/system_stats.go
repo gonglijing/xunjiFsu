@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"os"
@@ -300,7 +301,7 @@ func parseProcStatCPUTotalIdleBytes(data []byte) (procCPUStat, bool) {
 
 func firstLineBytes(data []byte) []byte {
 	line := data
-	if idx := indexByte(data, '\n'); idx >= 0 {
+	if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
 		line = data[:idx]
 	}
 	start := 0

@@ -121,6 +121,6 @@ func (a *MQTTAdapter) Initialize(configStr string) error {
 
 	a.applyConfig(cfg, client, settings)
 
-	slog.Info(fmt.Sprintf("MQTT adapter initialized: %s (broker=%s, topic=%s)", a.name, settings.broker, settings.topic))
+	slog.Info("MQTT adapter initialized", "name", a.name, "broker", settings.broker, "topic", settings.topic)
 	return nil
 }

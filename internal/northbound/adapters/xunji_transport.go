@@ -50,7 +50,7 @@ func (a *XunjiAdapter) markDisconnected() {
 }
 
 func (a *XunjiAdapter) reconnectOnce() error {
-	slog.Info(fmt.Sprintf("Xunji [%s] attempting to reconnect...", a.name))
+	slog.Info("Xunji attempting to reconnect", "adapter", a.name)
 	client, err := connectMQTT(a.broker, a.clientID, a.username, a.password, int(a.keepAlive.Seconds()), int(a.timeout.Seconds()))
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (a *XunjiAdapter) reconnectOnce() error {
 		oldClient.Disconnect(250)
 	}
 
-	slog.Info(fmt.Sprintf("Xunji [%s] reconnected successfully", a.name))
+	slog.Info("Xunji reconnected successfully", "adapter", a.name)
 	return nil
 }
 

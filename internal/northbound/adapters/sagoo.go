@@ -129,8 +129,7 @@ func (a *SagooAdapter) Initialize(configStr string) error {
 	// 订阅命令主题
 	a.subscribeCommandTopics(client)
 
-	slog.Info(fmt.Sprintf("Sagoo adapter initialized: %s (broker=%s, topic=%s))",
-		a.name, settings.broker, settings.topic))
+	slog.Info("Sagoo adapter initialized", "name", a.name, "broker", settings.broker, "topic", settings.topic)
 	return nil
 }
 

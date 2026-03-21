@@ -33,11 +33,11 @@ func connectMQTT(broker, clientID, username, password string, keepAliveSec, time
 	}
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		if err != nil {
-			slog.Info(fmt.Sprintf("MQTT connection lost: %v", err))
+			slog.Warn("MQTT connection lost", "error", err)
 		}
 	}
 	opts.OnConnect = func(_ mqtt.Client) {
-		slog.Info(fmt.Sprintf("MQTT connected: %s", broker))
+		slog.Info("MQTT connected", "broker", broker)
 	}
 
 	client := mqtt.NewClient(opts)

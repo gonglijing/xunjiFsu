@@ -76,7 +76,7 @@ func (a *IThingsAdapter) subscribeDownTopics(client mqtt.Client) {
 			continue
 		}
 		if err := token.Error(); err != nil {
-			slog.Info(fmt.Sprintf("iThings subscribe failed topic=%s: %v", topic, err))
+			slog.Warn("iThings subscribe failed", "topic", topic, "error", err)
 		}
 	}
 }

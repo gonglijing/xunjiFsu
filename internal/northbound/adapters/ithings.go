@@ -162,6 +162,6 @@ func (a *IThingsAdapter) Initialize(configStr string) error {
 
 	a.subscribeDownTopics(client)
 
-	slog.Info(fmt.Sprintf("iThings adapter initialized: %s (broker=%s)", a.name, settings.broker))
+	slog.Info("iThings adapter initialized", "name", a.name, "broker", settings.broker)
 	return nil
 }

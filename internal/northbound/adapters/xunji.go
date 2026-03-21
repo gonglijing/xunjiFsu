@@ -107,6 +107,6 @@ func (a *XunjiAdapter) Initialize(configStr string) error {
 
 	a.applyConfig(cfg, client, settings)
 
-	slog.Info(fmt.Sprintf("Xunji adapter initialized: %s (broker=%s, topic=%s)", a.name, settings.broker, settings.topic))
+	slog.Info("Xunji adapter initialized", "name", a.name, "broker", settings.broker, "topic", settings.topic)
 	return nil
 }

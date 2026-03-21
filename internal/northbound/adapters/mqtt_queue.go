@@ -3,7 +3,6 @@
 package adapters
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/gonglijing/xunjiFsu/internal/models"
@@ -52,7 +51,7 @@ func (a *MQTTAdapter) flushPendingData() {
 
 	for idx, data := range batch {
 		if err := a.publish(a.topic, data); err != nil {
-			slog.Info(fmt.Sprintf("MQTT [%s] send data failed: %v", a.name, err))
+			slog.Warn("MQTT send data failed", "adapter", a.name, "error", err)
 			remaining := batch[idx:]
 			a.pendingMu.Lock()
 			a.pendingData = prependQueueWithCap(a.pendingData, remaining, mqttPendingDataCap)
@@ -80,7 +79,7 @@ func (a *MQTTAdapter) flushAlarms() error {
 
 	for idx, alarm := range batch {
 		if err := a.publish(a.alarmTopic, alarm); err != nil {
-			slog.Info(fmt.Sprintf("MQTT [%s] send alarm failed: %v", a.name, err))
+			slog.Warn("MQTT send alarm failed", "adapter", a.name, "error", err)
 			remaining := batch[idx:]
 			a.alarmMu.Lock()
 			a.pendingAlarms = prependQueueWithCap(a.pendingAlarms, remaining, mqttPendingAlarmCap)

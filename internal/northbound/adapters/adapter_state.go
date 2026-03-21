@@ -1,9 +1,6 @@
 package adapters
 
-import (
-	"fmt"
-	"log/slog"
-)
+import "log/slog"
 
 type adapterLoopState uint8
 
@@ -48,5 +45,5 @@ func logLoopStateTransition(adapterType, adapterName string, transition loopStat
 	if !transition.changed {
 		return
 	}
-	slog.Info(fmt.Sprintf("[Northbound-%s:%s] loop_state %s -> %s", adapterType, adapterName, transition.from.String(), transition.to.String()))
+	slog.Info("Northbound loop state transition", "type", adapterType, "name", adapterName, "from", transition.from.String(), "to", transition.to.String())
 }

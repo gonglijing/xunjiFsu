@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"bytes"
 	"os"
 )
 
@@ -27,7 +28,7 @@ func parseSystemMemoryMBBytes(data []byte) (total, used, available float64, ok b
 
 	for len(data) > 0 {
 		line := data
-		if idx := indexByte(data, '\n'); idx >= 0 {
+		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
 			line = data[:idx]
 			data = data[idx+1:]
 		} else {
@@ -106,13 +107,4 @@ func parseMeminfoValue(line []byte) int64 {
 		return 0
 	}
 	return value
-}
-
-func indexByte(s []byte, target byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == target {
-			return i
-		}
-	}
-	return -1
 }
