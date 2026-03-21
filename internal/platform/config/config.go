@@ -110,8 +110,8 @@ func DefaultConfig() *Config {
 		DriverTCPReadTimeout:            0,
 		ThresholdCacheEnabled:           true,
 		ThresholdCacheTTL:               time.Minute,
-		MaxDataPoints:                   100000,
-		MaxDataCache:                    100000,
+		MaxDataPoints:                   20000,
+		MaxDataCache:                    15000,
 	}
 }
 

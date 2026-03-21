@@ -8,6 +8,6 @@ const (
 	defaultReconnectInterval = 5 * time.Second
 	minUploadInterval        = 500 * time.Millisecond
 	defaultAlarmBatch        = 20
-	defaultAlarmQueue        = 1000
-	defaultRealtimeQueue     = 1000
+	defaultAlarmQueue        = 200
+	defaultRealtimeQueue     = 200
 )

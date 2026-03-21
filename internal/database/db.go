@@ -15,14 +15,14 @@ const (
 	SyncBatchTrigger              = 1000            // 数据量触发同步的阈值
 	DefaultParamDBFile            = "param.db"      // 配置数据库文件名
 	DataDBFile                    = "data.db"       // 数据数据库文件名
-	MaxDataPoints                 = 100000          // 内存数据库最大数据点数
-	MaxDataCache                  = 100000          // 内存缓存最大条目数，默认可覆盖万级测点设备
+	MaxDataPoints                 = 20000           // 内存数据库最大数据点数（128 MB 设备适用）
+	MaxDataCache                  = 15000           // 内存缓存最大条目数（覆盖万级测点）
 	DefaultRetentionDays          = 30              // 默认历史保留天数
 	DefaultStorageIntervalSeconds = 300             // 默认存储周期(s)
 
-	// 连接池配置（可调整）
-	DefaultMaxOpenConns = 25        // 默认最大打开连接数
-	DefaultMaxIdleConns = 10        // 默认最大空闲连接数
+	// 连接池配置（嵌入式设备适用，可通过环境变量覆盖）
+	DefaultMaxOpenConns = 8         // 默认最大打开连接数
+	DefaultMaxIdleConns = 4         // 默认最大空闲连接数
 	ConnMaxLifetime     = time.Hour // 连接最大生命周期
 )
 

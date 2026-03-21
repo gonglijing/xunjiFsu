@@ -26,8 +26,8 @@ type collectDataBatchSQLCache struct {
 }
 
 const (
-	collectDataCacheBatchSize   = 200
-	collectDataHistoryBatchSize = 150
+	collectDataCacheBatchSize   = 100
+	collectDataHistoryBatchSize = 100
 )
 
 func newCollectDataBatchSQLCache(builder func(int) string) *collectDataBatchSQLCache {

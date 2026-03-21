@@ -79,11 +79,11 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.ThresholdCacheTTL != time.Minute {
 		t.Errorf("ThresholdCacheTTL = %v, want 1m", cfg.ThresholdCacheTTL)
 	}
-	if cfg.MaxDataPoints != 100000 {
-		t.Errorf("MaxDataPoints = %d, want 100000", cfg.MaxDataPoints)
+	if cfg.MaxDataPoints != 20000 {
+		t.Errorf("MaxDataPoints = %d, want 20000", cfg.MaxDataPoints)
 	}
-	if cfg.MaxDataCache != 100000 {
-		t.Errorf("MaxDataCache = %d, want 100000", cfg.MaxDataCache)
+	if cfg.MaxDataCache != 15000 {
+		t.Errorf("MaxDataCache = %d, want 15000", cfg.MaxDataCache)
 	}
 }
 

@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	collectWriteQueueCap      = 256
-	collectWriteMaxBatchItems = 32
+	collectWriteQueueCap      = 64
+	collectWriteMaxBatchItems = 16
 )
 
 type collectWriteRequest struct {
